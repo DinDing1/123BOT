@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>123Media_STRM</title>
+    <style>
+        :root {
+            --primary-color: #2d6ae3;
+            --secondary-color: #5b8def;
+            --background-color: #f8f9fa;
+            --text-color: #2d3846;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: var(--background-color);
+            margin: 0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .container {
+            flex: 1;
+            margin: 20px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            padding: 2rem;
+            display: grid;
+            grid-template-columns: 1fr 1fr;  /* 左右各占一半 */
+            gap: 2rem;
+            max-height: 90vh;
+            overflow: hidden;
+        }
+
+        .header {
+            grid-column: 1 / -1;
+            text-align: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .logo {
+            color: var(--primary-color);
+            font-size: 2rem;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+        }
+
+        .header p {
+            color: var(--text-color);
+            font-size: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .header .divider {
+            width: 80%;
+            height: 1px;
+            background: rgba(0, 0, 0, 0.1);
+            margin: 1rem auto;
+        }
+
+        .header .version {
+            color: #6c757d;
+            font-size: 0.9rem;
+            margin-top: 1rem;
+        }
+
+        /* 左侧配置区域 */
+        .config-panel {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);  /* 双列布局 */
+            gap: 1rem;  /* 列间距 */
+            align-content: start;
+        }
+
+        #configForm {
+            display: contents;  /* 关键设置：使表单元素参与父级网格布局 */
+        }
+
+        .form-group {
+            margin-bottom: 1rem;
+            min-width: 0;
+            break-inside: avoid;  /* 防止内容跨列断裂 */
+        }
+
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+            color: var(--text-color);
+        }
+
+        input {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            font-size: 1rem;
+            background: #f8fafc;
+            box-sizing: border-box;
+        }
+
+        /* 右侧日志区域 */
+        .log-panel {
+            background: #1a1a1a;
+            border-radius: 8px;
+            padding: 1rem;
+            font-family: 'Consolas', monospace;
+            font-size: 0.85rem;
+            line-height: 1.5;
+            height: 70vh;  /* 固定高度 */
+            overflow-y: auto;  /* 只滚动日志区域 */
+        }
+
+        .log-entry {
+            margin: 0.3rem 0;
+            word-break: break-all;
+        }
+
+        .log-time {
+            color: #6c757d;
+            margin-right: 1rem;
+        }
+
+        .log-process {
+            color: #4ea1ff;
+        }
+
+        .log-success {
+            color: #28a745;
+        }
+
+        .log-file {
+            color: #e9ecef;
+            margin-left: 1.5rem;
+        }
+
+        .log-error {
+            color: #dc3545;
+            background: #2d1d1d;
+            padding: 0.3rem;
+            border-radius: 4px;
+        }
+
+        button {
+            background-color: var(--primary-color);
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1rem;
+            width: 200px;
+            margin: 1rem auto;
+            display: block;
+        }
+
+        button:hover {
+            background-color: var(--secondary-color);
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 1rem;
+            color: var(--primary-color);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="logo">123Media_STRM</div>
+            <p>感谢🈲贫大佬，祝🈲贫大佬长命百岁</p>
+            <div class="divider"></div> <!-- 添加分割线 -->
+            <div class="version">版本号: v1.0.0 | 作者: dinding</div> <!-- 添加版本号和作者 -->
+        </div>
+
+        <!-- 左侧双列配置区域 -->
+        <div class="config-panel">
+            <form id="configForm" action="/generate" method="GET">
+                <!-- 第一列 -->
+                <div class="form-group">
+                    <label for="p123_user">123网盘账号 *</label>
+                    <input type="text" id="p123_user" name="p123_user" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="p123_pass">123网盘密码 *</label>
+                    <input type="password" id="p123_pass" name="p123_pass" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="parent_id">起始目录ID</label>
+                    <input type="number" id="parent_id" name="parent_id" value="0">
+                </div>
+
+                <div class="form-group">
+                    <label for="local_path">本地存储路径</label>
+                    <input type="text" id="local_path" name="local_path" value="./EmbyLibrary">
+                </div>
+
+                <div class="form-group">
+                    <label for="video_exts">视频扩展名</label>
+                    <input type="text" id="video_exts" name="video_exts" value=".mp4,.mkv,.avi,.mov,.flv,.ts,.iso,.rmvb,.m2ts">
+                </div>
+
+                <!-- 第二列 -->
+                <div class="form-group">
+                    <label for="subtitle_exts">字幕扩展名</label>
+                    <input type="text" id="subtitle_exts" name="subtitle_exts" value=".srt,.ass,.ssa,.sub,.txt,.vtt,.ttml,.dfxp">
+                </div>
+
+                <div class="form-group">
+                    <label for="direct_link_url">直链服务地址</label>
+                    <input type="url" id="direct_link_url" name="direct_link_url" value="http://172.17.0.1:8123" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="request_delay">请求间隔（秒）</label>
+                    <input type="number" id="request_delay" name="request_delay" value="1" min="0" step="0.1">
+                </div>
+
+                <div class="form-group">
+                    <label for="dir_delay">目录间隔（秒）</label>
+                    <input type="number" id="dir_delay" name="dir_delay" value="2" min="0" step="0.1">
+                </div>
+
+                <div class="form-group">
+                    <label for="timeout">下载超时（秒）</label>
+                    <input type="number" id="timeout" name="timeout" value="30" min="1">
+                </div>
+
+                <div class="form-group">
+                    <label for="max_retries">最大重试次数</label>
+                    <input type="number" id="max_retries" name="max_retries" value="3" min="0">
+                </div>
+            </form>
+        </div>
+
+        <!-- 右侧日志区域 -->
+        <div class="log-panel" id="output"></div>
+    </div>
+
+    <button type="submit" form="configForm">开始生成</button>
+    <div class="loading" id="loading">⏳ 正在生成中，请稍候...</div>
+
+    <script>
+        const form = document.getElementById('configForm');
+        const output = document.getElementById('output');
+        const loading = document.getElementById('loading');
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            output.innerHTML = '';
+            loading.style.display = 'block';
+
+            const formData = new FormData(form);
+            const eventSource = new EventSource(`/generate?${new URLSearchParams(formData)}`);
+
+            eventSource.onmessage = (event) => {
+                const rawLine = event.data.replace('data: ', '').trim();
+                const logEntry = document.createElement('div');
+                logEntry.className = 'log-entry';
+
+                // 解析日志内容
+                if (rawLine.includes('PROCESS_EXIT_CODE:')) {
+                    const code = rawLine.split(':')[1];
+                    loading.style.display = 'none';
+                    eventSource.close();  // 任务完成后关闭连接
+                    if (code !== '0') {
+                        logEntry.innerHTML = `
+                            <span class="log-time">${new Date().toLocaleTimeString()}</span>
+                            <span class="log-error">生成过程出现错误，退出码: ${code}</span>
+                        `;
+                    } else {
+                        logEntry.innerHTML = `
+                            <span class="log-time">${new Date().toLocaleTimeString()}</span>
+                            <span class="log-success">任务完成，退出码: ${code}</span>
+                        `;
+                    }
+                } else if (rawLine.startsWith('[SUCCESS]')) {
+                    logEntry.innerHTML = `
+                        <span class="log-time">${new Date().toLocaleTimeString()}</span>
+                        <span class="log-success">${rawLine.replace('[SUCCESS] ', '')}</span>
+                    `;
+                } else if (rawLine.startsWith('[PROCESS]')) {
+                    logEntry.innerHTML = `
+                        <span class="log-time">${new Date().toLocaleTimeString()}</span>
+                        <span class="log-process">${rawLine.replace('[PROCESS] ', '')}</span>
+                    `;
+                } else if (rawLine.startsWith('[ERROR]')) {
+                    logEntry.innerHTML = `
+                        <span class="log-time">${new Date().toLocaleTimeString()}</span>
+                        <span class="log-error">${rawLine.replace('[ERROR] ', '')}</span>
+                    `;
+                } else {
+                    logEntry.innerHTML = `
+                        <span class="log-time">${new Date().toLocaleTimeString()}</span>
+                        <span class="log-file">${rawLine}</span>
+                    `;
+                }
+
+                output.appendChild(logEntry);
+                output.scrollTop = output.scrollHeight;
+            };
+
+            eventSource.addEventListener('error', function(event) {
+                const errorMsg = event.data || '连接中断，请检查网络状态';
+                const logEntry = document.createElement('div');
+                logEntry.className = 'log-entry';
+                logEntry.innerHTML = `
+                    <span class="log-time">${new Date().toLocaleTimeString()}</span>
+                    <span class="log-error">${errorMsg}</span>
+                `;
+                output.appendChild(logEntry);
+                loading.style.display = 'none';
+                eventSource.close();
+            });
+        });
+    </script>
+</body>
+</html>
