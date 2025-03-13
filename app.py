@@ -5,7 +5,7 @@ import logging
 import sys
 import io
 from dotenv import load_dotenv
-from p123 import P123Client
+from auth import get_user_info_with_password  # 导入 get_user_info_with_password 函数
 
 # 加载环境变量
 load_dotenv()
@@ -49,7 +49,7 @@ def login():
         password = data.get('password')
         
         # 调用验证接口
-        user_info = get_user_info_with_password(passport, password)
+        user_info = get_user_info_with_password(passport, password)  # 调用导入的函数
         if user_info.get("code") != 0:
             return jsonify({"success": False, "message": user_info.get("message", "登录失败")})
 
