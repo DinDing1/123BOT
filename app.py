@@ -49,7 +49,7 @@ def login():
         password = data.get('password')
         
         # 调用验证接口
-        user_info = get_user_info_with_password(passport, password)  # 调用导入的函数
+        user_info = get_user_info_with_password(passport, password)
         if user_info.get("code") != 0:
             return jsonify({"success": False, "message": user_info.get("message", "登录失败")})
 
@@ -85,10 +85,27 @@ def get_user_info():
 def generate_strm():
     """生成 STRM 文件的路由"""
     try:
+        # 检查用户是否登录
+        if not session.get('logged_in'):
+            def generate_error():
+                yield "event: error\ndata: 请先登录\n\n"
+                yield "event: close\ndata: \n\n"
+            return Response(stream_with_context(generate_error()), content_type='text/event-stream')
+
+        # 从 session 中获取用户凭证
+        user_info = session.get('user_info', {})
+        p123_user = user_info.get('passport', '')
+        p123_pass = request.args.get('p123_pass', '')  # 实际应从加密参数解析
+
+        # 验证凭证有效性
+        if not p123_user or not p123_pass:
+            def generate_error():
+                yield "event: error\ndata: 凭证无效\n\n"
+                yield "event: close\ndata: \n\n"
+            return Response(stream_with_context(generate_error()), content_type='text/event-stream')
+
         # 获取 URL 参数
         config_params = {
-            'p123_user': request.args.get('p123_user'),
-            'p123_pass': request.args.get('p123_pass'),
             'parent_id': request.args.get('parent_id', '0'),
             'local_path': request.args.get('local_path', './EmbyLibrary'),
             'video_exts': request.args.get('video_exts', '.mp4,.mkv,.avi'),
@@ -100,18 +117,11 @@ def generate_strm():
             'direct_link_url': request.args.get('direct_link_url', 'http://172.17.0.1:8123')
         }
 
-        # 验证必填字段
-        if not all([config_params['p123_user'], config_params['p123_pass']]):
-            def generate_error():
-                yield "event: error\ndata: 用户名和密码不能为空\n\n"
-                yield "event: close\ndata: \n\n"
-            return Response(stream_with_context(generate_error()), content_type='text/event-stream')
-
         # 构造环境变量
         env = os.environ.copy()
         env.update({
-            'P123_USER': config_params['p123_user'],
-            'P123_PASS': config_params['p123_pass'],
+            'P123_USER': p123_user,
+            'P123_PASS': p123_pass,
             'PARENT_ID': config_params['parent_id'],
             'LIBRARY_PATH': config_params['local_path'],
             'VIDEO_EXTS': config_params['video_exts'],
