@@ -182,8 +182,14 @@
             display: block;
         }
 
-        button:hover {
+        button:hover:not(:disabled) {
             background-color: var(--secondary-color);
+        }
+
+        button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+            opacity: 0.7;
         }
 
         .loading {
@@ -223,19 +229,9 @@
             </div>
         </div>
 
-        <!-- 配置区域 -->
+        <!-- 配置区域（已移除账号密码输入框） -->
         <div class="config-panel">
             <form id="configForm" action="/generate" method="GET">
-                <div class="form-group">
-                    <label for="p123_user">123网盘账号 *</label>
-                    <input type="text" id="p123_user" name="p123_user" required>
-                </div>
-
-                <div class="form-group">
-                    <label for="p123_pass">123网盘密码 *</label>
-                    <input type="password" id="p123_pass" name="p123_pass" required>
-                </div>
-
                 <div class="form-group">
                     <label for="parent_id">起始目录ID</label>
                     <input type="number" id="parent_id" name="parent_id" value="0">
@@ -287,18 +283,20 @@
         <div class="log-panel" id="output"></div>
     </div>
 
-    <button type="submit" form="configForm">开始生成</button>
+    <button type="submit" form="configForm" id="generateBtn" disabled>开始生成</button>
     <div class="loading" id="loading">⏳ 正在生成中，请稍候...</div>
 
     <script>
         const form = document.getElementById('configForm');
         const output = document.getElementById('output');
         const loading = document.getElementById('loading');
+        const generateBtn = document.getElementById('generateBtn');
 
-        // 检查登录状态
+        // 检查登录状态并更新按钮
         async function checkLoginStatus() {
             const res = await fetch('/user_info');
             const data = await res.json();
+            
             if (data.logged_in) {
                 document.getElementById('loginForm').style.display = 'none';
                 const info = data.user_info;
@@ -308,6 +306,9 @@
                 document.getElementById('spaceUsed').textContent = formatSize(info.spaceUsed);
                 document.getElementById('spacePermanent').textContent = formatSize(info.spacePermanent);
                 document.getElementById('userInfo').style.display = 'block';
+                generateBtn.disabled = false;
+            } else {
+                generateBtn.disabled = true;
             }
         }
 
@@ -350,13 +351,30 @@
         // 页面加载时检查登录状态
         document.addEventListener('DOMContentLoaded', checkLoginStatus);
 
-        // 原有生成逻辑
+        // 表单提交逻辑
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
+            
+            // 检查登录状态
+            const userInfoRes = await fetch('/user_info');
+            const userInfo = await userInfoRes.json();
+            if (!userInfo.logged_in) {
+                alert('请先登录！');
+                return;
+            }
+
+            // 获取登录密码（实际应加密）
+            const password = document.getElementById('password').value;
+            
             output.innerHTML = '';
             loading.style.display = 'block';
 
+            // 构建表单数据
             const formData = new FormData(form);
+            formData.append('p123_user', userInfo.user_info.passport);
+            formData.append('p123_pass', password);
+
+            // 发送生成请求
             const eventSource = new EventSource(`/generate?${new URLSearchParams(formData)}`);
 
             eventSource.onmessage = (event) => {
