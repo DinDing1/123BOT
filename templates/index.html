@@ -40,155 +40,163 @@
             overflow: hidden;
         }
 
-        /* 头部区域 */
         .header {
             grid-area: header;
             text-align: center;
-            border-bottom: 1px solid rgba(0,0,0,0.1);
-            padding-bottom: 1rem;
-        }
-        .logo {
-            color: var(--primary-color);
-            font-size: 1.8rem;
-            font-weight: bold;
-            margin: 0;
-        }
-        .version {
-            color: #6c757d;
-            font-size: 0.9rem;
-            margin-top: 0.5rem;
+            margin-bottom: 1.5rem;
         }
 
-        /* 用户区域 */
+        .logo {
+            color: var(--primary-color);
+            font-size: 2rem;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+        }
+
+        .header p {
+            color: var(--text-color);
+            font-size: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .header .divider {
+            width: 80%;
+            height: 1px;
+            background: rgba(0, 0, 0, 0.1);
+            margin: 1rem auto;
+        }
+
+        .header .version {
+            color: #6c757d;
+            font-size: 0.9rem;
+            margin-top: 1rem;
+        }
+
         .user-area {
             grid-area: user-area;
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 1.5rem;
-        }
-
-        /* 登录表单 */
-        .login-form {
-            display: flex;
-            flex-direction: column;
             gap: 1rem;
-        }
-        .login-input {
-            width: 100%;
-            max-width: 280px;
-            padding: 0.8rem;
-            border: 1px solid #e2e8f0;
-            border-radius: 6px;
-            font-size: 1rem;
-        }
-        .login-btn {
-            width: 100%;
-            max-width: 280px;
-            padding: 0.8rem;
-            background: var(--primary-color);
-            color: white;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            transition: opacity 0.3s;
-        }
-        .login-btn:disabled {
-            opacity: 0.7;
-            cursor: not-allowed;
+            padding: 1rem;
         }
 
-        /* 用户信息 */
-        .user-info {
-            display: flex;
-            flex-direction: column;
-            gap: 0.8rem;
-            display: none; /* 默认隐藏 */
-        }
-        .info-item {
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-        }
-        .info-label {
-            min-width: 80px;
-            color: #666;
-            font-weight: 500;
-        }
-        .info-value {
-            color: var(--text-color);
-            word-break: break-word;
+        .login-form, .user-info {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
 
-        /* 配置区域 */
+        .user-info div {
+            margin: 0.5rem 0;
+            font-size: 0.9rem;
+        }
+
         .config-panel {
             grid-area: config-panel;
             display: grid;
             grid-template-columns: repeat(2, 1fr);
-            gap: 1.5rem;
+            gap: 1rem;
             align-content: start;
         }
+
+        #configForm {
+            display: contents;
+        }
+
         .form-group {
             margin-bottom: 1rem;
+            min-width: 0;
+            break-inside: avoid;
         }
-        .form-group label {
+
+        label {
             display: block;
             margin-bottom: 0.5rem;
-            color: #666;
             font-weight: 500;
+            color: var(--text-color);
         }
-        .form-group input {
+
+        input {
             width: 100%;
-            padding: 0.7rem;
+            padding: 0.75rem;
             border: 1px solid #e2e8f0;
             border-radius: 6px;
+            font-size: 1rem;
             background: #f8fafc;
+            box-sizing: border-box;
         }
 
-        /* 生成按钮 */
-        #generateBtn {
-            grid-column: 1 / -1;
-            justify-self: center;
-            width: 200px;
-            padding: 0.8rem;
-            background: var(--primary-color);
-            color: white;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            margin-top: 1rem;
-        }
-        #generateBtn:disabled {
-            background: #cccccc;
-            cursor: not-allowed;
-        }
-
-        /* 日志区域 */
         .log-panel {
             grid-area: log-panel;
             background: #1a1a1a;
             border-radius: 8px;
-            padding: 1.2rem;
-            color: white;
+            padding: 1rem;
             font-family: 'Consolas', monospace;
+            font-size: 0.85rem;
+            line-height: 1.5;
             height: 70vh;
             overflow-y: auto;
         }
+
         .log-entry {
-            margin: 0.5rem 0;
-            font-size: 0.9rem;
+            margin: 0.3rem 0;
+            word-break: break-all;
         }
+
         .log-time {
             color: #6c757d;
             margin-right: 1rem;
         }
+
         .log-process {
             color: #4ea1ff;
         }
+
         .log-success {
             color: #28a745;
         }
+
+        .log-file {
+            color: #e9ecef;
+            margin-left: 1.5rem;
+        }
+
         .log-error {
             color: #dc3545;
+            background: #2d1d1d;
+            padding: 0.3rem;
+            border-radius: 4px;
+        }
+
+        button {
+            background-color: var(--primary-color);
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1rem;
+            width: 200px;
+            margin: 1rem auto;
+            display: block;
+        }
+
+        button:hover:not(:disabled) {
+            background-color: var(--secondary-color);
+        }
+
+        button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 1rem;
+            color: var(--primary-color);
         }
     </style>
 </head>
@@ -197,79 +205,73 @@
         <div class="header">
             <div class="logo">123Media_STRM</div>
             <p>感谢🈲贫大佬，祝🈲贫大佬长命百岁</p>
+            <div class="divider"></div>
             <div class="version">版本号: v1.0.0 | 作者: dinding</div>
         </div>
 
         <!-- 用户区域 -->
         <div class="user-area">
-            <!-- 登录表单 -->
-            <div class="login-form">
-                <input type="text" class="login-input" id="passport" placeholder="123云盘账号">
-                <input type="password" class="login-input" id="password" placeholder="123云盘密码">
-                <button class="login-btn" onclick="handleLogin()" id="loginBtn">立即登录</button>
+            <div class="login-form" id="loginForm">
+                <h3>用户登录</h3>
+                <input type="text" id="passport" placeholder="123云盘账号">
+                <input type="password" id="password" placeholder="123云盘密码">
+                <button onclick="handleLogin()">立即登录</button>
             </div>
 
-            <!-- 用户信息 -->
-            <div class="user-info" id="userInfo">
-                <div class="info-item">
-                    <span class="info-label">用户ID</span>
-                    <span class="info-value" id="uid">-</span>
-                </div>
-                <div class="info-item">
-                    <span class="info-label">昵称</span>
-                    <span class="info-value" id="nickname">-</span>
-                </div>
-                <div class="info-item">
-                    <span class="info-label">手机号</span>
-                    <span class="info-value" id="phone">-</span>
-                </div>
-                <div class="info-item">
-                    <span class="info-label">已用空间</span>
-                    <span class="info-value" id="spaceUsed">-</span>
-                </div>
-                <div class="info-item">
-                    <span class="info-label">永久空间</span>
-                    <span class="info-value" id="spacePermanent">-</span>
-                </div>
-                <button class="login-btn" onclick="handleLogout()" style="background:#dc3545;margin-top:1rem">退出登录</button>
+            <div class="user-info" id="userInfo" style="display:none;">
+                <h3>用户信息</h3>
+                <div>用户ID: <span id="uid"></span></div>
+                <div>昵称: <span id="nickname"></span></div>
+                <div>手机号: <span id="phone"></span></div>
+                <div>已用空间: <span id="spaceUsed"></span></div>
+                <div>永久空间: <span id="spacePermanent"></span></div>
+                <button onclick="handleLogout()">退出登录</button>
             </div>
         </div>
 
-        <!-- 配置区域 -->
+        <!-- 配置区域（已移除账号密码输入框） -->
         <div class="config-panel">
-            <form id="configForm">
+            <form id="configForm" action="/generate" method="GET">
                 <div class="form-group">
                     <label for="parent_id">起始目录ID</label>
                     <input type="number" id="parent_id" name="parent_id" value="0">
                 </div>
+
                 <div class="form-group">
                     <label for="local_path">本地存储路径</label>
                     <input type="text" id="local_path" name="local_path" value="./EmbyLibrary">
                 </div>
+
                 <div class="form-group">
                     <label for="video_exts">视频扩展名</label>
                     <input type="text" id="video_exts" name="video_exts" value=".mp4,.mkv,.avi,.mov,.flv,.ts,.iso,.rmvb,.m2ts">
                 </div>
+
                 <div class="form-group">
                     <label for="subtitle_exts">字幕扩展名</label>
                     <input type="text" id="subtitle_exts" name="subtitle_exts" value=".srt,.ass,.ssa,.sub,.txt,.vtt,.ttml,.dfxp">
                 </div>
+
                 <div class="form-group">
                     <label for="direct_link_url">直链服务地址</label>
                     <input type="url" id="direct_link_url" name="direct_link_url" value="http://172.17.0.1:8123" required>
                 </div>
+
                 <div class="form-group">
                     <label for="request_delay">请求间隔（秒）</label>
                     <input type="number" id="request_delay" name="request_delay" value="1" min="0" step="0.1">
                 </div>
+
                 <div class="form-group">
                     <label for="dir_delay">目录间隔（秒）</label>
                     <input type="number" id="dir_delay" name="dir_delay" value="2" min="0" step="0.1">
                 </div>
+
                 <div class="form-group">
                     <label for="timeout">下载超时（秒）</label>
                     <input type="number" id="timeout" name="timeout" value="30" min="1">
                 </div>
+
                 <div class="form-group">
                     <label for="max_retries">最大重试次数</label>
                     <input type="number" id="max_retries" name="max_retries" value="3" min="0">
@@ -277,45 +279,36 @@
             </form>
         </div>
 
-        <!-- 开始生成按钮 -->
-        <button id="generateBtn" disabled>开始生成</button>
-
         <!-- 日志区域 -->
         <div class="log-panel" id="output"></div>
     </div>
 
+    <button type="submit" form="configForm" id="generateBtn" disabled>开始生成</button>
+    <div class="loading" id="loading">⏳ 正在生成中，请稍候...</div>
+
     <script>
         const form = document.getElementById('configForm');
         const output = document.getElementById('output');
+        const loading = document.getElementById('loading');
         const generateBtn = document.getElementById('generateBtn');
-        const loginBtn = document.getElementById('loginBtn');
-        const userInfo = document.getElementById('userInfo');
 
-        // 检查登录状态
+        // 检查登录状态并更新按钮
         async function checkLoginStatus() {
-            try {
-                const res = await fetch('/user_info');
-                const data = await res.json();
-                
-                if (data.logged_in) {
-                    // 显示用户信息
-                    document.getElementById('uid').textContent = data.user_info.uid;
-                    document.getElementById('nickname').textContent = data.user_info.nickname;
-                    document.getElementById('phone').textContent = data.user_info.passport;
-                    document.getElementById('spaceUsed').textContent = formatSize(data.user_info.spaceUsed);
-                    document.getElementById('spacePermanent').textContent = formatSize(data.user_info.spacePermanent);
-                    
-                    // 切换显示
-                    document.querySelector('.login-form').style.display = 'none';
-                    userInfo.style.display = 'flex';
-                    generateBtn.disabled = false;
-                } else {
-                    document.querySelector('.login-form').style.display = 'flex';
-                    userInfo.style.display = 'none';
-                    generateBtn.disabled = true;
-                }
-            } catch (error) {
-                console.error('登录状态检查失败:', error);
+            const res = await fetch('/user_info');
+            const data = await res.json();
+            
+            if (data.logged_in) {
+                document.getElementById('loginForm').style.display = 'none';
+                const info = data.user_info;
+                document.getElementById('uid').textContent = info.uid;
+                document.getElementById('nickname').textContent = info.nickname;
+                document.getElementById('phone').textContent = info.passport;
+                document.getElementById('spaceUsed').textContent = formatSize(info.spaceUsed);
+                document.getElementById('spacePermanent').textContent = formatSize(info.spacePermanent);
+                document.getElementById('userInfo').style.display = 'block';
+                generateBtn.disabled = false;
+            } else {
+                generateBtn.disabled = true;
             }
         }
 
@@ -335,35 +328,30 @@
             const passport = document.getElementById('passport').value;
             const password = document.getElementById('password').value;
             
-            try {
-                const res = await fetch('/login', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({passport, password})
-                });
-                
-                const result = await res.json();
-                if (result.success) {
-                    await checkLoginStatus();
-                } else {
-                    alert(`登录失败: ${result.message}`);
-                }
-            } catch (error) {
-                alert('网络错误，请检查连接');
+            const res = await fetch('/login', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({passport, password})
+            });
+            
+            const result = await res.json();
+            if (result.success) {
+                await checkLoginStatus();
+            } else {
+                alert(`登录失败: ${result.message}`);
             }
         }
 
         // 处理注销
         async function handleLogout() {
-            try {
-                await fetch('/logout');
-                await checkLoginStatus();
-            } catch (error) {
-                alert('退出失败');
-            }
+            await fetch('/logout');
+            location.reload();
         }
 
-        // 生成处理
+        // 页面加载时检查登录状态
+        document.addEventListener('DOMContentLoaded', checkLoginStatus);
+
+        // 表单提交逻辑
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
             
@@ -375,13 +363,16 @@
                 return;
             }
 
+            // 获取登录密码（实际应加密）
+            const password = document.getElementById('password').value;
+            
             output.innerHTML = '';
-            generateBtn.disabled = true;
+            loading.style.display = 'block';
 
             // 构建表单数据
             const formData = new FormData(form);
             formData.append('p123_user', userInfo.user_info.passport);
-            formData.append('p123_pass', document.getElementById('password').value);
+            formData.append('p123_pass', password);
 
             // 发送生成请求
             const eventSource = new EventSource(`/generate?${new URLSearchParams(formData)}`);
@@ -393,17 +384,17 @@
 
                 if (rawLine.includes('PROCESS_EXIT_CODE:')) {
                     const code = rawLine.split(':')[1];
-                    generateBtn.disabled = false;
+                    loading.style.display = 'none';
                     eventSource.close();
                     if (code !== '0') {
                         logEntry.innerHTML = `
                             <span class="log-time">${new Date().toLocaleTimeString()}</span>
-                            <span class="log-error">生成失败，退出码: ${code}</span>
+                            <span class="log-error">生成过程出现错误，退出码: ${code}</span>
                         `;
                     } else {
                         logEntry.innerHTML = `
                             <span class="log-time">${new Date().toLocaleTimeString()}</span>
-                            <span class="log-success">任务完成</span>
+                            <span class="log-success">任务完成，退出码: ${code}</span>
                         `;
                     }
                 } else if (rawLine.startsWith('[SUCCESS]')) {
@@ -424,7 +415,7 @@
                 } else {
                     logEntry.innerHTML = `
                         <span class="log-time">${new Date().toLocaleTimeString()}</span>
-                        <span>${rawLine}</span>
+                        <span class="log-file">${rawLine}</span>
                     `;
                 }
 
@@ -432,15 +423,19 @@
                 output.scrollTop = output.scrollHeight;
             };
 
-            eventSource.onerror = () => {
+            eventSource.addEventListener('error', function(event) {
+                const errorMsg = event.data || '连接中断，请检查网络状态';
+                const logEntry = document.createElement('div');
+                logEntry.className = 'log-entry';
+                logEntry.innerHTML = `
+                    <span class="log-time">${new Date().toLocaleTimeString()}</span>
+                    <span class="log-error">${errorMsg}</span>
+                `;
+                output.appendChild(logEntry);
+                loading.style.display = 'none';
                 eventSource.close();
-                generateBtn.disabled = false;
-                alert('生成过程中断');
-            };
+            });
         });
-
-        // 初始化检查登录状态
-        document.addEventListener('DOMContentLoaded', checkLoginStatus);
     </script>
 </body>
 </html>
