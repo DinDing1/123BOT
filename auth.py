@@ -5,8 +5,18 @@ def get_user_info_with_password(passport: str, password: str) -> Dict:
     """获取用户信息（带密码验证）"""
     try:
         client = P123Client(passport, password)
+        client.login()  # 确保先执行登录
         response = client.open_user_info()
-        return response
+        return {
+            "code": 0,
+            "data": {
+                "uid": response['data']['uid'],
+                "nickname": response['data']['nickname'],
+                "passport": response['data']['passport'],
+                "spaceUsed": response['data']['spaceUsed'],
+                "spacePermanent": response['data']['spacePermanent']
+            }
+        }
     except Exception as e:
         return {"code": -1, "message": str(e)}
 
