@@ -1,10 +1,11 @@
-from flask import Flask, render_template, request, jsonify, Response, stream_with_context
+from flask import Flask, render_template, request, jsonify, Response, stream_with_context, session
 import subprocess
 import os
 import logging
 import sys
 import io
 from dotenv import load_dotenv
+from p123 import P123Client
 
 # 加载环境变量
 load_dotenv()
@@ -39,6 +40,46 @@ DEEPSEEK_COLORS = {
 def index():
     """首页路由"""
     return render_template('index.html', colors=DEEPSEEK_COLORS)
+
+@app.route('/login', methods=['POST'])
+def login():
+    try:
+        data = request.json
+        passport = data.get('passport')
+        password = data.get('password')
+        
+        # 调用验证接口
+        user_info = get_user_info_with_password(passport, password)
+        if user_info.get("code") != 0:
+            return jsonify({"success": False, "message": user_info.get("message", "登录失败")})
+
+        # 存储用户信息到session
+        session['logged_in'] = True
+        session['user_info'] = {
+            'uid': user_info['data']['uid'],
+            'nickname': user_info['data']['nickname'],
+            'passport': user_info['data']['passport'],
+            'spaceUsed': user_info['data']['spaceUsed'],
+            'spacePermanent': user_info['data']['spacePermanent']
+        }
+        return jsonify({"success": True})
+    except Exception as e:
+        logging.error(f"登录失败: {str(e)}")
+        return jsonify({"success": False, "message": "服务器错误"})
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    return jsonify({"success": True})
+
+@app.route('/user_info')
+def get_user_info():
+    if not session.get('logged_in'):
+        return jsonify({"logged_in": False})
+    return jsonify({
+        "logged_in": True,
+        "user_info": session['user_info']
+    })
 
 @app.route('/generate', methods=['GET'])
 def generate_strm():
