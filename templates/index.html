@@ -29,14 +29,19 @@
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
             padding: 2rem;
             display: grid;
-            grid-template-columns: 1fr 1fr;  /* 左右各占一半 */
+            grid-template-areas: 
+                "header header"
+                "user-area log-panel"
+                "config-panel log-panel";
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: auto 1fr 2fr;
             gap: 2rem;
             max-height: 90vh;
             overflow: hidden;
         }
 
         .header {
-            grid-column: 1 / -1;
+            grid-area: header;
             text-align: center;
             margin-bottom: 1.5rem;
         }
@@ -67,22 +72,42 @@
             margin-top: 1rem;
         }
 
-        /* 左侧配置区域 */
-        .config-panel {
+        .user-area {
+            grid-area: user-area;
             display: grid;
-            grid-template-columns: repeat(2, 1fr);  /* 双列布局 */
-            gap: 1rem;  /* 列间距 */
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            padding: 1rem;
+        }
+
+        .login-form, .user-info {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .user-info div {
+            margin: 0.5rem 0;
+            font-size: 0.9rem;
+        }
+
+        .config-panel {
+            grid-area: config-panel;
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1rem;
             align-content: start;
         }
 
         #configForm {
-            display: contents;  /* 关键设置：使表单元素参与父级网格布局 */
+            display: contents;
         }
 
         .form-group {
             margin-bottom: 1rem;
             min-width: 0;
-            break-inside: avoid;  /* 防止内容跨列断裂 */
+            break-inside: avoid;
         }
 
         label {
@@ -102,16 +127,16 @@
             box-sizing: border-box;
         }
 
-        /* 右侧日志区域 */
         .log-panel {
+            grid-area: log-panel;
             background: #1a1a1a;
             border-radius: 8px;
             padding: 1rem;
             font-family: 'Consolas', monospace;
             font-size: 0.85rem;
             line-height: 1.5;
-            height: 70vh;  /* 固定高度 */
-            overflow-y: auto;  /* 只滚动日志区域 */
+            height: 70vh;
+            overflow-y: auto;
         }
 
         .log-entry {
@@ -174,14 +199,33 @@
         <div class="header">
             <div class="logo">123Media_STRM</div>
             <p>感谢🈲贫大佬，祝🈲贫大佬长命百岁</p>
-            <div class="divider"></div> <!-- 添加分割线 -->
-            <div class="version">版本号: v1.0.0 | 作者: dinding</div> <!-- 添加版本号和作者 -->
+            <div class="divider"></div>
+            <div class="version">版本号: v1.0.0 | 作者: dinding</div>
         </div>
 
-        <!-- 左侧双列配置区域 -->
+        <!-- 用户区域 -->
+        <div class="user-area">
+            <div class="login-form" id="loginForm">
+                <h3>用户登录</h3>
+                <input type="text" id="passport" placeholder="123云盘账号">
+                <input type="password" id="password" placeholder="123云盘密码">
+                <button onclick="handleLogin()">立即登录</button>
+            </div>
+
+            <div class="user-info" id="userInfo" style="display:none;">
+                <h3>用户信息</h3>
+                <div>用户ID: <span id="uid"></span></div>
+                <div>昵称: <span id="nickname"></span></div>
+                <div>手机号: <span id="phone"></span></div>
+                <div>已用空间: <span id="spaceUsed"></span></div>
+                <div>永久空间: <span id="spacePermanent"></span></div>
+                <button onclick="handleLogout()">退出登录</button>
+            </div>
+        </div>
+
+        <!-- 配置区域 -->
         <div class="config-panel">
             <form id="configForm" action="/generate" method="GET">
-                <!-- 第一列 -->
                 <div class="form-group">
                     <label for="p123_user">123网盘账号 *</label>
                     <input type="text" id="p123_user" name="p123_user" required>
@@ -207,7 +251,6 @@
                     <input type="text" id="video_exts" name="video_exts" value=".mp4,.mkv,.avi,.mov,.flv,.ts,.iso,.rmvb,.m2ts">
                 </div>
 
-                <!-- 第二列 -->
                 <div class="form-group">
                     <label for="subtitle_exts">字幕扩展名</label>
                     <input type="text" id="subtitle_exts" name="subtitle_exts" value=".srt,.ass,.ssa,.sub,.txt,.vtt,.ttml,.dfxp">
@@ -240,7 +283,7 @@
             </form>
         </div>
 
-        <!-- 右侧日志区域 -->
+        <!-- 日志区域 -->
         <div class="log-panel" id="output"></div>
     </div>
 
@@ -252,6 +295,62 @@
         const output = document.getElementById('output');
         const loading = document.getElementById('loading');
 
+        // 检查登录状态
+        async function checkLoginStatus() {
+            const res = await fetch('/user_info');
+            const data = await res.json();
+            if (data.logged_in) {
+                document.getElementById('loginForm').style.display = 'none';
+                const info = data.user_info;
+                document.getElementById('uid').textContent = info.uid;
+                document.getElementById('nickname').textContent = info.nickname;
+                document.getElementById('phone').textContent = info.passport;
+                document.getElementById('spaceUsed').textContent = formatSize(info.spaceUsed);
+                document.getElementById('spacePermanent').textContent = formatSize(info.spacePermanent);
+                document.getElementById('userInfo').style.display = 'block';
+            }
+        }
+
+        // 格式化存储空间
+        function formatSize(bytes) {
+            const units = ['字节', 'KB', 'MB', 'GB', 'TB'];
+            let unitIndex = 0;
+            while (bytes >= 1024 && unitIndex < 4) {
+                bytes /= 1024;
+                unitIndex++;
+            }
+            return `${bytes.toFixed(2)} ${units[unitIndex]}`;
+        }
+
+        // 处理登录
+        async function handleLogin() {
+            const passport = document.getElementById('passport').value;
+            const password = document.getElementById('password').value;
+            
+            const res = await fetch('/login', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({passport, password})
+            });
+            
+            const result = await res.json();
+            if (result.success) {
+                await checkLoginStatus();
+            } else {
+                alert(`登录失败: ${result.message}`);
+            }
+        }
+
+        // 处理注销
+        async function handleLogout() {
+            await fetch('/logout');
+            location.reload();
+        }
+
+        // 页面加载时检查登录状态
+        document.addEventListener('DOMContentLoaded', checkLoginStatus);
+
+        // 原有生成逻辑
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
             output.innerHTML = '';
@@ -265,11 +364,10 @@
                 const logEntry = document.createElement('div');
                 logEntry.className = 'log-entry';
 
-                // 解析日志内容
                 if (rawLine.includes('PROCESS_EXIT_CODE:')) {
                     const code = rawLine.split(':')[1];
                     loading.style.display = 'none';
-                    eventSource.close();  // 任务完成后关闭连接
+                    eventSource.close();
                     if (code !== '0') {
                         logEntry.innerHTML = `
                             <span class="log-time">${new Date().toLocaleTimeString()}</span>
