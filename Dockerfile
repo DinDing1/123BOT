@@ -25,6 +25,7 @@ COPY requirements.txt .
 COPY generate_strm.py .
 COPY app.py .
 COPY main.py .
+COPY auth.py .  
 COPY auth_check.sh .
 COPY templates/index.html ./templates/
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
