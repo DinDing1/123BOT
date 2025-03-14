@@ -38,6 +38,11 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
 logging.getLogger("p123").setLevel(logging.WARNING)
 
+
+# 禁用 Flask 和 Werkzeug 的默认日志
+logging.getLogger('werkzeug').disabled = True  # 禁用 Werkzeug 日志
+logging.getLogger('flask.app').setLevel(logging.ERROR)  # 设置 Flask 日志级别为 ERROR
+
 # DeepSeek 风格配色
 DEEPSEEK_COLORS = {
     "primary": "#2d6ae3",
