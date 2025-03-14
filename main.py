@@ -20,6 +20,11 @@ logger = logging.getLogger(__name__)
 logging.getLogger("uvicorn").setLevel(logging.WARNING)
 logging.getLogger("uvicorn.access").disabled = True  # 禁用访问日志
 
+# 禁用 httpx 和 p123 的日志输出
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+logging.getLogger("p123").setLevel(logging.WARNING)
+
 # 数据库配置
 CACHE_DB = "/app/cache/download_cache.db"
 CACHE_TTL = 20 * 60 * 60  # 20小时
