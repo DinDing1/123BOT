@@ -11,6 +11,13 @@ from datetime import datetime
 from logging import getLogger, FileHandler, StreamHandler, Formatter, INFO
 from urllib.parse import quote
 import io  
+import logging
+
+# 禁用 httpx 和 p123 的日志输出
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+logging.getLogger("p123").setLevel(logging.WARNING)
+
 
 # 强制标准输出和错误输出使用 UTF-8 编码
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
