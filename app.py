@@ -18,7 +18,7 @@ app.secret_key = os.urandom(24)
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
-# 配置日志（仅保留关键信息）
+# 配置日志（简化格式，去除多余空行）
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(message)s',  # 简化日志格式
