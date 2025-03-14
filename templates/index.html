@@ -116,11 +116,16 @@
             font-size: 0.9rem;
             display: flex;
             align-items: center; /* 垂直居中 */
-            justify-content: center; /* 水平居中 */
+            justify-content: flex-start; /* 左对齐 */
             gap: 0.5rem; /* 添加emoji与文字的间距 */
+            width: 100%; /* 确保宽度一致 */
             
         }
-
+        .emoji-container {
+            width: 1.5rem; /* 固定Emoji容器宽度 */
+            text-align: right; /* Emoji右对齐 */
+        }
+        
         .config-panel {
             grid-area: config-panel;
             display: grid;
@@ -250,14 +255,29 @@
                 <button onclick="handleLogin()">立即登录</button>
             </div>
 
-            <div class="user-info" id="userInfo" style="display:none;">
+             <div class="user-info" id="userInfo" style="display:none;">
                 <h3>👤 用户信息</h3>
-                <div>📛 昵称: <span id="nickname"></span></div>
-                <div>🆔 用户ID: <span id="uid"></span></div>
-                <div>📱 手机号: <span id="phone"></span></div>
-                <div>💽 永久空间: <span id="spacePermanent"></span></div>
-                <div>💾 已用空间: <span id="spaceUsed"></span></div>
-                <button class="logout-btn" onclick="handleLogout()"> 退出登录</button>
+                <div>
+                    <span class="emoji-container">📛</span>
+                    <span>昵称: <span id="nickname"></span></span>
+                </div> 
+                <div>
+                    <span class="emoji-container">🆔</span>
+                    <span>用户ID: <span id="uid"></span></span>
+                </div>
+                <div>
+                    <span class="emoji-container">📱</span>
+                    <span>手机号: <span id="phone"></span></span>
+                </div>
+                 <div>
+                    <span class="emoji-container">💽</span>
+                    <span>永久空间: <span id="spacePermanent"></span></span>
+                </div>
+                <div>
+                    <span class="emoji-container">💾</span>
+                    <span>已用空间: <span id="spaceUsed"></span></span>
+                </div>
+                <button class="logout-btn" onclick="handleLogout()">退出登录</button>
             </div>
         </div>
 
