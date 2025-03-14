@@ -22,6 +22,69 @@
             min-height: 720px;
         }
 
+        /* 登录容器 */
+        .login-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            width: 100%;
+            padding: 2rem;
+            box-sizing: border-box;
+        }
+
+        /* 登录表单 */
+        .login-form {
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 400px;
+            text-align: center;
+            box-sizing: border-box;
+        }
+
+        .login-form h3 {
+            margin: 0 0 1.5rem 0;
+            font-size: 1.5rem;
+            color: var(--primary-color);
+        }
+
+        .login-form input {
+            width: calc(100% - 2rem); /* 左右各1rem边距 */
+            padding: 0.8rem 1rem; /* 左右内边距一致 */
+            margin: 0 1rem 1rem 1rem; /* 统一外边距 */
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 1rem;
+            box-sizing: border-box;
+        }
+
+        .login-form button {
+            width: calc(100% - 2rem); /* 与输入框同宽 */
+            padding: 0.8rem;
+            margin: 1rem;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            cursor: pointer;
+            box-sizing: border-box;
+        }
+
+        .login-form button:hover {
+            background-color: var(--secondary-color);
+        }
+
+        .version-info {
+            margin: 1.5rem 1rem 0 1rem; /* 统一外边距 */
+            font-size: 0.9rem;
+            color: #666;
+        }
+
+        /* 主界面容器 */
         .container {
             flex: 1;
             margin: 12px;
@@ -29,7 +92,7 @@
             border-radius: 12px;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
             padding: 1.2rem;
-            display: grid;
+            display: none; /* 默认隐藏 */
             grid-template-areas: 
                 "header header"
                 "user-area log-panel"
@@ -39,6 +102,7 @@
             gap: 1.2rem;
             min-height: 680px;
             overflow: hidden;
+            box-sizing: border-box;
         }
 
         .header {
@@ -73,7 +137,6 @@
             margin-top: 0.8rem;
         }
 
-        /* 修改后的用户区域样式 */
         .user-area {
             grid-area: user-area;
             display: flex;
@@ -82,7 +145,6 @@
             width: 100%;
         }
 
-        /* 新增认证面板通用样式 */
         .auth-panel {
             background: white;
             padding: 1.5rem 2rem;
@@ -91,62 +153,11 @@
             width: 100%;
             max-width: 380px;
             display: none;
-            animation: fadeIn 0.3s ease;
         }
 
         .auth-panel.active {
             display: block !important;
-        }
-
-        /* 登录表单特殊样式 */
-        .login-form {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
-
-        .login-form h3 {
-            margin: 0 0 1.5rem 0;
-            transform: translateY(-2px);
-        }
-
-        .login-form input {
-            margin-bottom: 0.8rem;
-            width: 100%;
-        }
-
-        .login-form button {
-            margin: 0.8rem 0 0;
-            width: auto;
-            padding: 0.6rem 2rem;
-        }
-
-        /* 用户信息特殊样式 */
-        .user-info {
-            text-align: center;
-        }
-
-        .user-info h3 {
-            margin: 0 0 1.2rem 0;
-        }
-
-        .user-info div {
-            display: flex;
-            align-items: center;
-            width: 100%;
-            margin: 0.4rem 0;
-            padding: 0 15%;
-        }
-
-        .emoji-container {
-            flex: 0 0 30px;
-            text-align: center;
-            margin-right: 8px;
-        }
-
-        .user-info div > span:last-child {
-            text-align: left;
-            flex-grow: 1;
+            animation: fadeIn 0.3s ease;
         }
 
         .config-panel {
@@ -228,7 +239,6 @@
             border-radius: 6px;
             cursor: pointer;
             font-size: 1rem;
-            width: 200px;
             margin: 1rem auto;
             display: block;
         }
@@ -266,6 +276,20 @@
     </style>
 </head>
 <body>
+    <!-- 登录界面 -->
+    <div class="login-container">
+        <div class="login-form">
+            <h3>用户登录</h3>
+            <input type="text" id="passport" placeholder="123云盘账号">
+            <input type="password" id="password" placeholder="123云盘密码">
+            <button onclick="handleLogin()">登录</button>
+            <div class="version-info">
+                版本号: v2.0.0 | 作者: dinding
+            </div>
+        </div>
+    </div>
+
+    <!-- 主界面 -->
     <div class="container">
         <div class="header">
             <div class="logo">123Media_STRM</div>
@@ -274,13 +298,9 @@
             <div class="version">版本号: v2.0.0 | 作者: dinding</div>
         </div>
 
-        <!-- 修改后的用户区域 -->
         <div class="user-area">
-            <div class="auth-panel login-form active" id="loginForm">
-                <h3>👤 用户登录</h3>
-                <input type="text" id="passport" placeholder="123云盘账号">
-                <input type="password" id="password" placeholder="123云盘密码">
-                <button onclick="handleLogin()">立即登录</button>
+            <div class="auth-panel login-form" id="loginForm">
+                <!-- 登录表单已移动到独立登录界面 -->
             </div>
 
             <div class="auth-panel user-info" id="userInfo">
@@ -363,7 +383,8 @@
             const data = await res.json();
             
             if (data.logged_in) {
-                document.getElementById('loginForm').classList.remove('active');
+                document.querySelector('.login-container').style.display = 'none';
+                document.querySelector('.container').style.display = 'grid';
                 const info = data.user_info;
                 document.getElementById('uid').textContent = info.uid;
                 document.getElementById('nickname').textContent = info.nickname;
@@ -373,8 +394,8 @@
                 document.getElementById('userInfo').classList.add('active');
                 generateBtn.disabled = false;
             } else {
-                document.getElementById('loginForm').classList.add('active');
-                document.getElementById('userInfo').classList.remove('active');
+                document.querySelector('.login-container').style.display = 'flex';
+                document.querySelector('.container').style.display = 'none';
                 generateBtn.disabled = true;
             }
         }
