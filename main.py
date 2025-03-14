@@ -92,9 +92,10 @@ def startup_event():
     scheduler = BackgroundScheduler()
     scheduler.add_job(db_optimize, 'interval', hours=6)
     scheduler.start()
-    # 仅保留关键启动日志
-    logger.info("\n=== 302直连服务已启动 ===")
-    logger.info(f"302直连地址: http://0.0.0.0:8123\n")
+    # 启动日志优化
+logger = logging.getLogger(__name__)
+logger.info("=== 302直连服务已启动 ===")
+logger.info("302直连地址: http://0.0.0.0:8123")
 
 # 工具函数
 def generate_cache_key(file_name: str, size: int, etag: str) -> str:
