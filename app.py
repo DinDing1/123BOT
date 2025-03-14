@@ -18,15 +18,19 @@ app.secret_key = os.urandom(24)
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
-# 配置日志
+# 配置日志（仅保留关键信息）
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
+    format='%(asctime)s - %(message)s',  # 简化日志格式
     handlers=[
-        logging.FileHandler("web_strm.log", encoding='utf-8'),  # 日志文件使用 UTF-8 编码
-        logging.StreamHandler(sys.stdout)  # 终端输出使用 UTF-8 编码
+        logging.FileHandler("web_strm.log", encoding='utf-8'),
+        logging.StreamHandler(sys.stdout)
     ]
 )
+
+# 禁用 Werkzeug 默认日志
+if __name__ != '__main__':
+    logging.getLogger('werkzeug').setLevel(logging.ERROR)
 
 # DeepSeek 风格配色
 DEEPSEEK_COLORS = {
@@ -171,5 +175,5 @@ logger.info("\n\n=== WEBUI已启动 ===")
 logger.info(f"监听地址: http://0.0.0.0:8124\n")
 
 if __name__ == '__main__':
-    # 启动 Flask 应用
-    app.run(host='0.0.0.0', port=8124, debug=True)
+    # 生产环境禁用调试模式
+    app.run(host='0.0.0.0', port=8124, debug=False, use_reloader=False)
