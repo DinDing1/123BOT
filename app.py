@@ -18,34 +18,33 @@ app.secret_key = os.urandom(24)
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
-# 配置日志（简化格式，去除多余空行）
+# 配置日志（简化格式）
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(message)s',  # 简化日志格式
+    format='%(asctime)s - %(message)s',
     handlers=[
         logging.FileHandler("web_strm.log", encoding='utf-8'),
         logging.StreamHandler(sys.stdout)
     ]
 )
 
+# 自定义 SilentWSGIRequestHandler 以禁用 Werkzeug 日志
+class SilentWSGIRequestHandler(WSGIRequestHandler):
+    def log(self, type: str, message: str, *args) -> None:
+        pass  # 完全禁用 Werkzeug 的日志输出
+
 # 禁用 Flask 和 Werkzeug 的默认日志
-if __name__ != '__main__':
-    logging.getLogger('werkzeug').disabled = True  # 禁用 Werkzeug 日志
-    logging.getLogger('flask.app').setLevel(logging.ERROR)  # 设置 Flask 日志级别为 ERROR
+logging.getLogger('werkzeug').disabled = True  # 禁用 Werkzeug 日志
+logging.getLogger('flask.app').setLevel(logging.ERROR)  # 设置 Flask 日志级别为 ERROR
 
 # 禁用 httpx 和 p123 的日志输出
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
 logging.getLogger("p123").setLevel(logging.WARNING)
 
-# 禁用所有 Werkzeug 日志输出
-class SilentWSGIRequestHandler(WSGIRequestHandler):
-    def log(self, type: str, message: str, *args) -> None:
-        pass  # 完全禁用 Werkzeug 的日志输出
+
         
-# 禁用 Flask 和 Werkzeug 的默认日志
-logging.getLogger('werkzeug').disabled = True  # 禁用 Werkzeug 日志
-logging.getLogger('flask.app').setLevel(logging.ERROR)  # 设置 Flask 日志级别为 ERROR
+
 
 # DeepSeek 风格配色
 DEEPSEEK_COLORS = {
@@ -190,5 +189,13 @@ logger.info("=== WEBUI已启动 ===")
 logger.info("WEBUI地址: http://0.0.0.0:8124")
 
 if __name__ == '__main__':
-    # 生产环境禁用调试模式
-    app.run(host='0.0.0.0', port=8124, debug=False, use_reloader=False)
+    # 使用自定义的 SilentWSGIRequestHandler 并禁用调试模式
+    from werkzeug.serving import run_simple
+    run_simple(
+        hostname='0.0.0.0',
+        port=8124,
+        application=app,
+        request_handler=SilentWSGIRequestHandler,
+        use_debugger=False,
+        use_reloader=False
+    )
