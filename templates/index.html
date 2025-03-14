@@ -75,12 +75,11 @@
 
         .user-area {
             grid-area: user-area;
-            display: flex; /* 改为flex布局 */
-            flex-direction: column;
-            align-items: center; /* 水平居中 */
-            justify-content: center; /* 垂直居中 */
+            display: flex !important; /* 强制覆盖可能存在的其他布局 */
+            align-items: center !important; /* 垂直居中 */
+            justify-content: center !important; /* 水平居中 */
             padding: 1rem;
-            min-height: 240px;
+            width: 100% !important; /* 移除旧版50%限制 */
         }
 
         .login-form, .user-info {
@@ -96,7 +95,7 @@
         
         .login-form h3, .user-info h3 {
             margin: 0 0 1.2rem 0;  /* 上右下左 */
-            transform: translateY(-15px); /* 微调位置 */
+            transform: translateY(-2px); /* 微调位置 */
         }       
 
         .login-form input {
@@ -111,28 +110,28 @@
         }
 
         .user-info {
-            display: flex;
-            flex-direction: column;
-            width: 100%; /* 占满父容器宽度 */
-            max-width: 400px; /* 添加最大宽度限制 */
+            width: 100%;
+            max-width: 300px; /* 控制整体宽度 */
+            text-align: center; /* 新增：保证内部元素继承居中 */
         }
         
         .user-info div {
-            grid-template-columns: 30px 1fr; /* 固定emoji列宽 */
-            width: 100%; /* 控制内容区域宽度 */
-            max-width: 260px; /* 控制整体宽度 */
-            justify-items: start; /* 文字左对齐 */
+            display: flex !important; /* 改用flex布局 */
+            align-items: center;
+            width: 100%;
+            margin: 0.4rem 0;
+            padding: 0 15%; /* 两侧留白保证视觉居中 */
+        }
+        
+        .emoji-container {
+            flex: 0 0 30px; /* 固定宽度 */
+            text-align: center;
+            margin-right: 8px;
         }
 
         .user-info div > span:last-child {
-            text-align: left; 
-            width: 100%;
-        }
-        
-        
-        .emoji-container {
-            width: 30px !important; /* 固定宽度 */
-            text-align: center !important; /* 强制居中 */
+            text-align: left;
+            flex-grow: 1;
         }
         
         .config-panel {
