@@ -75,24 +75,29 @@
 
         .user-area {
             grid-area: user-area;
-            display: grid;
-            grid-template-columns: 1fr;
-            gap: 1rem;
+            display: flex; /* 改为flex布局 */
+            flex-direction: column;
+            align-items: center; /* 水平居中 */
+            justify-content: center; /* 垂直居中 */
             padding: 1rem;
             min-height: 240px;
-            width: 50%;
         }
 
         .login-form, .user-info {
             background: white;
-            padding: 1.5rem;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+            padding: 2.5rem;
+            border-radius: 10px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.18);
             height: auto;
             display: flex;
             flex-direction: column;
             align-items: center; /* 内容居中 */
         }
+        
+        .login-form h3, .user-info h3 {
+            margin: 0 0 1.2rem 0;  /* 上右下左 */
+            transform: translateY(-15px); /* 微调位置 */
+        }       
 
         .login-form input {
             margin-bottom: 0.8rem;
@@ -105,20 +110,19 @@
             padding: 0.6rem 2rem; /* 增加按钮左右内边距 */
         }
 
-
-
         .user-info {
             display: flex;
             flex-direction: column;
-            align-items: center; /* 子元素整体居中 */
+            width: 100%; /* 占满父容器宽度 */
+            max-width: 400px; /* 添加最大宽度限制 */
         }
         
         .user-info div {
             display: grid;
             grid-template-columns: auto 1fr; /* Emoji和文字分两列 */
             align-items: center;
-            width: 80%; /* 控制内容区域宽度 */
-            jmax-width: 300px; /* 防止过宽 */
+            width: 100%; /* 控制内容区域宽度 */
+            margin: 0.2rem 0; /* 添加垂直间距 */
         }
         
         .emoji-container {
