@@ -190,5 +190,13 @@ logger.info("=== WEBUI已启动 ===")
 logger.info("WEBUI地址: http://0.0.0.0:8124")
 
 if __name__ == '__main__':
-    # 生产环境禁用调试模式
-    app.run(host='0.0.0.0', port=8124, debug=False, use_reloader=False)
+    # 使用自定义的 SilentWSGIRequestHandler 并禁用调试模式
+    from werkzeug.serving import run_simple
+    run_simple(
+        hostname='0.0.0.0',
+        port=8124,
+        application=app,
+        request_handler=SilentWSGIRequestHandler,
+        use_debugger=False,
+        use_reloader=False
+    )
