@@ -19,58 +19,57 @@
             height: 100vh;
             display: flex;
             flex-direction: column;
-            min-height: 720px;
         }
 
         .container {
             flex: 1;
-            margin: 12px;
+            margin: 20px;
             background: white;
             border-radius: 12px;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            padding: 1.2rem;
+            padding: 2rem;
             display: grid;
             grid-template-areas: 
                 "header header"
                 "user-area log-panel"
                 "config-panel log-panel";
             grid-template-columns: 1fr 1fr;
-            grid-template-rows: auto auto 1fr;
-            gap: 1.2rem;
-            min-height: 680px;
+            grid-template-rows: auto 1fr 2fr;
+            gap: 2rem;
+            max-height: 90vh;
             overflow: hidden;
         }
 
         .header {
             grid-area: header;
             text-align: center;
-            margin-bottom: 0.8rem;
+            margin-bottom: 1.5rem;
         }
 
         .logo {
             color: var(--primary-color);
-            font-size: 1.7rem;
+            font-size: 2rem;
             font-weight: bold;
-            margin-bottom: 0.2rem;
+            margin-bottom: 0.5rem;
         }
 
         .header p {
             color: var(--text-color);
-            font-size: 0.88rem;
-            margin-bottom: 0.6rem;
+            font-size: 1rem;
+            margin-bottom: 1rem;
         }
 
         .header .divider {
-            width: 88%;
+            width: 80%;
             height: 1px;
             background: rgba(0, 0, 0, 0.1);
-            margin: 0.6rem auto;
+            margin: 1rem auto;
         }
 
         .header .version {
             color: #6c757d;
-            font-size: 0.82rem;
-            margin-top: 0.8rem;
+            font-size: 0.9rem;
+            margin-top: 1rem;
         }
 
         .user-area {
@@ -79,41 +78,34 @@
             grid-template-columns: 1fr;
             gap: 1rem;
             padding: 1rem;
-            min-height: 240px;
-            width: 50%;
         }
 
         .login-form, .user-info {
             background: white;
-            padding: 1.2rem;
+            padding: 1.5rem;
             border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.08);
-            height: auto;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
             display: flex;
             flex-direction: column;
-            align-items: center; /* 内容居中 */
+            align-items: center;
         }
 
-        .login-form input {
-            margin-bottom: 0.8rem;
-            width: 100%; /* 输入框宽度占满容器 */
-        }
-
-        .login-form button {
-            margin: 0.8rem 0 0; /* 调整按钮间距 */
-            width: auto; /* 按钮宽度自适应 */
-            padding: 0.6rem 2rem; /* 增加按钮左右内边距 */
+        .user-info {
+            text-align: center; /* 用户信息居中 */
         }
 
         .user-info div {
-            margin: 0.4rem 0;
-            font-size: 0.85rem;
+            margin: 0.8rem 0; /* 增加行间距 */
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
         }
 
         .config-panel {
             grid-area: config-panel;
             display: grid;
-            grid-template-columns: repeat(3, minmax(0, 1fr));
+            grid-template-columns: repeat(3, 1fr);
             gap: 1rem;
             align-content: start;
         }
@@ -123,39 +115,33 @@
         }
 
         .form-group {
-            margin-bottom: 0.8rem;
+            margin-bottom: 1rem;
             min-width: 0;
         }
 
-        .form-group.extension-group {
-            grid-column: span 1;
-        }
+        /* 扩展名输入框对齐 */
         .form-group.extension-group:first-child {
             grid-column: 1 / 2;
         }
         .form-group.extension-group:last-child {
             grid-column: 3 / 4;
         }
-        .form-group.extension-group input {
-            width: 100%;
-        }
 
         label {
             display: block;
-            margin-bottom: 0.4rem;
+            margin-bottom: 0.5rem;
             font-weight: 500;
             color: var(--text-color);
-            font-size: 0.9rem;
         }
 
         input {
-            padding: 0.6rem;
+            width: 100%;
+            padding: 0.75rem;
             border: 1px solid #e2e8f0;
             border-radius: 6px;
-            font-size: 0.9rem;
+            font-size: 1rem;
             background: #f8fafc;
             box-sizing: border-box;
-            width: 100%;
         }
 
         .log-panel {
@@ -164,31 +150,64 @@
             border-radius: 8px;
             padding: 1rem;
             font-family: 'Consolas', monospace;
-            font-size: 0.8rem;
-            line-height: 1.4;
-            height: 62vh;
+            font-size: 0.85rem;
+            line-height: 1.5;
+            height: 70vh;
             overflow-y: auto;
         }
 
         .log-entry {
-            margin: 0.25rem 0;
+            margin: 0.3rem 0;
             word-break: break-all;
+            color: #4ea1ff; /* 日志文字改为蓝色 */
         }
 
         .log-time {
             color: #6c757d;
-            margin-right: 0.8rem;
+            margin-right: 1rem;
+        }
+
+        .log-process {
+            color: #4ea1ff;
+        }
+
+        .log-success {
+            color: #28a745;
+        }
+
+        .log-file {
+            color: #e9ecef;
+            margin-left: 1.5rem;
+        }
+
+        .log-error {
+            color: #dc3545;
+            background: #2d1d1d;
+            padding: 0.3rem;
+            border-radius: 4px;
         }
 
         button {
             background-color: var(--primary-color);
             color: white;
-            padding: 0.6rem 1.2rem;
+            padding: 0.75rem 1.5rem;
             border: none;
             border-radius: 6px;
             cursor: pointer;
-            font-size: 0.9rem;
-            margin: 0.8rem auto;
+            font-size: 1rem;
+            width: 200px;
+            margin: 1rem auto;
+            display: block;
+        }
+
+        /* 退出登录按钮样式 */
+        .logout-btn {
+            background-color: #dc3545 !important;
+            width: 150px;
+            margin-top: 1.5rem;
+        }
+        .logout-btn:hover {
+            background-color: #bb2d3b !important;
         }
 
         button:hover:not(:disabled) {
@@ -204,8 +223,7 @@
         .loading {
             display: none;
             text-align: center;
-            padding: 0.8rem;
-            font-size: 0.9rem;
+            padding: 1rem;
             color: var(--primary-color);
         }
     </style>
@@ -216,25 +234,25 @@
             <div class="logo">123Media_STRM</div>
             <p>感谢🈲贫大佬，祝🈲贫大佬长命百岁</p>
             <div class="divider"></div>
-            <div class="version">版本号: v1.0.0 | 作者: dinding</div>
+            <div class="version">版本号: v2.0.0 | 作者: dinding</div>
         </div>
 
         <div class="user-area">
             <div class="login-form" id="loginForm">
-                <h3>用户登录</h3>
+                <h3>👤 用户登录</h3>
                 <input type="text" id="passport" placeholder="123云盘账号">
                 <input type="password" id="password" placeholder="123云盘密码">
                 <button onclick="handleLogin()">立即登录</button>
             </div>
 
             <div class="user-info" id="userInfo" style="display:none;">
-                <h3>用户信息</h3>
-                <div>用户ID: <span id="uid"></span></div>
-                <div>昵称: <span id="nickname"></span></div>
-                <div>手机号: <span id="phone"></span></div>
-                <div>已用空间: <span id="spaceUsed"></span></div>
-                <div>永久空间: <span id="spacePermanent"></span></div>
-                <button onclick="handleLogout()">退出登录</button>
+                <h3>👤 用户信息</h3>
+                <div>🆔 用户ID: <span id="uid"></span></div>
+                <div>📛 昵称: <span id="nickname"></span></div>
+                <div>📱 手机号: <span id="phone"></span></div>
+                <div>💾 已用空间: <span id="spaceUsed"></span></div>
+                <div>💽 永久空间: <span id="spacePermanent"></span></div>
+                <button class="logout-btn" onclick="handleLogout()">⚠️ 退出登录</button>
             </div>
         </div>
 
