@@ -19,83 +19,101 @@
             height: 100vh;
             display: flex;
             flex-direction: column;
+            min-height: 720px;
         }
 
         .container {
             flex: 1;
-            margin: 20px;
+            margin: 12px;
             background: white;
             border-radius: 12px;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            padding: 2rem;
+            padding: 1.2rem;
             display: grid;
             grid-template-areas: 
                 "header header"
                 "user-area log-panel"
                 "config-panel log-panel";
             grid-template-columns: 1fr 1fr;
-            grid-template-rows: auto 1fr 2fr;
-            gap: 2rem;
-            max-height: 90vh;
+            grid-template-rows: auto auto 1fr;
+            gap: 1.2rem;
+            min-height: 680px;
             overflow: hidden;
         }
 
         .header {
             grid-area: header;
             text-align: center;
-            margin-bottom: 1.5rem;
+            margin-bottom: 0.8rem;
         }
 
         .logo {
             color: var(--primary-color);
-            font-size: 2rem;
+            font-size: 1.7rem;
             font-weight: bold;
-            margin-bottom: 0.5rem;
+            margin-bottom: 0.2rem;
         }
 
         .header p {
             color: var(--text-color);
-            font-size: 1rem;
-            margin-bottom: 1rem;
+            font-size: 0.88rem;
+            margin-bottom: 0.6rem;
         }
 
         .header .divider {
-            width: 80%;
+            width: 88%;
             height: 1px;
             background: rgba(0, 0, 0, 0.1);
-            margin: 1rem auto;
+            margin: 0.6rem auto;
         }
 
         .header .version {
             color: #6c757d;
-            font-size: 0.9rem;
-            margin-top: 1rem;
+            font-size: 0.82rem;
+            margin-top: 0.8rem;
         }
 
         .user-area {
             grid-area: user-area;
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: 1fr;
             gap: 1rem;
             padding: 1rem;
+            min-height: 240px;
+            width: 50%;
         }
 
         .login-form, .user-info {
             background: white;
-            padding: 1.5rem;
+            padding: 1.2rem;
             border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+            height: auto;
+            display: flex;
+            flex-direction: column;
+            align-items: center; /* 内容居中 */
+        }
+
+        .login-form input {
+            margin-bottom: 0.8rem;
+            width: 100%; /* 输入框宽度占满容器 */
+        }
+
+        .login-form button {
+            margin: 0.8rem 0 0; /* 调整按钮间距 */
+            width: auto; /* 按钮宽度自适应 */
+            padding: 0.6rem 2rem; /* 增加按钮左右内边距 */
         }
 
         .user-info div {
-            margin: 0.5rem 0;
-            font-size: 0.9rem;
+            margin: 0.4rem 0;
+            font-size: 0.85rem;
         }
 
         .config-panel {
             grid-area: config-panel;
             display: grid;
-            grid-template-columns: repeat(2, 1fr);
+            grid-template-columns: repeat(3, minmax(0, 1fr));
             gap: 1rem;
             align-content: start;
         }
@@ -105,26 +123,39 @@
         }
 
         .form-group {
-            margin-bottom: 1rem;
+            margin-bottom: 0.8rem;
             min-width: 0;
-            break-inside: avoid;
+        }
+
+        .form-group.extension-group {
+            grid-column: span 1;
+        }
+        .form-group.extension-group:first-child {
+            grid-column: 1 / 2;
+        }
+        .form-group.extension-group:last-child {
+            grid-column: 3 / 4;
+        }
+        .form-group.extension-group input {
+            width: 100%;
         }
 
         label {
             display: block;
-            margin-bottom: 0.5rem;
+            margin-bottom: 0.4rem;
             font-weight: 500;
             color: var(--text-color);
+            font-size: 0.9rem;
         }
 
         input {
-            width: 100%;
-            padding: 0.75rem;
+            padding: 0.6rem;
             border: 1px solid #e2e8f0;
             border-radius: 6px;
-            font-size: 1rem;
+            font-size: 0.9rem;
             background: #f8fafc;
             box-sizing: border-box;
+            width: 100%;
         }
 
         .log-panel {
@@ -133,53 +164,31 @@
             border-radius: 8px;
             padding: 1rem;
             font-family: 'Consolas', monospace;
-            font-size: 0.85rem;
-            line-height: 1.5;
-            height: 70vh;
+            font-size: 0.8rem;
+            line-height: 1.4;
+            height: 62vh;
             overflow-y: auto;
         }
 
         .log-entry {
-            margin: 0.3rem 0;
+            margin: 0.25rem 0;
             word-break: break-all;
         }
 
         .log-time {
             color: #6c757d;
-            margin-right: 1rem;
-        }
-
-        .log-process {
-            color: #4ea1ff;
-        }
-
-        .log-success {
-            color: #28a745;
-        }
-
-        .log-file {
-            color: #e9ecef;
-            margin-left: 1.5rem;
-        }
-
-        .log-error {
-            color: #dc3545;
-            background: #2d1d1d;
-            padding: 0.3rem;
-            border-radius: 4px;
+            margin-right: 0.8rem;
         }
 
         button {
             background-color: var(--primary-color);
             color: white;
-            padding: 0.75rem 1.5rem;
+            padding: 0.6rem 1.2rem;
             border: none;
             border-radius: 6px;
             cursor: pointer;
-            font-size: 1rem;
-            width: 200px;
-            margin: 1rem auto;
-            display: block;
+            font-size: 0.9rem;
+            margin: 0.8rem auto;
         }
 
         button:hover:not(:disabled) {
@@ -195,7 +204,8 @@
         .loading {
             display: none;
             text-align: center;
-            padding: 1rem;
+            padding: 0.8rem;
+            font-size: 0.9rem;
             color: var(--primary-color);
         }
     </style>
@@ -209,7 +219,6 @@
             <div class="version">版本号: v1.0.0 | 作者: dinding</div>
         </div>
 
-        <!-- 用户区域 -->
         <div class="user-area">
             <div class="login-form" id="loginForm">
                 <h3>用户登录</h3>
@@ -229,57 +238,48 @@
             </div>
         </div>
 
-        <!-- 配置区域（已移除账号密码输入框） -->
         <div class="config-panel">
             <form id="configForm" action="/generate" method="GET">
+                <!-- 第一行 -->
+                <div class="form-group">
+                    <label for="direct_link_url">直连服务地址</label>
+                    <input type="url" id="direct_link_url" name="direct_link_url" value="http://172.17.0.1:8123" required>
+                </div>
                 <div class="form-group">
                     <label for="parent_id">起始目录ID</label>
                     <input type="number" id="parent_id" name="parent_id" value="0">
                 </div>
-
                 <div class="form-group">
-                    <label for="local_path">本地存储路径</label>
-                    <input type="text" id="local_path" name="local_path" value="./EmbyLibrary">
+                    <label for="max_retries">最大重试次数</label>
+                    <input type="number" id="max_retries" name="max_retries" value="3" min="0">
                 </div>
 
-                <div class="form-group">
-                    <label for="video_exts">视频扩展名</label>
-                    <input type="text" id="video_exts" name="video_exts" value=".mp4,.mkv,.avi,.mov,.flv,.ts,.iso,.rmvb,.m2ts">
-                </div>
-
-                <div class="form-group">
-                    <label for="subtitle_exts">字幕扩展名</label>
-                    <input type="text" id="subtitle_exts" name="subtitle_exts" value=".srt,.ass,.ssa,.sub,.txt,.vtt,.ttml,.dfxp">
-                </div>
-
-                <div class="form-group">
-                    <label for="direct_link_url">直链服务地址</label>
-                    <input type="url" id="direct_link_url" name="direct_link_url" value="http://172.17.0.1:8123" required>
-                </div>
-
+                <!-- 第二行 -->
                 <div class="form-group">
                     <label for="request_delay">请求间隔（秒）</label>
                     <input type="number" id="request_delay" name="request_delay" value="1" min="0" step="0.1">
                 </div>
-
                 <div class="form-group">
                     <label for="dir_delay">目录间隔（秒）</label>
                     <input type="number" id="dir_delay" name="dir_delay" value="2" min="0" step="0.1">
                 </div>
-
                 <div class="form-group">
                     <label for="timeout">下载超时（秒）</label>
                     <input type="number" id="timeout" name="timeout" value="30" min="1">
                 </div>
 
-                <div class="form-group">
-                    <label for="max_retries">最大重试次数</label>
-                    <input type="number" id="max_retries" name="max_retries" value="3" min="0">
+                <!-- 第三行 -->
+                <div class="form-group extension-group">
+                    <label for="video_exts">视频扩展名</label>
+                    <input type="text" id="video_exts" name="video_exts" value=".mp4,.mkv,.avi,.mov,.flv,.ts,.iso,.rmvb,.m2ts">
+                </div>
+                <div class="form-group extension-group">
+                    <label for="subtitle_exts">字幕扩展名</label>
+                    <input type="text" id="subtitle_exts" name="subtitle_exts" value=".srt,.ass,.ssa,.sub,.txt,.vtt,.ttml,.dfxp">
                 </div>
             </form>
         </div>
 
-        <!-- 日志区域 -->
         <div class="log-panel" id="output"></div>
     </div>
 
@@ -292,7 +292,6 @@
         const loading = document.getElementById('loading');
         const generateBtn = document.getElementById('generateBtn');
 
-        // 检查登录状态并更新按钮
         async function checkLoginStatus() {
             const res = await fetch('/user_info');
             const data = await res.json();
@@ -312,7 +311,6 @@
             }
         }
 
-        // 格式化存储空间
         function formatSize(bytes) {
             const units = ['字节', 'KB', 'MB', 'GB', 'TB'];
             let unitIndex = 0;
@@ -323,7 +321,6 @@
             return `${bytes.toFixed(2)} ${units[unitIndex]}`;
         }
 
-        // 处理登录
         async function handleLogin() {
             const passport = document.getElementById('passport').value;
             const password = document.getElementById('password').value;
@@ -342,20 +339,16 @@
             }
         }
 
-        // 处理注销
         async function handleLogout() {
             await fetch('/logout');
             location.reload();
         }
 
-        // 页面加载时检查登录状态
         document.addEventListener('DOMContentLoaded', checkLoginStatus);
 
-        // 表单提交逻辑
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
             
-            // 检查登录状态
             const userInfoRes = await fetch('/user_info');
             const userInfo = await userInfoRes.json();
             if (!userInfo.logged_in) {
@@ -363,18 +356,15 @@
                 return;
             }
 
-            // 获取登录密码（实际应加密）
             const password = document.getElementById('password').value;
             
             output.innerHTML = '';
             loading.style.display = 'block';
 
-            // 构建表单数据
             const formData = new FormData(form);
             formData.append('p123_user', userInfo.user_info.passport);
             formData.append('p123_pass', password);
 
-            // 发送生成请求
             const eventSource = new EventSource(`/generate?${new URLSearchParams(formData)}`);
 
             eventSource.onmessage = (event) => {
