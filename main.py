@@ -16,9 +16,13 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# 禁用 Uvicorn 的默认日志
+# 禁用 Uvicorn 和 FastAPI 的默认日志
 logging.getLogger("uvicorn").setLevel(logging.WARNING)
 logging.getLogger("uvicorn.access").disabled = True  # 禁用访问日志
+logging.getLogger("fastapi").setLevel(logging.WARNING)
+
+# 禁用 APScheduler 的日志
+logging.getLogger("apscheduler").setLevel(logging.WARNING)
 
 # 禁用 httpx 和 p123 的日志输出
 logging.getLogger("httpx").setLevel(logging.WARNING)
