@@ -9,13 +9,13 @@ DEVICE_ID_FILE="/app/cache/config/device_id"  # 修改为子目录路径
 generate_device_id() {
     # 检查现有设备ID文件
     if [[ -f "$DEVICE_ID_FILE" ]]; then
-        echo -e "\033[34m[调试] 读取现有设备ID文件\033[0m" >&2
+        echo -e "\033[34m 读取现有设备ID文件\033[0m" >&2
         cat "$DEVICE_ID_FILE"
         return
     fi
 
     # 尝试通过多种方式生成设备ID
-    echo -e "\033[34m[调试] 生成新的设备ID\033[0m" >&2
+    echo -e "\033[34m 生成新的设备ID\033[0m" >&2
     if command -v uuidgen &> /dev/null; then
         device_id=$(uuidgen)
     elif [[ -e /proc/sys/kernel/random/uuid ]]; then
@@ -52,7 +52,7 @@ fi
 verify_auth_key() {
     local retries=0
     while [[ $retries -lt $MAX_RETRIES ]]; do
-        echo -e "\033[34m[调试] 正在验证：auth_key=${AUTH_KEY}, device_id=${DEVICE_ID}\033[0m" >&2
+        echo -e "\033[34m 正在验证：auth_key=${AUTH_KEY}, device_id=${DEVICE_ID}\033[0m" >&2
 
         # 发送请求并捕获 HTTP 状态码和响应体
         response=$(curl -sSf -X POST \
