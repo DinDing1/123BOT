@@ -1,0 +1,7 @@
+**/__pycache__
+**/*.log
+**/.git
+**/.vscode
+**/*.md
+Dockerfile
+docker-compose.yml
