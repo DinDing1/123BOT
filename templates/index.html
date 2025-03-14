@@ -369,14 +369,18 @@
         <div class="log-panel" id="output"></div>
     </div>
 
-    <button type="submit" form="configForm" id="generateBtn" disabled>开始生成</button>
-    <div class="loading" id="loading">⏳ 正在生成中，请稍候...</div>
+    <!-- 立即生成按钮仅在主界面显示 -->
+    <div id="generateButtonContainer" style="display: none;">
+        <button type="submit" form="configForm" id="generateBtn" disabled>开始生成</button>
+        <div class="loading" id="loading">⏳ 正在生成中，请稍候...</div>
+    </div>
 
     <script>
         const form = document.getElementById('configForm');
         const output = document.getElementById('output');
         const loading = document.getElementById('loading');
         const generateBtn = document.getElementById('generateBtn');
+        const generateButtonContainer = document.getElementById('generateButtonContainer');
 
         async function checkLoginStatus() {
             const res = await fetch('/user_info');
@@ -385,6 +389,7 @@
             if (data.logged_in) {
                 document.querySelector('.login-container').style.display = 'none';
                 document.querySelector('.container').style.display = 'grid';
+                generateButtonContainer.style.display = 'block';
                 const info = data.user_info;
                 document.getElementById('uid').textContent = info.uid;
                 document.getElementById('nickname').textContent = info.nickname;
@@ -396,6 +401,7 @@
             } else {
                 document.querySelector('.login-container').style.display = 'flex';
                 document.querySelector('.container').style.display = 'none';
+                generateButtonContainer.style.display = 'none';
                 generateBtn.disabled = true;
             }
         }
