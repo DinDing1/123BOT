@@ -180,10 +180,10 @@ def generate_strm():
             yield "event: close\ndata: \n\n"
         return Response(stream_with_context(generate_error()), content_type='text/event-stream')
 
-# 启动日志
+# 启动日志优化
 logger = logging.getLogger('strm_generator')
-logger.info("\n\n=== WEBUI已启动 ===")
-logger.info(f"WEBUI地址: http://0.0.0.0:8124\n")
+logger.info("=== WEBUI已启动 ===")
+logger.info("WEBUI地址: http://0.0.0.0:8124")
 
 if __name__ == '__main__':
     # 生产环境禁用调试模式
