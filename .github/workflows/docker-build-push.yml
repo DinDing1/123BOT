@@ -28,4 +28,4 @@ jobs:
           push: true
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/123strm:latest
-            ${{ secrets.DOCKERHUB_USERNAME }}/123strm:v3.5
+            ${{ secrets.DOCKERHUB_USERNAME }}/123strm:v3.6
