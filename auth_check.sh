@@ -3,7 +3,7 @@
 # 远程验证服务地址
 AUTH_API_URL="http://cc.38u.net:5000/verify"
 MAX_RETRIES=3
-DEVICE_ID_FILE="/app/cache/device_id"  # 修改为持久化卷路径
+DEVICE_ID_FILE="/app/cache/config/device_id"  # 修改为子目录路径
 
 # 生成或读取设备ID（增强兼容性和错误处理）
 generate_device_id() {
@@ -28,7 +28,7 @@ generate_device_id() {
     fi
 
     # 保存设备ID到文件（确保目录可写）
-    mkdir -p "$(dirname "$DEVICE_ID_FILE")"
+    mkdir -p "$(dirname "$DEVICE_ID_FILE")"  # 创建父目录
     if ! echo "$device_id" > "$DEVICE_ID_FILE"; then
         echo -e "\033[31m[错误] 无法写入设备ID文件：权限不足\033[0m" >&2
         exit 1
