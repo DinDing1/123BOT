@@ -108,22 +108,23 @@
 
 
         .user-info {
-            text-align: center /* 整体居中 */
+            display: flex;
+            flex-direction: column;
+            align-items: center; /* 子元素整体居中 */
         }
         
         .user-info div {
-            margin: 0.8rem 0;/* 增加行间距 */
-            font-size: 0.9rem;
-            display: flex;
-            align-items: center; /* 垂直居中 */
-            justify-content: center; /* 左对齐 */
-            gap: 0.5rem; /* 添加emoji与文字的间距 */
-            width: 100%; /* 确保宽度一致 */
-            
+            display: grid;
+            grid-template-columns: auto 1fr; /* Emoji和文字分两列 */
+            align-items: center;
+            width: 80%; /* 控制内容区域宽度 */
+            jmax-width: 300px; /* 防止过宽 */
         }
+        
         .emoji-container {
-            width: 1.5rem; /* 固定Emoji容器宽度 */
-            text-align: right; /* Emoji右对齐 */
+            width: 2rem; /* 固定宽度 */
+            text-align: center; /* Emoji居中 */
+            margin-right: 0.5rem; /* 与文字间距 */
         }
         
         .config-panel {
