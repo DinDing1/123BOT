@@ -118,17 +118,21 @@
         }
         
         .user-info div {
-            display: grid;
-            grid-template-columns: auto 1fr; /* Emoji和文字分两列 */
-            align-items: center;
+            grid-template-columns: 30px 1fr; /* 固定emoji列宽 */
             width: 100%; /* 控制内容区域宽度 */
-            margin: 0.2rem 0; /* 添加垂直间距 */
+            max-width: 260px; /* 控制整体宽度 */
+            justify-items: start; /* 文字左对齐 */
+        }
+
+        .user-info div > span:last-child {
+            text-align: left; 
+            width: 100%;
         }
         
+        
         .emoji-container {
-            width: 2rem; /* 固定宽度 */
-            text-align: center; /* Emoji居中 */
-            margin-right: 0.5rem; /* 与文字间距 */
+            width: 30px !important; /* 固定宽度 */
+            text-align: center !important; /* 强制居中 */
         }
         
         .config-panel {
