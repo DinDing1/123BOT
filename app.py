@@ -6,6 +6,7 @@ import sys
 import io
 from dotenv import load_dotenv
 from auth import get_user_info_with_password  # 导入 get_user_info_with_password 函数
+from werkzeug.serving import WSGIRequestHandler  # 修复导入路径
 
 # 加载环境变量
 load_dotenv()
