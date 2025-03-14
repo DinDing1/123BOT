@@ -16,6 +16,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# 禁用 Uvicorn 的默认日志
+logging.getLogger("uvicorn").setLevel(logging.WARNING)
+logging.getLogger("uvicorn.access").disabled = True  # 禁用访问日志
+
 # 数据库配置
 CACHE_DB = "/app/cache/download_cache.db"
 CACHE_TTL = 20 * 60 * 60  # 20小时
@@ -82,7 +86,7 @@ def startup_event():
     scheduler.start()
     # 仅保留关键启动日志
     logger.info("\n=== 302直连服务已启动 ===")
-    logger.info(f"监听地址: http://0.0.0.0:8123\n")
+    logger.info(f"302直连地址: http://0.0.0.0:8123\n")
 
 # 工具函数
 def generate_cache_key(file_name: str, size: int, etag: str) -> str:
