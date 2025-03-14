@@ -73,58 +73,73 @@
             margin-top: 0.8rem;
         }
 
+        /* 修改后的用户区域样式 */
         .user-area {
             grid-area: user-area;
-            display: flex !important; /* 强制覆盖可能存在的其他布局 */
-            align-items: center !important; /* 垂直居中 */
-            justify-content: center !important; /* 水平居中 */
+            display: flex;
+            justify-content: center;
             padding: 1rem;
-            width: 100% !important; /* 移除旧版50%限制 */
+            width: 100%;
         }
 
-        .login-form, .user-info {
+        /* 新增认证面板通用样式 */
+        .auth-panel {
             background: white;
-            padding: 2.5rem;
-            border-radius: 10px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.18);
-            height: auto;
+            padding: 1.5rem 2rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+            width: 100%;
+            max-width: 380px;
+            display: none;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .auth-panel.active {
+            display: block !important;
+        }
+
+        /* 登录表单特殊样式 */
+        .login-form {
             display: flex;
             flex-direction: column;
-            align-items: center; /* 内容居中 */
+            align-items: center;
         }
-        
-        .login-form h3, .user-info h3 {
-            margin: 0 0 1.2rem 0;  /* 上右下左 */
-            transform: translateY(-2px); /* 微调位置 */
-        }       
+
+        .login-form h3 {
+            margin: 0 0 1.5rem 0;
+            transform: translateY(-2px);
+        }
 
         .login-form input {
             margin-bottom: 0.8rem;
-            width: 100%; /* 输入框宽度占满容器 */
+            width: 100%;
         }
 
         .login-form button {
-            margin: 0.8rem 0 0; /* 调整按钮间距 */
-            width: auto; /* 按钮宽度自适应 */
-            padding: 0.6rem 2rem; /* 增加按钮左右内边距 */
+            margin: 0.8rem 0 0;
+            width: auto;
+            padding: 0.6rem 2rem;
         }
 
+        /* 用户信息特殊样式 */
         .user-info {
-            width: 100%;
-            max-width: 300px; /* 控制整体宽度 */
-            text-align: center; /* 新增：保证内部元素继承居中 */
+            text-align: center;
         }
-        
+
+        .user-info h3 {
+            margin: 0 0 1.2rem 0;
+        }
+
         .user-info div {
-            display: flex !important; /* 改用flex布局 */
+            display: flex;
             align-items: center;
             width: 100%;
             margin: 0.4rem 0;
-            padding: 0 15%; /* 两侧留白保证视觉居中 */
+            padding: 0 15%;
         }
-        
+
         .emoji-container {
-            flex: 0 0 30px; /* 固定宽度 */
+            flex: 0 0 30px;
             text-align: center;
             margin-right: 8px;
         }
@@ -133,7 +148,7 @@
             text-align: left;
             flex-grow: 1;
         }
-        
+
         .config-panel {
             grid-area: config-panel;
             display: grid;
@@ -218,7 +233,6 @@
             display: block;
         }
 
-        /* 退出登录按钮样式 */
         .logout-btn {
             background-color: #dc3545 !important;
             width: 150px;
@@ -244,6 +258,11 @@
             padding: 1rem;
             color: var(--primary-color);
         }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
     </style>
 </head>
 <body>
@@ -255,20 +274,21 @@
             <div class="version">版本号: v2.0.0 | 作者: dinding</div>
         </div>
 
+        <!-- 修改后的用户区域 -->
         <div class="user-area">
-            <div class="login-form" id="loginForm">
+            <div class="auth-panel login-form active" id="loginForm">
                 <h3>👤 用户登录</h3>
                 <input type="text" id="passport" placeholder="123云盘账号">
                 <input type="password" id="password" placeholder="123云盘密码">
                 <button onclick="handleLogin()">立即登录</button>
             </div>
 
-             <div class="user-info" id="userInfo" style="display:none;">
+            <div class="auth-panel user-info" id="userInfo">
                 <h3>👤 用户信息</h3>
                 <div>
                     <span class="emoji-container">📛</span>
                     <span>昵称: <span id="nickname"></span></span>
-                </div> 
+                </div>
                 <div>
                     <span class="emoji-container">🆔</span>
                     <span>用户ID: <span id="uid"></span></span>
@@ -277,7 +297,7 @@
                     <span class="emoji-container">📱</span>
                     <span>手机号: <span id="phone"></span></span>
                 </div>
-                 <div>
+                <div>
                     <span class="emoji-container">💽</span>
                     <span>永久空间: <span id="spacePermanent"></span></span>
                 </div>
@@ -291,7 +311,6 @@
 
         <div class="config-panel">
             <form id="configForm" action="/generate" method="GET">
-                <!-- 第一行 -->
                 <div class="form-group">
                     <label for="direct_link_url">直连服务地址</label>
                     <input type="url" id="direct_link_url" name="direct_link_url" value="http://172.17.0.1:8123" required>
@@ -304,8 +323,6 @@
                     <label for="max_retries">最大重试次数</label>
                     <input type="number" id="max_retries" name="max_retries" value="3" min="0">
                 </div>
-
-                <!-- 第二行 -->
                 <div class="form-group">
                     <label for="request_delay">请求间隔（秒）</label>
                     <input type="number" id="request_delay" name="request_delay" value="1" min="0" step="0.1">
@@ -318,8 +335,6 @@
                     <label for="timeout">下载超时（秒）</label>
                     <input type="number" id="timeout" name="timeout" value="30" min="1">
                 </div>
-
-                <!-- 第三行 -->
                 <div class="form-group extension-group">
                     <label for="video_exts">视频扩展名</label>
                     <input type="text" id="video_exts" name="video_exts" value=".mp4,.mkv,.avi,.mov,.flv,.ts,.iso,.rmvb,.m2ts">
@@ -348,16 +363,18 @@
             const data = await res.json();
             
             if (data.logged_in) {
-                document.getElementById('loginForm').style.display = 'none';
+                document.getElementById('loginForm').classList.remove('active');
                 const info = data.user_info;
                 document.getElementById('uid').textContent = info.uid;
                 document.getElementById('nickname').textContent = info.nickname;
                 document.getElementById('phone').textContent = info.passport;
                 document.getElementById('spaceUsed').textContent = formatSize(info.spaceUsed);
                 document.getElementById('spacePermanent').textContent = formatSize(info.spacePermanent);
-                document.getElementById('userInfo').style.display = 'block';
+                document.getElementById('userInfo').classList.add('active');
                 generateBtn.disabled = false;
             } else {
+                document.getElementById('loginForm').classList.add('active');
+                document.getElementById('userInfo').classList.remove('active');
                 generateBtn.disabled = true;
             }
         }
