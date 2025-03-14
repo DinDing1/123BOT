@@ -1,51 +1,59 @@
-FROM python:3.12-bookworm
+# 使用多阶段构建
+# 第一阶段：构建环境
+FROM python:3.12-slim-bookworm as builder
 
-# 设置工作目录
 WORKDIR /app
 
-# 安装系统依赖
+# 安装构建依赖（后续会清理）
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
-    openssl \        
-    uuid-runtime \    
     gcc \
     python3-dev \
-    sqlite3 \
     && rm -rf /var/lib/apt/lists/*
 
-# 创建必要目录结构
-RUN mkdir -p \
-    /app/templates \
-    /app/EmbyLibrary \
-    /app/cache \
-    /var/log/supervisor
-
-# 复制所有项目文件
+# 先安装 requirements 以利用缓存
 COPY requirements.txt .
-COPY generate_strm.py .
-COPY app.py .
-COPY main.py .
-COPY auth.py .  
-COPY auth_check.sh .
-COPY templates/index.html ./templates/
-COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+RUN pip install --user --no-cache-dir -r requirements.txt
 
-# 安装Python依赖
-RUN pip install --upgrade pip
-RUN pip install --no-cache-dir -r requirements.txt
+# 第二阶段：运行环境
+FROM python:3.12-slim-bookworm
 
-# 设置权限（关键！）
-RUN chmod +x /app/auth_check.sh && \
-    chmod 777 /app  
+WORKDIR /app
+
+# 只复制必要的运行时依赖
+COPY --from=builder /root/.local /root/.local
+ENV PATH=/root/.local/bin:$PATH
+
+# 安装运行时系统依赖
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    openssl \
+    uuid-runtime \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# 创建目录结构
+RUN mkdir -p \
+    templates \
+    EmbyLibrary \
+    /app/cache/config \
+    /var/log/supervisor \
+    && chmod 777 /app
+
+# 复制项目文件（使用 .dockerignore 过滤无关文件）
+COPY . .
+
+# 设置权限
+RUN chmod +x /app/auth_check.sh
 
 # 暴露端口
-EXPOSE 8124 8123
+EXPOSE 8123 8124
 
-# 设置环境变量
-ENV FLASK_APP=app.py
-ENV FLASK_ENV=production
+# 环境变量
+ENV FLASK_APP=app.py \
+    FLASK_ENV=production \
+    PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app
 
-# 强制使用 ENTRYPOINT
+# 入口点
 ENTRYPOINT ["/app/auth_check.sh"]
 CMD ["sh", "-c", \
     "flask run --host=0.0.0.0 --port=8124 & \
