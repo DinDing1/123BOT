@@ -8,13 +8,12 @@ from datetime import datetime, timedelta
 import hashlib
 from apscheduler.schedulers.background import BackgroundScheduler
 
-# 日志配置（简化格式）
+# 配置日志（简化格式，去除多余空行）
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(message)s',
+    format='%(asctime)s - %(message)s',  # 简化日志格式
     handlers=[logging.StreamHandler()]
 )
-logger = logging.getLogger(__name__)
 
 # 禁用 Uvicorn 和 FastAPI 的默认日志
 logging.getLogger("uvicorn").setLevel(logging.WARNING)
