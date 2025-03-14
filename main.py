@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 import hashlib
 from apscheduler.schedulers.background import BackgroundScheduler
 
-# 日志配置
+# 日志配置（简化格式）
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(message)s',
@@ -64,9 +64,8 @@ except Exception as e:
 
 app = FastAPI(docs_url=None, redoc_url=None)
 
-# 维护任务
+# 维护任务优化
 def db_optimize():
-    """数据库优化任务"""
     try:
         with sqlite3.connect(CACHE_DB) as conn:
             conn.execute("PRAGMA optimize")
@@ -81,7 +80,8 @@ def startup_event():
     scheduler = BackgroundScheduler()
     scheduler.add_job(db_optimize, 'interval', hours=6)
     scheduler.start()
-    logger.info("\n\n=== 302直连服务已启动 ===")
+    # 仅保留关键启动日志
+    logger.info("\n=== 302直连服务已启动 ===")
     logger.info(f"监听地址: http://0.0.0.0:8123\n")
 
 # 工具函数
