@@ -105,9 +105,18 @@
             padding: 0.6rem 2rem; /* 增加按钮左右内边距 */
         }
 
+
+
+        .user-info {
+            text-align: center
+        }
+        
         .user-info div {
-            margin: 0.4rem 0;
-            font-size: 0.85rem;
+            margin: 0.8rem 0;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem; /* 添加emoji与文字的间距 */
+            
         }
 
         .config-panel {
@@ -246,7 +255,7 @@
                 <div>📱 手机号: <span id="phone"></span></div>
                 <div>💾 已用空间: <span id="spaceUsed"></span></div>
                 <div>💽 永久空间: <span id="spacePermanent"></span></div>
-                <button class="logout-btn" onclick="handleLogout()">⚠️ 退出登录</button>
+                <button class="logout-btn" onclick="handleLogout()"> 退出登录</button>
             </div>
         </div>
 
