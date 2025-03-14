@@ -28,9 +28,10 @@ logging.basicConfig(
     ]
 )
 
-# 禁用 Werkzeug 默认日志
+# 禁用 Flask 和 Werkzeug 的默认日志
 if __name__ != '__main__':
-    logging.getLogger('werkzeug').setLevel(logging.ERROR)
+    logging.getLogger('werkzeug').disabled = True  # 禁用 Werkzeug 日志
+    logging.getLogger('flask.app').setLevel(logging.ERROR)  # 设置 Flask 日志级别为 ERROR
 
 # DeepSeek 风格配色
 DEEPSEEK_COLORS = {
@@ -172,7 +173,7 @@ def generate_strm():
 # 启动日志
 logger = logging.getLogger('strm_generator')
 logger.info("\n\n=== WEBUI已启动 ===")
-logger.info(f"监听地址: http://0.0.0.0:8124\n")
+logger.info(f"WEBUI地址: http://0.0.0.0:8124\n")
 
 if __name__ == '__main__':
     # 生产环境禁用调试模式
