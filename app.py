@@ -38,7 +38,11 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
 logging.getLogger("p123").setLevel(logging.WARNING)
 
-
+# 禁用所有 Werkzeug 日志输出
+class SilentWSGIRequestHandler(WSGIRequestHandler):
+    def log(self, type: str, message: str, *args) -> None:
+        pass  # 完全禁用 Werkzeug 的日志输出
+        
 # 禁用 Flask 和 Werkzeug 的默认日志
 logging.getLogger('werkzeug').disabled = True  # 禁用 Werkzeug 日志
 logging.getLogger('flask.app').setLevel(logging.ERROR)  # 设置 Flask 日志级别为 ERROR
