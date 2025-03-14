@@ -26,6 +26,8 @@ ENV PATH=/root/.local/bin:$PATH
 # 安装运行时系统依赖
 RUN apt-get update && apt-get install -y --no-install-recommends \
     openssl \
+    curl \
+    sqlite3 \
     uuid-runtime \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
