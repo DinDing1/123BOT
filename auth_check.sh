@@ -68,8 +68,8 @@ verify_auth_key() {
         response_body=$(echo "$response" | head -n -1)
 
         # 调试输出
-        echo -e "\033[34m[调试] HTTP状态码：${http_code}\033[0m" >&2
-        echo -e "\033[34m[调试] 服务端响应：${response_body}\033[0m" >&2
+        #echo -e "\033[34m[调试] HTTP状态码：${http_code}\033[0m" >&2
+        #echo -e "\033[34m[调试] 服务端响应：${response_body}\033[0m" >&2
 
         # 处理响应
         case "$http_code" in
