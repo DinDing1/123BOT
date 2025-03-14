@@ -19,57 +19,58 @@
             height: 100vh;
             display: flex;
             flex-direction: column;
+            min-height: 720px;
         }
 
         .container {
             flex: 1;
-            margin: 20px;
+            margin: 12px;
             background: white;
             border-radius: 12px;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            padding: 2rem;
+            padding: 1.2rem;
             display: grid;
             grid-template-areas: 
                 "header header"
                 "user-area log-panel"
                 "config-panel log-panel";
             grid-template-columns: 1fr 1fr;
-            grid-template-rows: auto 1fr 2fr;
-            gap: 2rem;
-            max-height: 90vh;
+            grid-template-rows: auto auto 1fr;
+            gap: 1.2rem;
+            min-height: 680px;
             overflow: hidden;
         }
 
         .header {
             grid-area: header;
             text-align: center;
-            margin-bottom: 1.5rem;
+            margin-bottom: 0.8rem;
         }
 
         .logo {
             color: var(--primary-color);
-            font-size: 2rem;
+            font-size: 1.7rem;
             font-weight: bold;
-            margin-bottom: 0.5rem;
+            margin-bottom: 0.2rem;
         }
 
         .header p {
             color: var(--text-color);
-            font-size: 1rem;
-            margin-bottom: 1rem;
+            font-size: 0.88rem;
+            margin-bottom: 0.6rem;
         }
 
         .header .divider {
-            width: 80%;
+            width: 88%;
             height: 1px;
             background: rgba(0, 0, 0, 0.1);
-            margin: 1rem auto;
+            margin: 0.6rem auto;
         }
 
         .header .version {
             color: #6c757d;
-            font-size: 0.9rem;
-            margin-top: 1rem;
+            font-size: 0.82rem;
+            margin-top: 0.8rem;
         }
 
         .user-area {
@@ -78,34 +79,41 @@
             grid-template-columns: 1fr;
             gap: 1rem;
             padding: 1rem;
+            min-height: 240px;
+            width: 50%;
         }
 
         .login-form, .user-info {
             background: white;
-            padding: 1.5rem;
+            padding: 1.2rem;
             border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+            height: auto;
             display: flex;
             flex-direction: column;
-            align-items: center;
+            align-items: center; /* 内容居中 */
         }
 
-        .user-info {
-            text-align: center; /* 用户信息居中 */
+        .login-form input {
+            margin-bottom: 0.8rem;
+            width: 100%; /* 输入框宽度占满容器 */
+        }
+
+        .login-form button {
+            margin: 0.8rem 0 0; /* 调整按钮间距 */
+            width: auto; /* 按钮宽度自适应 */
+            padding: 0.6rem 2rem; /* 增加按钮左右内边距 */
         }
 
         .user-info div {
-            margin: 0.8rem 0; /* 增加行间距 */
-            font-size: 0.9rem;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
+            margin: 0.4rem 0;
+            font-size: 0.85rem;
         }
 
         .config-panel {
             grid-area: config-panel;
             display: grid;
-            grid-template-columns: repeat(3, 1fr);
+            grid-template-columns: repeat(3, minmax(0, 1fr));
             gap: 1rem;
             align-content: start;
         }
@@ -115,33 +123,39 @@
         }
 
         .form-group {
-            margin-bottom: 1rem;
+            margin-bottom: 0.8rem;
             min-width: 0;
         }
 
-        /* 扩展名输入框对齐 */
+        .form-group.extension-group {
+            grid-column: span 1;
+        }
         .form-group.extension-group:first-child {
             grid-column: 1 / 2;
         }
         .form-group.extension-group:last-child {
             grid-column: 3 / 4;
         }
+        .form-group.extension-group input {
+            width: 100%;
+        }
 
         label {
             display: block;
-            margin-bottom: 0.5rem;
+            margin-bottom: 0.4rem;
             font-weight: 500;
             color: var(--text-color);
+            font-size: 0.9rem;
         }
 
         input {
-            width: 100%;
-            padding: 0.75rem;
+            padding: 0.6rem;
             border: 1px solid #e2e8f0;
             border-radius: 6px;
-            font-size: 1rem;
+            font-size: 0.9rem;
             background: #f8fafc;
             box-sizing: border-box;
+            width: 100%;
         }
 
         .log-panel {
@@ -150,41 +164,21 @@
             border-radius: 8px;
             padding: 1rem;
             font-family: 'Consolas', monospace;
-            font-size: 0.85rem;
-            line-height: 1.5;
-            height: 70vh;
+            font-size: 0.8rem;
+            line-height: 1.4;
+            height: 62vh;
             overflow-y: auto;
         }
 
         .log-entry {
-            margin: 0.3rem 0;
+            margin: 0.25rem 0;
             word-break: break-all;
-            color: #4ea1ff; /* 日志文字改为蓝色 */
+            color: #4ea1ff;
         }
 
         .log-time {
             color: #6c757d;
-            margin-right: 1rem;
-        }
-
-        .log-process {
-            color: #4ea1ff;
-        }
-
-        .log-success {
-            color: #28a745;
-        }
-
-        .log-file {
-            color: #e9ecef;
-            margin-left: 1.5rem;
-        }
-
-        .log-error {
-            color: #dc3545;
-            background: #2d1d1d;
-            padding: 0.3rem;
-            border-radius: 4px;
+            margin-right: 0.8rem;
         }
 
         button {
@@ -234,7 +228,7 @@
             <div class="logo">123Media_STRM</div>
             <p>感谢🈲贫大佬，祝🈲贫大佬长命百岁</p>
             <div class="divider"></div>
-            <div class="version">版本号: v2.0.0 | 作者: dinding</div>
+            <div class="version">版本号: v1.0.0 | 作者: dinding</div>
         </div>
 
         <div class="user-area">
