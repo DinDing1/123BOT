@@ -163,6 +163,7 @@
             grid-area: user-area;
             display: flex;
             justify-content: center;
+            align-items: center; /* 0315新增：垂直居中 */
             padding: 1rem;
             width: 100%;
         }
@@ -176,11 +177,22 @@
             max-width: 380px;
             display: none;
             border: 1px solid rgba(0, 243, 255, 0.2);
+            text-align: center; /* 0315新增：内容居中 */
         }
 
         .auth-panel.active {
             display: block !important;
             animation: fadeIn 0.3s ease;
+        }
+
+        .auth-panel h3 {
+            margin-bottom: 1.5rem;
+        }
+
+        .auth-panel div {
+            margin: 0.8rem 0;
+            text-align: left; /* 0315新增：文本左对齐 */
+            display: inline-block; /* 0315新增：使内容居中 */
         }
 
         .config-panel {
@@ -331,14 +343,14 @@
                 <div><span>📱 手机号: <span id="phone"></span></span></div>
                 <div><span>💽 永久空间: <span id="spacePermanent"></span></span></div>
                 <div><span>💾 已用空间: <span id="spaceUsed"></span></span></div>
-                <button class="logout-btn" onclick="handleLogout()">退出登录</button>
+                <button class="logout-btn" onclick="handleLogout()">退出</button>
             </div>
         </div>
 
         <div class="config-panel">
             <form id="configForm" action="/generate" method="GET">
                 <div class="form-group">
-                    <label for="direct_link_url">直连服务地址</label>
+                    <label for="direct_link_url">直连地址</label>
                     <input type="url" id="direct_link_url" name="direct_link_url" value="http://172.17.0.1:8123" required>
                 </div>
                 <div class="form-group">
@@ -346,7 +358,7 @@
                     <input type="number" id="parent_id" name="parent_id" value="0">
                 </div>
                 <div class="form-group">
-                    <label for="max_retries">最大重试次数</label>
+                    <label for="max_retries">重试次数</label>
                     <input type="number" id="max_retries" name="max_retries" value="3" min="0">
                 </div>
                 <div class="form-group">
@@ -376,7 +388,7 @@
     </div>
 
     <div id="generateButtonContainer" style="display: none;">
-        <button type="submit" form="configForm" id="generateBtn" disabled>开始生成</button>
+        <button type="submit" form="configForm" id="generateBtn" disabled>生成STRM</button>
         <div class="loading" id="loading">⏳ 正在生成中，请稍候...</div>
     </div>
 
