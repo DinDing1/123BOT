@@ -6,17 +6,27 @@
     <title>123Media_STRM</title>
     <style>
         :root {
-            --primary-color: #2d6ae3;
-            --secondary-color: #5b8def;
-            --background-color: #f8f9fa;
-            --text-color: #2d3846;
+            --primary-color: #00f3ff;
+            --secondary-color: #0066ff;
+            --neon-effect: 0 0 8px rgba(0, 243, 255, 0.3);
+            --background-color: #0a1420;
+            --text-color: #e0e0e0;
+        }
+
+        canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            z-index: -1;
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background-color: var(--background-color);
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: var(--background-color);
+            color: var(--text-color);
             margin: 0;
             height: 100vh;
+            overflow: auto;
             display: flex;
             flex-direction: column;
             min-height: 720px;
@@ -33,53 +43,63 @@
             box-sizing: border-box;
         }
 
-        /* 登录表单 */
         .login-form {
-            background: white;
+            background: rgba(25, 40, 60, 0.9);
             padding: 2rem;
             border-radius: 12px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            box-shadow: var(--neon-effect);
             width: 100%;
             max-width: 400px;
             text-align: center;
             box-sizing: border-box;
+            border: 1px solid rgba(0, 243, 255, 0.3);
+            backdrop-filter: blur(3px);
         }
 
         .login-form h3 {
             margin: 0 0 1.5rem 0;
-            font-size: 1.5rem;
+            font-size: 1.6rem;
             color: var(--primary-color);
         }
 
         .login-form input {
-            width: calc(100% - 2rem); /* 左右各1rem边距 */
-            padding: 0.8rem 1rem; /* 左右内边距一致 */
-            margin: 0 1rem 1rem 1rem; /* 统一外边距 */
-            border: 1px solid #e2e8f0;
+            width: calc(100% - 2rem);
+            padding: 0.8rem 1rem;
+            margin: 0.5rem auto; /* 调整上下间距 居中 */
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(0, 243, 255, 0.2);
             border-radius: 8px;
             font-size: 1rem;
-            box-sizing: border-box;
+            color: var(--text-color);
+            transition: border-color 0.3s ease;
+        }
+
+
+        .login-form input:focus {
+            border-color: var(--primary-color);
+            outline: none;
         }
 
         .login-form button {
-            width: calc(100% - 2rem); /* 与输入框同宽 */
+            width: 50%; /* 按钮宽度调整为50% */
             padding: 0.8rem;
-            margin: 1rem;
-            background-color: var(--primary-color);
+            margin: 1rem auto; /* 居中 */
+            background: linear-gradient(45deg, var(--secondary-color), var(--primary-color));
             color: white;
             border: none;
             border-radius: 8px;
             font-size: 1rem;
             cursor: pointer;
-            box-sizing: border-box;
+            transition: transform 0.2s ease;
+            display: block;
         }
 
         .login-form button:hover {
-            background-color: var(--secondary-color);
+            transform: scale(1.02);
         }
 
         .version-info {
-            margin: 1.5rem 1rem 0 1rem; /* 统一外边距 */
+            margin: 1.5rem 1rem 0 1rem;
             font-size: 0.9rem;
             color: #666;
         }
@@ -87,12 +107,12 @@
         /* 主界面容器 */
         .container {
             flex: 1;
-            margin: 12px;
-            background: white;
+            margin: 20px;
+            background: rgba(20, 30, 45, 0.95);
             border-radius: 12px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            box-shadow: var(--neon-effect);
             padding: 1.2rem;
-            display: none; /* 默认隐藏 */
+            display: none;
             grid-template-areas: 
                 "header header"
                 "user-area log-panel"
@@ -103,6 +123,8 @@
             min-height: 680px;
             overflow: hidden;
             box-sizing: border-box;
+            border: 1px solid rgba(0, 243, 255, 0.2);
+            backdrop-filter: blur(5px);
         }
 
         .header {
@@ -127,7 +149,7 @@
         .header .divider {
             width: 88%;
             height: 1px;
-            background: rgba(0, 0, 0, 0.1);
+            background: rgba(255, 255, 255, 0.1);
             margin: 0.6rem auto;
         }
 
@@ -146,13 +168,14 @@
         }
 
         .auth-panel {
-            background: white;
+            background: rgba(0, 0, 0, 0.6);
             padding: 1.5rem 2rem;
             border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+            box-shadow: 0 0 8px rgba(0, 243, 255, 0.2);
             width: 100%;
             max-width: 380px;
             display: none;
+            border: 1px solid rgba(0, 243, 255, 0.2);
         }
 
         .auth-panel.active {
@@ -180,15 +203,6 @@
         .form-group.extension-group {
             grid-column: span 1;
         }
-        .form-group.extension-group:first-child {
-            grid-column: 1 / 2;
-        }
-        .form-group.extension-group:last-child {
-            grid-column: 3 / 4;
-        }
-        .form-group.extension-group input {
-            width: 100%;
-        }
 
         label {
             display: block;
@@ -200,17 +214,22 @@
 
         input {
             padding: 0.6rem;
-            border: 1px solid #e2e8f0;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(0, 243, 255, 0.2);
             border-radius: 6px;
             font-size: 0.9rem;
-            background: #f8fafc;
-            box-sizing: border-box;
-            width: 100%;
+            color: var(--text-color);
+            transition: all 0.3s ease;
+        }
+
+        input:focus {
+            border-color: var(--primary-color);
+            outline: none;
         }
 
         .log-panel {
             grid-area: log-panel;
-            background: #1a1a1a;
+            background: rgba(0, 0, 0, 0.7);
             border-radius: 8px;
             padding: 1rem;
             font-family: 'Consolas', monospace;
@@ -218,12 +237,13 @@
             line-height: 1.4;
             height: 62vh;
             overflow-y: auto;
+            border: 1px solid rgba(0, 243, 255, 0.2);
         }
 
         .log-entry {
             margin: 0.25rem 0;
             word-break: break-all;
-            color: #4ea1ff;
+            color: var(--primary-color);
         }
 
         .log-time {
@@ -232,7 +252,7 @@
         }
 
         button {
-            background-color: var(--primary-color);
+            background: linear-gradient(45deg, var(--secondary-color), var(--primary-color));
             color: white;
             padding: 0.75rem 1.5rem;
             border: none;
@@ -241,23 +261,25 @@
             font-size: 1rem;
             margin: 1rem auto;
             display: block;
-        }
-
-        .logout-btn {
-            background-color: #dc3545 !important;
-            width: 150px;
-            margin-top: 1.5rem;
-        }
-        .logout-btn:hover {
-            background-color: #bb2d3b !important;
+            transition: transform 0.2s ease;
         }
 
         button:hover:not(:disabled) {
-            background-color: var(--secondary-color);
+            transform: scale(1.02);
+        }
+
+        .logout-btn {
+            background: linear-gradient(45deg, #ff006a, #dc3545) !important;
+            width: 150px;
+            margin-top: 1.5rem;
+        }
+
+        .logout-btn:hover {
+            background: linear-gradient(45deg, #dc3545, #bb2d3b) !important;
         }
 
         button:disabled {
-            background-color: #6c757d;
+            background: #6c757d;
             cursor: not-allowed;
             opacity: 0.7;
         }
@@ -276,6 +298,8 @@
     </style>
 </head>
 <body>
+    <canvas id="background"></canvas>
+
     <!-- 登录界面 -->
     <div class="login-container">
         <div class="login-form">
@@ -299,32 +323,14 @@
         </div>
 
         <div class="user-area">
-            <div class="auth-panel login-form" id="loginForm">
-                <!-- 登录表单已移动到独立登录界面 -->
-            </div>
-
+            <div class="auth-panel login-form" id="loginForm"></div>
             <div class="auth-panel user-info" id="userInfo">
                 <h3>👤 用户信息</h3>
-                <div>
-                    <span class="emoji-container">📛</span>
-                    <span>昵称: <span id="nickname"></span></span>
-                </div>
-                <div>
-                    <span class="emoji-container">🆔</span>
-                    <span>用户ID: <span id="uid"></span></span>
-                </div>
-                <div>
-                    <span class="emoji-container">📱</span>
-                    <span>手机号: <span id="phone"></span></span>
-                </div>
-                <div>
-                    <span class="emoji-container">💽</span>
-                    <span>永久空间: <span id="spacePermanent"></span></span>
-                </div>
-                <div>
-                    <span class="emoji-container">💾</span>
-                    <span>已用空间: <span id="spaceUsed"></span></span>
-                </div>
+                <div><span>📛 昵称: <span id="nickname"></span></span></div>
+                <div><span>🆔 用户ID: <span id="uid"></span></span></div>
+                <div><span>📱 手机号: <span id="phone"></span></span></div>
+                <div><span>💽 永久空间: <span id="spacePermanent"></span></span></div>
+                <div><span>💾 已用空间: <span id="spaceUsed"></span></span></div>
                 <button class="logout-btn" onclick="handleLogout()">退出登录</button>
             </div>
         </div>
@@ -369,13 +375,77 @@
         <div class="log-panel" id="output"></div>
     </div>
 
-    <!-- 立即生成按钮仅在主界面显示 -->
     <div id="generateButtonContainer" style="display: none;">
         <button type="submit" form="configForm" id="generateBtn" disabled>开始生成</button>
         <div class="loading" id="loading">⏳ 正在生成中，请稍候...</div>
     </div>
 
     <script>
+        // 背景线条优化
+        const canvas = document.getElementById('background');
+        const ctx = canvas.getContext('2d');
+        let lines = [];
+
+        class Line {
+            constructor() {
+                this.reset();
+                this.lineWidth = Math.random() * 0.8 + 0.2;
+            }
+
+            reset() {
+                this.x = Math.random() * canvas.width;
+                this.y = Math.random() * canvas.height;
+                this.speed = Math.random() * 1.5 + 0.5;
+                this.angle = Math.random() * Math.PI * 2;
+                this.alpha = Math.random() * 0.2 + 0.1;
+            }
+
+            update() {
+                this.x += Math.cos(this.angle) * this.speed;
+                this.y += Math.sin(this.angle) * this.speed;
+                
+                if (this.x < 0 || this.x > canvas.width || 
+                    this.y < 0 || this.y > canvas.height) {
+                    this.reset();
+                }
+            }
+
+            draw() {
+                ctx.beginPath();
+                ctx.strokeStyle = `rgba(0, 243, 255, ${this.alpha})`;
+                ctx.lineWidth = this.lineWidth;
+                ctx.moveTo(this.x, this.y);
+                ctx.lineTo(
+                    this.x - Math.cos(this.angle) * 50,
+                    this.y - Math.sin(this.angle) * 50
+                );
+                ctx.stroke();
+            }
+        }
+
+        function initBackground() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            lines = Array(50).fill().map(() => new Line());
+        }
+
+        function animate() {
+            ctx.fillStyle = 'rgba(10, 20, 30, 0.08)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            lines.forEach(line => {
+                line.update();
+                line.draw();
+            });
+
+            requestAnimationFrame(animate);
+        }
+
+        window.addEventListener('resize', initBackground);
+        initBackground();
+        animate();
+
+        // 原有应用逻辑
         const form = document.getElementById('configForm');
         const output = document.getElementById('output');
         const loading = document.getElementById('loading');
