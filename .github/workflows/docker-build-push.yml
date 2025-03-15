@@ -22,11 +22,17 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      - name: Read Version
+        id: version
+        run: |
+          VERSION=$(cat VERSION | tr -d '[:space:]')  # 读取 VERSION 文件内容
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+
       - name: Build and Push Docker Image (Multi-Arch)
         uses: docker/build-push-action@v5
         with:
           context: .
-          platforms: linux/amd64,linux/arm64 
+          platforms: linux/amd64,linux/arm64  # 多架构支持
           push: true
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/cs:latest
