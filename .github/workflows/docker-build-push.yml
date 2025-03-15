@@ -37,5 +37,5 @@ jobs:
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/cs:latest
             ${{ secrets.DOCKERHUB_USERNAME }}/cs:${{ steps.version.outputs.version }}
-            ${{ secrets.DOCKERHUB_USERNAME }}/123strm:latest
-            ${{ secrets.DOCKERHUB_USERNAME }}/123strm:${{ steps.version.outputs.version }}
+            #${{ secrets.DOCKERHUB_USERNAME }}/123strm:latest
+            #${{ secrets.DOCKERHUB_USERNAME }}/123strm:${{ steps.version.outputs.version }}
