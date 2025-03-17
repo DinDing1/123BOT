@@ -13,20 +13,16 @@ import subprocess
 # 配置日志（简化格式，去除多余空行）
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(message)s',  # 简化日志格式
+    format='%(asctime)s - %(message)s',
     handlers=[logging.StreamHandler()]
 )
 
 # 禁用 Uvicorn 和 FastAPI 的默认日志
 logging.getLogger("uvicorn").setLevel(logging.WARNING)
-logging.getLogger("uvicorn.access").disabled = True  # 禁用访问日志
-logging.getLogger("uvicorn.error").disabled = True  # 禁用错误日志
+logging.getLogger("uvicorn.access").disabled = True
+logging.getLogger("uvicorn.error").disabled = True
 logging.getLogger("fastapi").setLevel(logging.WARNING)
-
-# 禁用 APScheduler 的日志
 logging.getLogger("apscheduler").setLevel(logging.WARNING)
-
-# 禁用 httpx 和 p123 的日志输出
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
 logging.getLogger("p123").setLevel(logging.WARNING)
@@ -39,7 +35,6 @@ def init_db():
     """初始化数据库结构"""
     try:
         with sqlite3.connect(CACHE_DB) as conn:
-            # 创建主表（含索引优化）
             conn.execute('''
                 CREATE TABLE IF NOT EXISTS download_cache (
                     key TEXT PRIMARY KEY,
@@ -50,8 +45,6 @@ def init_db():
                 CREATE INDEX IF NOT EXISTS idx_expire 
                 ON download_cache (expire_time)
             ''')
-            
-            # 创建自动清理触发器
             conn.execute('''
                 CREATE TRIGGER IF NOT EXISTS auto_clean 
                 AFTER INSERT ON download_cache
@@ -60,24 +53,20 @@ def init_db():
                     WHERE expire_time <= strftime('%Y-%m-%d %H:%M:%S', 'now');
                 END;
             ''')
-
-            # 新增115配置表
             conn.execute('''
                 CREATE TABLE IF NOT EXISTS auto115_config (
                     user_id TEXT PRIMARY KEY,
                     main_cookies TEXT,
                     sub_accounts TEXT,
-                    wish_content TEXT DEFAULT '求一本钢铁是怎样炼成得书'
-                    schedule_time TEXT DEFAULT '8:00'  # 新增定时字段
+                    wish_content TEXT DEFAULT '求一本钢铁是怎样炼成得书',
+                    schedule_time TEXT DEFAULT '08:00'
                 )''')
-
             conn.commit()
             logger.info("数据库初始化完成")
     except Exception as e:
         logger.error(f"数据库初始化失败: {str(e)}")
         raise
 
-# 客户端初始化
 try:
     client = P123Client(
         passport=os.getenv("P123_PASSPORT"),
@@ -90,7 +79,6 @@ except Exception as e:
 
 app = FastAPI(docs_url=None, redoc_url=None)
 
-# 维护任务优化
 def db_optimize():
     try:
         with sqlite3.connect(CACHE_DB) as conn:
@@ -100,54 +88,81 @@ def db_optimize():
     except Exception as e:
         logger.error(f"优化失败: {str(e)}")
 
-# 115自动化任务
-def run_115_task():
-    """执行115自动化任务"""
+def execute_115_job(user_id: str):
+    """执行指定用户的115任务"""
     try:
         with sqlite3.connect(CACHE_DB) as conn:
-            users = conn.execute('SELECT * FROM auto115_config').fetchall()
+            row = conn.execute('''
+                SELECT main_cookies, sub_accounts 
+                FROM auto115_config WHERE user_id = ?
+            ''', (user_id,)).fetchone()
         
-        for user in users:
-            config = {
-                "wish_main": {
-                    "cookies": json.loads(user[1]),
-                    "name": "主账号"
-                },
-                "wish_subs": [{"cookies": json.loads(cookie)} for cookie in json.loads(user[2])]
-            }
-            
-            config_path = f"/app/cache/115_{user[0]}.json"
-            with open(config_path, "w") as f:
-                json.dump(config, f)
-            
-            subprocess.Popen([
-                'python', '/app/115_auto.py',
-                '--config', config_path
-            ])
-            logger.info(f"已启动115自动化任务 for user {user[0]}")
+        if not row:
+            logger.error(f"未找到用户配置: {user_id}")
+            return
+
+        config = {
+            "wish_main": {
+                "cookies": json.loads(row[0]),
+                "name": "主账号"
+            },
+            "wish_subs": [{"cookies": json.loads(cookie)} for cookie in json.loads(row[1])]
+        }
+        
+        config_path = f"/app/cache/115_{user_id}.json"
+        with open(config_path, "w") as f:
+            json.dump(config, f)
+        
+        subprocess.Popen([
+            'python', '/app/115_auto.py',
+            '--config', config_path
+        ])
+        logger.info(f"已启动115自动化任务 for user {user_id}")
     except Exception as e:
-        logger.error(f"115自动化任务执行失败: {str(e)}")
+        logger.error(f"115任务执行失败: {str(e)}")
+
+def run_115_task():
+    """动态创建定时任务"""
+    try:
+        with sqlite3.connect(CACHE_DB) as conn:
+            users = conn.execute('''
+                SELECT user_id, schedule_time 
+                FROM auto115_config
+            ''').fetchall()
+
+        scheduler = BackgroundScheduler()
+        for user_id, schedule in users:
+            if not schedule:
+                schedule = "08:00"
+            hour, minute = schedule.split(":")
+            scheduler.add_job(
+                execute_115_job,
+                'cron',
+                hour=int(hour),
+                minute=int(minute),
+                args=[user_id]
+            )
+        scheduler.start()
+        logger.info("定时任务调度完成")
+    except Exception as e:
+        logger.error(f"定时任务创建失败: {str(e)}")
 
 @app.on_event("startup")
 def startup_event():
     init_db()
     scheduler = BackgroundScheduler()
     scheduler.add_job(db_optimize, 'interval', hours=6)
-    scheduler.add_job(run_115_task, 'cron', hour=8)  # 每天8点执行
+    scheduler.add_job(run_115_task)  # 启动时初始化定时任务
     scheduler.start()
 
-# 工具函数
 def generate_cache_key(file_name: str, size: int, etag: str) -> str:
-    """生成唯一缓存键"""
     raw_key = f"{file_name}|{size}|{etag}"
     return hashlib.sha256(raw_key.encode()).hexdigest()
 
-# 核心路由
 @app.get("/{uri:path}")
 @app.head("/{uri:path}")
 async def handle_request(request: Request, uri: str):
     try:
-        # 参数解析
         if uri.count("|") < 2:
             raise HTTPException(400, "URI格式错误")
         
@@ -156,7 +171,6 @@ async def handle_request(request: Request, uri: str):
         size = int(size)
         cache_key = generate_cache_key(file_name, size, etag)
 
-        # 缓存查询（含有效期判断）
         with sqlite3.connect(CACHE_DB) as conn:
             cursor = conn.execute(
                 '''
@@ -164,7 +178,7 @@ async def handle_request(request: Request, uri: str):
                 FROM download_cache 
                 WHERE 
                     key = ? 
-                    AND expire_time > strftime('%Y-%m-%d %H:%M:%S', 'now')
+                    AND expire_time > datetime('now')
                 ''',
                 (cache_key,)
             )
@@ -172,7 +186,6 @@ async def handle_request(request: Request, uri: str):
                 logger.info(f"缓存命中 - {file_name}")
                 return RedirectResponse(row[0], status_code=302)
 
-        # 获取新地址
         download_resp = check_response(client.download_info({
             "FileName": file_name,
             "Size": size,
@@ -180,7 +193,6 @@ async def handle_request(request: Request, uri: str):
             "S3KeyFlag": request.query_params.get("s3keyflag", "")
         }))
         
-        # 写入缓存
         download_url = download_resp["data"]["DownloadUrl"]
         expire_time = (datetime.now() + timedelta(seconds=CACHE_TTL)).strftime("%Y-%m-%d %H:%M:%S")
         with sqlite3.connect(CACHE_DB) as conn:
@@ -204,7 +216,6 @@ async def handle_request(request: Request, uri: str):
         logger.error(f"服务器错误: {str(e)}", exc_info=True)
         raise HTTPException(500, "内部服务器错误")
 
-# 启动日志优化
 logger = logging.getLogger('strm_generator')
 logger.info("=== 302直连服务已启动 ===")
 logger.info("302直连地址: http://0.0.0.0:8123")
