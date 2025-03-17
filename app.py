@@ -100,6 +100,48 @@ def get_user_info():
         "user_info": session['user_info']
     })
 
+####115网盘
+@app.route('/115_config', methods=['POST'])
+def save_115_config():
+    if not session.get('logged_in'):
+        return jsonify({"success": False})
+    
+    data = request.json
+    user_id = session['user_info']['uid']
+    
+    # 连接main.py使用的数据库
+    with sqlite3.connect(CACHE_DB) as conn:
+        conn.execute('''
+            INSERT OR REPLACE INTO auto115_config 
+            (user_id, main_cookies, sub_accounts, wish_content)
+            VALUES (?, ?, ?, ?)
+        ''', (
+            user_id,
+            json.dumps(data['main']),
+            json.dumps(data['subs']),
+            data['content']
+        ))
+    return jsonify({"success": True})
+
+@app.route('/115_config')
+def get_115_config():
+    if not session.get('logged_in'):
+        return jsonify({})
+    
+    user_id = session['user_info']['uid']
+    with sqlite3.connect(CACHE_DB) as conn:
+        row = conn.execute('''
+            SELECT main_cookies, sub_accounts, wish_content 
+            FROM auto115_config WHERE user_id = ?
+        ''', (user_id,)).fetchone()
+    
+    return jsonify({
+        "main": json.loads(row[0]) if row else None,
+        "subs": json.loads(row[1]) if row else [],
+        "content": row[2] if row else ""
+    })
+    
+
 @app.route('/generate', methods=['GET'])
 def generate_strm():
     """生成 STRM 文件的路由"""
