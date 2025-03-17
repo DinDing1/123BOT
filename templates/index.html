@@ -161,11 +161,19 @@
 
         .user-area {
             grid-area: user-area;
-            display: flex;
-            justify-content: center;
-            align-items: center; /* 0315新增：垂直居中 */
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
             padding: 1rem;
-            width: 100%;
+        }
+        
+        /* 用户信息面板 */
+        .user-info {
+            background: rgba(25, 40, 60, 0.9);
+            padding: 1.5rem;
+            border-radius: 12px;
+            box-shadow: 0 0 8px rgba(0, 243, 255, 0.2);
+            border: 1px solid rgba(0, 243, 255, 0.2);
         }
 
         .auth-panel {
@@ -309,29 +317,26 @@
             to { opacity: 1; transform: translateY(0); }
         }
         /* 新增115配置区域样式 */
-        .config-area-115 {
-            grid-area: config-area;
+        .config-115 {
             background: rgba(25, 40, 60, 0.9);
             padding: 1.5rem;
             border-radius: 12px;
             box-shadow: 0 0 8px rgba(0, 243, 255, 0.2);
             border: 1px solid rgba(0, 243, 255, 0.2);
-            height: fit-content;
-            margin-left: 1rem;
         }
 
-        .config-area-115 h2 {
+        .config-115 h2 {
             color: var(--primary-color);
             font-size: 1.3rem;
             margin-bottom: 1.2rem;
             text-align: center;
         }
 
-        .config-area-115 .form-group {
+        .config-115 .form-group {
             margin-bottom: 1rem;
         }
 
-        .config-area-115 textarea {
+        .config-115 textarea {
             width: 100%;
             background: rgba(255, 255, 255, 0.08);
             border: 1px solid rgba(0, 243, 255, 0.3);
@@ -339,16 +344,23 @@
             padding: 0.8rem;
             color: var(--text-color);
             resize: vertical;
-            min-height: 80px;
+            min-height: 100px;
         }
 
-        .config-area-115 input[type="time"] {
+        .config-115 input[type="time"] {
             width: 100%;
             background: rgba(255, 255, 255, 0.08);
             border: 1px solid rgba(0, 243, 255, 0.3);
             color: var(--text-color);
             padding: 0.6rem;
             border-radius: 6px;
+        }
+
+        .config-115 button {
+            width: 48%;
+            padding: 0.75rem;
+            margin: 0.5rem 0;
+            font-size: 0.95rem;
         }
 
         /* 按钮样式调整 */
@@ -404,8 +416,8 @@
         </div>
 
         <div class="user-area">
-            <div class="auth-panel login-form" id="loginForm"></div>
-            <div class="auth-panel user-info" id="userInfo">
+            <!-- 左侧：用户信息 -->
+            <div class="user-info">
                 <h2>👤 用户信息</h2>
                 <div><span>📛 昵称: <span id="nickname"></span></span></div>
                 <div><span>🆔 用户ID: <span id="uid"></span></span></div>
@@ -414,28 +426,46 @@
                 <div><span>💾 已用空间: <span id="spaceUsed"></span></span></div>
                 <button class="logout-btn" onclick="handleLogout()">退出</button>
             </div>
-        </div>
 
         <!-- 新增115配置区域 -->
-        <div class="config-area-115">
-            <h2>⏱ 115自动化配置</h2>
-            <div class="form-group">
-                <label>主账号Cookie</label>
-                <textarea id="115_main" placeholder="请输入主账号Cookie JSON"></textarea>
-            </div>
-            <div class="form-group">
-                <label>小号配置（每行一个Cookie）</label>
-                <textarea id="115_subs" placeholder="请输入小号Cookie JSON，每行一个"></textarea>
-            </div>
-            <div class="form-group">
-                <label>定时执行时间</label>
-                <input type="time" id="115_schedule" value="08:00">
-            </div>
-            <div style="display: flex; gap: 4%;">
-                <button class="btn-save" onclick="save115Config()">保存配置</button>
-                <button class="btn-run" onclick="run115Task()">立即执行</button>
+        <!-- 右侧：115配置区域 -->
+            <div class="config-115">
+                <h2>⏱ 115自动化配置</h2>
+                <div class="form-group">
+                    <label>主账号Cookie</label>
+                    <textarea id="115_main" placeholder='{
+    "UID": "7157309_I1_1738992621",
+    "CID": "115ed3ba005c50bc7623505f04b4200c",
+    "SEID": "5e1928d3e72bc29b0aa57d6757e0147a463364941c19810860dacd481c3534ce9ad8a349d0dae0ee11790843d26c48934abc565c8b9f64ae07976855",
+    "KID": "28d35c069fc93d3670714ab46377fbe6"
+}'></textarea>
+                </div>
+                <div class="form-group">
+                    <label>小号配置（每行一个Cookie）</label>
+                    <textarea id="115_subs" placeholder='[
+    {
+        "UID": "102187719_I1_1742187023",
+        "CID": "c460195a0c4c6a43bf3b32b43118e04d",
+        "SEID": "fd87d9e17094a27af6fdf6238203dbba11a728a32a980369278310d9e4362ce730757223706bc1697e11b4616d372d23cf39af9b878eaa42577009fd",
+        "KID": "9ef5ce45199383c8e0df04db35bcc8ba"
+    }
+]'></textarea>
+                </div>
+                <div class="form-group">
+                    <label>定时执行时间</label>
+                    <input type="time" id="115_schedule" value="08:00">
+                </div>
+                <div class="form-group">
+                    <label>许愿内容</label>
+                    <input type="text" id="115_content" value="求一本钢铁是怎样炼成得书">
+                </div>
+                <div style="display: flex; gap: 4%;">
+                    <button class="btn-save" onclick="save115Config()">保存配置</button>
+                    <button class="btn-run" onclick="run115Task()">立即执行</button>
+                </div>
             </div>
         </div>
+        
 
         <div class="config-panel">
             <form id="configForm" action="/generate" method="GET">
@@ -699,8 +729,8 @@
             const config = await res.json();
             
             if(config.main) {
-                document.getElementById('115_main').value = JSON.stringify(config.main, null, 2);
-                document.getElementById('115_subs').value = config.subs.map(s => JSON.stringify(s)).join('\n');
+                document.getElementById('115_main').value = JSON.stringify(config.main.cookies, null, 2);
+                document.getElementById('115_subs').value = JSON.stringify(config.subs.map(s => s.cookies), null, 2);
                 document.getElementById('115_content').value = config.content;
                 document.getElementById('115_schedule').value = config.schedule || '08:00';
             }
@@ -708,11 +738,12 @@
 
         async function save115Config() {
             try {
-                const main = JSON.parse(document.getElementById('115_main').value);
-                const subs = document.getElementById('115_subs').value
-                    .split('\n')
-                    .filter(s => s.trim())
-                    .map(s => JSON.parse(s));
+                const main = {
+                    name: "主账号",
+                    cookies: JSON.parse(document.getElementById('115_main').value)
+                };
+                const subs = JSON.parse(document.getElementById('115_subs').value)
+                    .map(cookies => ({ name: "小号", cookies }));
                 const content = document.getElementById('115_content').value;
                 const schedule = document.getElementById('115_schedule').value;
 
