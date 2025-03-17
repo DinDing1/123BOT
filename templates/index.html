@@ -426,7 +426,7 @@
         <button type="submit" form="configForm" id="generateBtn" disabled>生成STRM</button>
         <div class="loading" id="loading">⏳ 正在生成中，请稍候...</div>
     </div>
-        <script>
+    <script>
         // 背景线条优化
         const canvas = document.getElementById('background');
         const ctx = canvas.getContext('2d');
@@ -490,10 +490,8 @@
         window.addEventListener('resize', initBackground);
         initBackground();
         animate();
-    <script>
-        // ...（保持原有背景动画代码不变）...
 
-        // 原有应用逻辑增强
+        // 原有应用逻辑
         const form = document.getElementById('configForm');
         const output = document.getElementById('output');
         const loading = document.getElementById('loading');
@@ -624,8 +622,28 @@
         }
 
         // 原有登录/注销功能
-        async function handleLogin() { /* ... */ }
-        async function handleLogout() { /* ... */ }
+        async function handleLogin() {
+            const passport = document.getElementById('passport').value;
+            const password = document.getElementById('password').value;
+            
+            const res = await fetch('/login', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({passport, password})
+            });
+            
+            const result = await res.json();
+            if (result.success) {
+                await checkLoginStatus();
+            } else {
+                alert(`登录失败: ${result.message}`);
+            }
+        }
+
+        async function handleLogout() {
+            await fetch('/logout');
+            location.reload();
+        }
 
         // 初始化
         document.addEventListener('DOMContentLoaded', () => {
@@ -635,7 +653,86 @@
         });
 
         // 保持原有表单提交逻辑
-        form.addEventListener('submit', async (e) => { /* ... */ });
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const userInfoRes = await fetch('/user_info');
+            const userInfo = await userInfoRes.json();
+            if (!userInfo.logged_in) {
+                alert('请先登录！');
+                return;
+            }
+
+            const password = document.getElementById('password').value;
+            
+            output.innerHTML = '';
+            loading.style.display = 'block';
+
+            const formData = new FormData(form);
+            formData.append('p123_user', userInfo.user_info.passport);
+            formData.append('p123_pass', password);
+
+            const eventSource = new EventSource(`/generate?${new URLSearchParams(formData)}`);
+
+            eventSource.onmessage = (event) => {
+                const rawLine = event.data.replace('data: ', '').trim();
+                const logEntry = document.createElement('div');
+                logEntry.className = 'log-entry';
+
+                if (rawLine.includes('PROCESS_EXIT_CODE:')) {
+                    const code = rawLine.split(':')[1];
+                    loading.style.display = 'none';
+                    eventSource.close();
+                    if (code !== '0') {
+                        logEntry.innerHTML = `
+                            <span class="log-time">${new Date().toLocaleTimeString()}</span>
+                            <span class="log-error">生成过程出现错误，退出码: ${code}</span>
+                        `;
+                    } else {
+                        logEntry.innerHTML = `
+                            <span class="log-time">${new Date().toLocaleTimeString()}</span>
+                            <span class="log-success">任务完成，退出码: ${code}</span>
+                        `;
+                    }
+                } else if (rawLine.startsWith('[SUCCESS]')) {
+                    logEntry.innerHTML = `
+                        <span class="log-time">${new Date().toLocaleTimeString()}</span>
+                        <span class="log-success">${rawLine.replace('[SUCCESS] ', '')}</span>
+                    `;
+                } else if (rawLine.startsWith('[PROCESS]')) {
+                    logEntry.innerHTML = `
+                        <span class="log-time">${new Date().toLocaleTimeString()}</span>
+                        <span class="log-process">${rawLine.replace('[PROCESS] ', '')}</span>
+                    `;
+                } else if (rawLine.startsWith('[ERROR]')) {
+                    logEntry.innerHTML = `
+                        <span class="log-time">${new Date().toLocaleTimeString()}</span>
+                        <span class="log-error">${rawLine.replace('[ERROR] ', '')}</span>
+                    `;
+                } else {
+                    logEntry.innerHTML = `
+                        <span class="log-time">${new Date().toLocaleTimeString()}</span>
+                        <span class="log-file">${rawLine}</span>
+                    `;
+                }
+
+                output.appendChild(logEntry);
+                output.scrollTop = output.scrollHeight;
+            };
+
+            eventSource.addEventListener('error', function(event) {
+                const errorMsg = event.data || '连接中断，请检查网络状态';
+                const logEntry = document.createElement('div');
+                logEntry.className = 'log-entry';
+                logEntry.innerHTML = `
+                    <span class="log-time">${new Date().toLocaleTimeString()}</span>
+                    <span class="log-error">${errorMsg}</span>
+                `;
+                output.appendChild(logEntry);
+                loading.style.display = 'none';
+                eventSource.close();
+            });
+        });
     </script>
 </body>
 </html>
