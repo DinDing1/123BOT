@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -32,7 +33,6 @@
             min-height: 720px;
         }
 
-        /* 登录容器 */
         .login-container {
             display: flex;
             justify-content: center;
@@ -65,7 +65,7 @@
         .login-form input {
             width: calc(100% - 2rem);
             padding: 0.8rem 1rem;
-            margin: 0.5rem auto; /* 调整上下间距 居中 */
+            margin: 0.5rem auto;
             background: rgba(255, 255, 255, 0.08);
             border: 1px solid rgba(0, 243, 255, 0.2);
             border-radius: 8px;
@@ -74,16 +74,15 @@
             transition: border-color 0.3s ease;
         }
 
-
         .login-form input:focus {
             border-color: var(--primary-color);
             outline: none;
         }
 
         .login-form button {
-            width: 50%; /* 按钮宽度调整为50% */
+            width: 50%;
             padding: 0.8rem;
-            margin: 1rem auto; /* 居中 */
+            margin: 1rem auto;
             background: linear-gradient(45deg, var(--secondary-color), var(--primary-color));
             color: white;
             border: none;
@@ -104,7 +103,6 @@
             color: #666;
         }
 
-        /* 主界面容器 */
         .container {
             flex: 1;
             margin: 20px;
@@ -166,8 +164,7 @@
             gap: 1rem;
             padding: 1rem;
         }
-        
-        /* 用户信息面板 */
+
         .user-info {
             background: rgba(25, 40, 60, 0.9);
             padding: 1.5rem;
@@ -176,76 +173,58 @@
             border: 1px solid rgba(0, 243, 255, 0.2);
         }
 
-        .auth-panel {
-            background: rgba(0, 0, 0, 0.6);
-            padding: 1.5rem 2rem;
-            border-radius: 8px;
+        .config-115 {
+            background: rgba(25, 40, 60, 0.9);
+            padding: 1.5rem;
+            border-radius: 12px;
             box-shadow: 0 0 8px rgba(0, 243, 255, 0.2);
+            border: 1px solid rgba(0, 243, 255, 0.2);
+        }
+
+        .config-115 h2 {
+            color: var(--primary-color);
+            font-size: 1.3rem;
+            margin-bottom: 1.2rem;
+            text-align: center;
+        }
+
+        .config-115 .form-group {
+            margin-bottom: 1rem;
+        }
+
+        .config-115 textarea {
             width: 100%;
-            max-width: 380px;
-            display: none;
-            border: 1px solid rgba(0, 243, 255, 0.2);
-            text-align: center; /* 0315新增：内容居中 */
-        }
-
-        .auth-panel.active {
-            display: block !important;
-            animation: fadeIn 0.3s ease;
-        }
-
-        .auth-panel h3 {
-            margin-bottom: 1.5rem;
-        }
-
-        .auth-panel div {
-            margin: 0.8rem 0;
-            text-align: center; /* 0315新增：文本JZ */
-            display: block; /* 0315新增：确保每个字段单独一行 */
-            width: 100%;/*0315 确保宽度占满容器 */
-        }
-
-        .config-panel {
-            grid-area: config-panel;
-            display: grid;
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-            gap: 1rem;
-            align-content: start;
-        }
-
-        #configForm {
-            display: contents;
-        }
-
-        .form-group {
-            margin-bottom: 0.8rem;
-            min-width: 0;
-        }
-
-        .form-group.extension-group {
-            grid-column: span 1;
-        }
-
-        label {
-            display: block;
-            margin-bottom: 0.4rem;
-            font-weight: 500;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(0, 243, 255, 0.3);
+            border-radius: 8px;
+            padding: 0.8rem;
             color: var(--text-color);
-            font-size: 0.9rem;
+            resize: vertical;
+            min-height: 100px;
         }
 
-        input {
+        .config-115 input[type="time"] {
+            width: 100%;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(0, 243, 255, 0.3);
+            color: var(--text-color);
             padding: 0.6rem;
-            background: rgba(255, 255, 255, 0.1);
-            border: 1px solid rgba(0, 243, 255, 0.2);
             border-radius: 6px;
-            font-size: 0.9rem;
-            color: var(--text-color);
-            transition: all 0.3s ease;
         }
 
-        input:focus {
-            border-color: var(--primary-color);
-            outline: none;
+        .config-115 button {
+            width: 48%;
+            padding: 0.75rem;
+            margin: 0.5rem 0;
+            font-size: 0.95rem;
+        }
+
+        .btn-save {
+            background: linear-gradient(45deg, var(--secondary-color), var(--primary-color));
+        }
+
+        .btn-run {
+            background: linear-gradient(45deg, #00cc88, #009966);
         }
 
         .log-panel {
@@ -316,78 +295,6 @@
             from { opacity: 0; transform: translateY(10px); }
             to { opacity: 1; transform: translateY(0); }
         }
-        /* 新增115配置区域样式 */
-        .config-115 {
-            background: rgba(25, 40, 60, 0.9);
-            padding: 1.5rem;
-            border-radius: 12px;
-            box-shadow: 0 0 8px rgba(0, 243, 255, 0.2);
-            border: 1px solid rgba(0, 243, 255, 0.2);
-        }
-
-        .config-115 h2 {
-            color: var(--primary-color);
-            font-size: 1.3rem;
-            margin-bottom: 1.2rem;
-            text-align: center;
-        }
-
-        .config-115 .form-group {
-            margin-bottom: 1rem;
-        }
-
-        .config-115 textarea {
-            width: 100%;
-            background: rgba(255, 255, 255, 0.08);
-            border: 1px solid rgba(0, 243, 255, 0.3);
-            border-radius: 8px;
-            padding: 0.8rem;
-            color: var(--text-color);
-            resize: vertical;
-            min-height: 100px;
-        }
-
-        .config-115 input[type="time"] {
-            width: 100%;
-            background: rgba(255, 255, 255, 0.08);
-            border: 1px solid rgba(0, 243, 255, 0.3);
-            color: var(--text-color);
-            padding: 0.6rem;
-            border-radius: 6px;
-        }
-
-        .config-115 button {
-            width: 48%;
-            padding: 0.75rem;
-            margin: 0.5rem 0;
-            font-size: 0.95rem;
-        }
-
-        /* 按钮样式调整 */
-        .config-area-115 button {
-            width: 48%;
-            padding: 0.75rem;
-            margin: 0.5rem 0;
-            font-size: 0.95rem;
-        }
-
-        .btn-save {
-            background: linear-gradient(45deg, var(--secondary-color), var(--primary-color));
-        }
-
-        .btn-run {
-            background: linear-gradient(45deg, #00cc88, #009966);
-        }
-
-        /* 调整网格布局 */
-        .container {
-            grid-template-areas: 
-                "header header"
-                "user-area config-area"
-                "log-panel log-panel";
-            grid-template-columns: 1fr 1fr;
-        }
-         /* 以上新增115配置区域样式 */       
     </style>
 </head>
 <body>
@@ -415,6 +322,7 @@
             <div class="version">版本号: v2.0.1 | 作者: dinding</div>
         </div>
 
+        <!-- 用户信息区域（一分为二） -->
         <div class="user-area">
             <!-- 左侧：用户信息 -->
             <div class="user-info">
@@ -427,27 +335,26 @@
                 <button class="logout-btn" onclick="handleLogout()">退出</button>
             </div>
 
-        <!-- 新增115配置区域 -->
-        <!-- 右侧：115配置区域 -->
+            <!-- 右侧：115配置区域 -->
             <div class="config-115">
                 <h2>⏱ 115自动化配置</h2>
                 <div class="form-group">
                     <label>主账号Cookie</label>
                     <textarea id="115_main" placeholder='{
-    "UID": "7157309_I1_1738992621",
-    "CID": "115ed3ba005c50bc7623505f04b4200c",
-    "SEID": "5e1928d3e72bc29b0aa57d6757e0147a463364941c19810860dacd481c3534ce9ad8a349d0dae0ee11790843d26c48934abc565c8b9f64ae07976855",
-    "KID": "28d35c069fc93d3670714ab46377fbe6"
+    "UID": "7157309",
+    "CID": "115ed3b",
+    "SEID": "5e1928",
+    "KID": "28d35c0"
 }'></textarea>
                 </div>
                 <div class="form-group">
                     <label>小号配置（每行一个Cookie）</label>
                     <textarea id="115_subs" placeholder='[
     {
-        "UID": "102187719_I1_1742187023",
-        "CID": "c460195a0c4c6a43bf3b32b43118e04d",
-        "SEID": "fd87d9e17094a27af6fdf6238203dbba11a728a32a980369278310d9e4362ce730757223706bc1697e11b4616d372d23cf39af9b878eaa42577009fd",
-        "KID": "9ef5ce45199383c8e0df04db35bcc8ba"
+        "UID": "102187719",
+        "CID": "c460195a0",
+        "SEID": "fd87d9e1",
+        "KID": "9ef5ce451"
     }
 ]'></textarea>
                 </div>
@@ -465,45 +372,8 @@
                 </div>
             </div>
         </div>
-        
 
-        <div class="config-panel">
-            <form id="configForm" action="/generate" method="GET">
-                <div class="form-group">
-                    <label for="direct_link_url">直连地址</label>
-                    <input type="url" id="direct_link_url" name="direct_link_url" value="http://172.17.0.1:8123" required>
-                </div>
-                <div class="form-group">
-                    <label for="parent_id">起始目录ID</label>
-                    <input type="number" id="parent_id" name="parent_id" value="0">
-                </div>
-                <div class="form-group">
-                    <label for="max_retries">重试次数</label>
-                    <input type="number" id="max_retries" name="max_retries" value="3" min="0">
-                </div>
-                <div class="form-group">
-                    <label for="request_delay">请求间隔（秒）</label>
-                    <input type="number" id="request_delay" name="request_delay" value="1" min="0" step="0.1">
-                </div>
-                <div class="form-group">
-                    <label for="dir_delay">目录间隔（秒）</label>
-                    <input type="number" id="dir_delay" name="dir_delay" value="2" min="0" step="0.1">
-                </div>
-                <div class="form-group">
-                    <label for="timeout">下载超时（秒）</label>
-                    <input type="number" id="timeout" name="timeout" value="30" min="1">
-                </div>
-                <div class="form-group extension-group">
-                    <label for="video_exts">视频扩展名</label>
-                    <input type="text" id="video_exts" name="video_exts" value=".mp4,.mkv,.avi,.mov,.flv,.ts,.iso,.rmvb,.m2ts">
-                </div>
-                <div class="form-group extension-group">
-                    <label for="subtitle_exts">字幕扩展名</label>
-                    <input type="text" id="subtitle_exts" name="subtitle_exts" value=".srt,.ass,.ssa,.sub,.txt,.vtt,.ttml,.dfxp">
-                </div>
-            </form>
-        </div>
-
+        <!-- 日志面板 -->
         <div class="log-panel" id="output"></div>
     </div>
 
