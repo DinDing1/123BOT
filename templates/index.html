@@ -308,6 +308,74 @@
             from { opacity: 0; transform: translateY(10px); }
             to { opacity: 1; transform: translateY(0); }
         }
+        /* 新增115配置区域样式 */
+        .config-area-115 {
+            grid-area: config-area;
+            background: rgba(25, 40, 60, 0.9);
+            padding: 1.5rem;
+            border-radius: 12px;
+            box-shadow: 0 0 8px rgba(0, 243, 255, 0.2);
+            border: 1px solid rgba(0, 243, 255, 0.2);
+            height: fit-content;
+            margin-left: 1rem;
+        }
+
+        .config-area-115 h2 {
+            color: var(--primary-color);
+            font-size: 1.3rem;
+            margin-bottom: 1.2rem;
+            text-align: center;
+        }
+
+        .config-area-115 .form-group {
+            margin-bottom: 1rem;
+        }
+
+        .config-area-115 textarea {
+            width: 100%;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(0, 243, 255, 0.3);
+            border-radius: 8px;
+            padding: 0.8rem;
+            color: var(--text-color);
+            resize: vertical;
+            min-height: 80px;
+        }
+
+        .config-area-115 input[type="time"] {
+            width: 100%;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(0, 243, 255, 0.3);
+            color: var(--text-color);
+            padding: 0.6rem;
+            border-radius: 6px;
+        }
+
+        /* 按钮样式调整 */
+        .config-area-115 button {
+            width: 48%;
+            padding: 0.75rem;
+            margin: 0.5rem 0;
+            font-size: 0.95rem;
+        }
+
+        .btn-save {
+            background: linear-gradient(45deg, var(--secondary-color), var(--primary-color));
+        }
+
+        .btn-run {
+            background: linear-gradient(45deg, #00cc88, #009966);
+        }
+
+        /* 调整网格布局 */
+        .container {
+            grid-template-areas: 
+                "header header"
+                "user-area config-area"
+                "log-panel log-panel";
+            grid-template-columns: 1fr 1fr;
+        }
+         /* 以上新增115配置区域样式 */       
     </style>
 </head>
 <body>
@@ -345,6 +413,31 @@
                 <div><span>💽 永久空间: <span id="spacePermanent"></span></span></div>
                 <div><span>💾 已用空间: <span id="spaceUsed"></span></span></div>
                 <button class="logout-btn" onclick="handleLogout()">退出</button>
+            </div>
+        </div>
+
+        <!-- 新增115配置区域 -->
+        <div class="config-area-115">
+            <h2>⏱ 115自动化配置</h2>
+            <div class="form-group">
+                <label>主账号Cookie</label>
+                <textarea id="115_main" placeholder="请输入主账号Cookie JSON"></textarea>
+            </div>
+            <div class="form-group">
+                <label>小号配置（每行一个Cookie）</label>
+                <textarea id="115_subs" placeholder="请输入小号Cookie JSON，每行一个"></textarea>
+            </div>
+            <div class="form-group">
+                <label>定时执行时间</label>
+                <input type="time" id="115_schedule" value="08:00">
+            </div>
+            <div class="form-group">
+                <label>许愿内容</label>
+                <input type="text" id="115_content" value="求一本钢铁是怎样炼成得书">
+            </div>
+            <div style="display: flex; gap: 4%;">
+                <button class="btn-save" onclick="save115Config()">保存配置</button>
+                <button class="btn-run" onclick="run115Task()">立即执行</button>
             </div>
         </div>
 
@@ -604,6 +697,84 @@
                 eventSource.close();
             });
         });
+        // 新增115功能相关逻辑
+        async function load115Config() {
+            const res = await fetch('/115_config');
+            const config = await res.json();
+            
+            if(config.main) {
+                document.getElementById('115_main').value = JSON.stringify(config.main, null, 2);
+                document.getElementById('115_subs').value = config.subs.map(s => JSON.stringify(s)).join('\n');
+                document.getElementById('115_content').value = config.content;
+                document.getElementById('115_schedule').value = config.schedule || '08:00';
+            }
+        }
+
+        async function save115Config() {
+            try {
+                const main = JSON.parse(document.getElementById('115_main').value);
+                const subs = document.getElementById('115_subs').value
+                    .split('\n')
+                    .filter(s => s.trim())
+                    .map(s => JSON.parse(s));
+                const content = document.getElementById('115_content').value;
+                const schedule = document.getElementById('115_schedule').value;
+
+                const res = await fetch('/115_config', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        main: main,
+                        subs: subs,
+                        content: content,
+                        schedule: schedule
+                    })
+                });
+                
+                if(res.ok) {
+                    addLogEntry('配置保存成功', 'success');
+                }
+            } catch (e) {
+                addLogEntry(`配置保存失败: ${e.message}`, 'error');
+            }
+        }
+
+        async function run115Task() {
+            try {
+                const res = await fetch('/run_115_task', {method: 'POST'});
+                const result = await res.json();
+                addLogEntry(result.message, result.success ? 'success' : 'error');
+            } catch (e) {
+                addLogEntry('任务执行失败: ' + e.message, 'error');
+            }
+        }
+
+        function addLogEntry(message, type = 'info') {
+            const logEntry = document.createElement('div');
+            logEntry.className = 'log-entry';
+            
+            const timestamp = new Date().toLocaleTimeString();
+            const typeIcon = {
+                success: '✅',
+                error: '❌',
+                info: 'ℹ️'
+            }[type] || '';
+
+            logEntry.innerHTML = `
+                <span class="log-time">${timestamp}</span>
+                <span class="log-${type}">${typeIcon} ${message}</span>
+            `;
+            
+            document.getElementById('output').appendChild(logEntry);
+            output.scrollTop = output.scrollHeight;
+        }
+
+        // 初始化时加载配置
+        document.addEventListener('DOMContentLoaded', () => {
+            checkLoginStatus();
+            load115Config();
+        });
+        
     </script>
 </body>
 </html>
