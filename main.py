@@ -68,6 +68,7 @@ def init_db():
                     main_cookies TEXT,
                     sub_accounts TEXT,
                     wish_content TEXT DEFAULT '求一本钢铁是怎样炼成得书'
+                    schedule_time TEXT DEFAULT '8:00'  # 新增定时字段
                 )''')
 
             conn.commit()
