@@ -32,77 +32,6 @@
             min-height: 720px;
         }
 
-        /* 登录容器 */
-        .login-container {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            width: 100%;
-            padding: 2rem;
-            box-sizing: border-box;
-        }
-
-        .login-form {
-            background: rgba(25, 40, 60, 0.9);
-            padding: 2rem;
-            border-radius: 12px;
-            box-shadow: var(--neon-effect);
-            width: 100%;
-            max-width: 400px;
-            text-align: center;
-            box-sizing: border-box;
-            border: 1px solid rgba(0, 243, 255, 0.3);
-            backdrop-filter: blur(3px);
-        }
-
-        .login-form h3 {
-            margin: 0 0 1.5rem 0;
-            font-size: 1.6rem;
-            color: var(--primary-color);
-        }
-
-        .login-form input {
-            width: calc(100% - 2rem);
-            padding: 0.8rem 1rem;
-            margin: 0.5rem auto; /* 调整上下间距 居中 */
-            background: rgba(255, 255, 255, 0.08);
-            border: 1px solid rgba(0, 243, 255, 0.2);
-            border-radius: 8px;
-            font-size: 1rem;
-            color: var(--text-color);
-            transition: border-color 0.3s ease;
-        }
-
-
-        .login-form input:focus {
-            border-color: var(--primary-color);
-            outline: none;
-        }
-
-        .login-form button {
-            width: 50%; /* 按钮宽度调整为50% */
-            padding: 0.8rem;
-            margin: 1rem auto; /* 居中 */
-            background: linear-gradient(45deg, var(--secondary-color), var(--primary-color));
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-size: 1rem;
-            cursor: pointer;
-            transition: transform 0.2s ease;
-            display: block;
-        }
-
-        .login-form button:hover {
-            transform: scale(1.02);
-        }
-
-        .version-info {
-            margin: 1.5rem 1rem 0 1rem;
-            font-size: 0.9rem;
-            color: #666;
-        }
 
         /* 主界面容器 */
         .container {
@@ -195,56 +124,6 @@
             display: block; /* 0315新增：确保每个字段单独一行 */
             width: 100%;/*0315 确保宽度占满容器 */
         }
-        
-        /* 115配置面板 */
-        .config-115 {
-            background: rgba(25, 40, 60, 0.9);
-            padding: 1.5rem;
-            border-radius: 12px;
-            box-shadow: 0 0 8px rgba(0, 243, 255, 0.2);
-            border: 1px solid rgba(0, 243, 255, 0.2);
-        }
-
-        .config-115 h2 {
-            color: var(--primary-color);
-            font-size: 1.3rem;
-            margin-bottom: 1.2rem;
-            text-align: center;
-        }
-
-        .config-115 .form-group {
-            margin-bottom: 1rem;
-        }
-
-        .config-115 textarea {
-            width: 100%;
-            background: rgba(255, 255, 255, 0.08);
-            border: 1px solid rgba(0, 243, 255, 0.3);
-            border-radius: 8px;
-            padding: 0.8rem;
-            color: var(--text-color);
-            resize: vertical;
-            min-height: 100px;
-        }
-
-        .config-115 input[type="time"] {
-            width: 100%;
-            background: rgba(255, 255, 255, 0.08);
-            border: 1px solid rgba(0, 243, 255, 0.3);
-            color: var(--text-color);
-            padding: 0.6rem;
-            border-radius: 6px;
-        }
-
-        .config-115 button {
-            width: 48%;
-            padding: 0.75rem;
-            margin: 0.5rem 0;
-            font-size: 0.95rem;
-        }
-        
-        
-        
 
         .config-panel {
             grid-area: config-panel;
@@ -363,18 +242,7 @@
 <body>
     <canvas id="background"></canvas>
 
-    <!-- 登录界面 -->
-    <div class="login-container">
-        <div class="login-form">
-            <h3>用户登录</h3>
-            <input type="text" id="passport" placeholder="123云盘账号">
-            <input type="password" id="password" placeholder="123云盘密码">
-            <button onclick="handleLogin()">登录</button>
-            <div class="version-info">
-                版本号: v2.0.1 | 作者: dinding
-            </div>
-        </div>
-    </div>
+
 
     <!-- 主界面 -->
     <div class="container">
@@ -385,10 +253,9 @@
             <div class="version">版本号: v2.0.1 | 作者: dinding</div>
         </div>
 
-        <!-- 用户信息区域（一分为二） -->
         <div class="user-area">
-            <!-- 左侧：用户信息 -->
-            <div class="user-info">
+            <div class="auth-panel login-form" id="loginForm"></div>
+            <div class="auth-panel user-info" id="userInfo">
                 <h2>👤 用户信息</h2>
                 <div><span>📛 昵称: <span id="nickname"></span></span></div>
                 <div><span>🆔 用户ID: <span id="uid"></span></span></div>
@@ -396,43 +263,6 @@
                 <div><span>💽 永久空间: <span id="spacePermanent"></span></span></div>
                 <div><span>💾 已用空间: <span id="spaceUsed"></span></span></div>
                 <button class="logout-btn" onclick="handleLogout()">退出</button>
-            </div>
-
-            <!-- 右侧：115配置区域 -->
-            <div class="config-115">
-                <h2>⏱ 115自动化配置</h2>
-                <div class="form-group">
-                    <label>主账号Cookie</label>
-                    <textarea id="115_main" placeholder='{
-    "UID": "7157309_I1_1738992621",
-    "CID": "115ed3ba005c50bc7623505f04b4200c",
-    "SEID": "5e1928d3e72bc29b0aa57d6757e0147a463364941c19810860dacd481c3534ce9ad8a349d0dae0ee11790843d26c48934abc565c8b9f64ae07976855",
-    "KID": "28d35c069fc93d3670714ab46377fbe6"
-}'></textarea>
-                </div>
-                <div class="form-group">
-                    <label>小号配置（每行一个Cookie）</label>
-                    <textarea id="115_subs" placeholder='[
-    {
-        "UID": "102187719_I1_1742187023",
-        "CID": "c460195a0c4c6a43bf3b32b43118e04d",
-        "SEID": "fd87d9e17094a27af6fdf6238203dbba11a728a32a980369278310d9e4362ce730757223706bc1697e11b4616d372d23cf39af9b878eaa42577009fd",
-        "KID": "9ef5ce45199383c8e0df04db35bcc8ba"
-    }
-]'></textarea>
-                </div>
-                <div class="form-group">
-                    <label>定时执行时间</label>
-                    <input type="time" id="115_schedule" value="08:00">
-                </div>
-                <div class="form-group">
-                    <label>许愿内容</label>
-                    <input type="text" id="115_content" value="求一本钢铁是怎样炼成得书">
-                </div>
-                <div style="display: flex; gap: 4%;">
-                    <button class="btn-save" onclick="save115Config()">保存配置</button>
-                    <button class="btn-run" onclick="run115Task()">立即执行</button>
-                </div>
             </div>
         </div>
 
@@ -692,51 +522,6 @@
                 eventSource.close();
             });
         });
-        
-// 在页面加载时获取配置
-async function load115Config() {
-    const res = await fetch('/115_config');
-    const config = await res.json();
-    
-    if(config.main) {
-        document.getElementById('115_main').value = JSON.stringify(config.main, null, 2);
-        document.getElementById('115_subs').value = config.subs.map(s => JSON.stringify(s)).join('\n');
-        document.getElementById('115_content').value = config.content;
-    }
-}
-
-// 保存配置
-async function save115Config() {
-    const main = JSON.parse(document.getElementById('115_main').value);
-    const subs = document.getElementById('115_subs').value.split('\n').map(s => JSON.parse(s));
-    const content = document.getElementById('115_content').value;
-    
-    const res = await fetch('/115_config', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-            main: main,
-            subs: subs,
-            content: content
-        })
-    });
-    
-    if(res.ok) alert('配置保存成功');
-}
-
-// 执行任务
-async function run115Task() {
-    const res = await fetch('/run_115_task', {method: 'POST'});
-    const result = await res.json();
-    alert(result.message);
-}
-
-// 在DOMContentLoaded事件中添加
-document.addEventListener('DOMContentLoaded', () => {
-    checkLoginStatus();
-    load115Config();
-});
-        
     </script>
 </body>
 </html>
