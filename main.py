@@ -7,6 +7,8 @@ import sqlite3
 from datetime import datetime, timedelta
 import hashlib
 from apscheduler.schedulers.background import BackgroundScheduler
+import json
+import subprocess
 
 # 配置日志（简化格式，去除多余空行）
 logging.basicConfig(
@@ -49,15 +51,6 @@ def init_db():
                 ON download_cache (expire_time)
             ''')
             
-            # 新增115配置表
-            conn.execute('''
-                CREATE TABLE IF NOT EXISTS auto115_config (
-                user_id TEXT PRIMARY KEY,
-                main_cookies TEXT,
-                sub_accounts TEXT,
-                wish_content TEXT DEFAULT '求一本钢铁是怎样炼成得书'
-            )''')
-            
             # 创建自动清理触发器
             conn.execute('''
                 CREATE TRIGGER IF NOT EXISTS auto_clean 
@@ -67,6 +60,16 @@ def init_db():
                     WHERE expire_time <= strftime('%Y-%m-%d %H:%M:%S', 'now');
                 END;
             ''')
+
+            # 新增115配置表
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS auto115_config (
+                    user_id TEXT PRIMARY KEY,
+                    main_cookies TEXT,
+                    sub_accounts TEXT,
+                    wish_content TEXT DEFAULT '求一本钢铁是怎样炼成得书'
+                )''')
+
             conn.commit()
             logger.info("数据库初始化完成")
     except Exception as e:
@@ -96,16 +99,41 @@ def db_optimize():
     except Exception as e:
         logger.error(f"优化失败: {str(e)}")
 
+# 115自动化任务
+def run_115_task():
+    """执行115自动化任务"""
+    try:
+        with sqlite3.connect(CACHE_DB) as conn:
+            users = conn.execute('SELECT * FROM auto115_config').fetchall()
+        
+        for user in users:
+            config = {
+                "wish_main": {
+                    "cookies": json.loads(user[1]),
+                    "name": "主账号"
+                },
+                "wish_subs": [{"cookies": json.loads(cookie)} for cookie in json.loads(user[2])]
+            }
+            
+            config_path = f"/app/cache/115_{user[0]}.json"
+            with open(config_path, "w") as f:
+                json.dump(config, f)
+            
+            subprocess.Popen([
+                'python', '/app/115_auto.py',
+                '--config', config_path
+            ])
+            logger.info(f"已启动115自动化任务 for user {user[0]}")
+    except Exception as e:
+        logger.error(f"115自动化任务执行失败: {str(e)}")
+
 @app.on_event("startup")
 def startup_event():
     init_db()
     scheduler = BackgroundScheduler()
     scheduler.add_job(db_optimize, 'interval', hours=6)
+    scheduler.add_job(run_115_task, 'cron', hour=8)  # 每天8点执行
     scheduler.start()
-    # 启动日志优化
-logger = logging.getLogger(__name__)
-logger.info("=== 302直连服务已启动 ===")
-logger.info("302直连地址: http://0.0.0.0:8123")
 
 # 工具函数
 def generate_cache_key(file_name: str, size: int, etag: str) -> str:
@@ -174,3 +202,8 @@ async def handle_request(request: Request, uri: str):
     except Exception as e:
         logger.error(f"服务器错误: {str(e)}", exc_info=True)
         raise HTTPException(500, "内部服务器错误")
+
+# 启动日志优化
+logger = logging.getLogger('strm_generator')
+logger.info("=== 302直连服务已启动 ===")
+logger.info("302直连地址: http://0.0.0.0:8123")
