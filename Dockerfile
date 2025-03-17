@@ -12,7 +12,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # 先安装 requirements 以利用缓存
 COPY requirements.txt .
-RUN pip install --user --no-cache-dir -r requirements.txt
+RUN pip install --user --no-cache-dir -r requirements.txt \
+    && pip install --user p115client
 
 # 第二阶段：运行环境
 FROM python:3.12-slim-bookworm
