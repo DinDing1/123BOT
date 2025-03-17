@@ -693,84 +693,49 @@
             });
         });
         
-        // 新增115功能相关逻辑
-        async function load115Config() {
-            const res = await fetch('/115_config');
-            const config = await res.json();
-            
-            if(config.main) {
-                document.getElementById('115_main').value = JSON.stringify(config.main.cookies, null, 2);
-                document.getElementById('115_subs').value = JSON.stringify(config.subs.map(s => s.cookies), null, 2);
-                document.getElementById('115_content').value = config.content;
-                document.getElementById('115_schedule').value = config.schedule || '08:00';
-            }
-        }
+// 在页面加载时获取配置
+async function load115Config() {
+    const res = await fetch('/115_config');
+    const config = await res.json();
+    
+    if(config.main) {
+        document.getElementById('115_main').value = JSON.stringify(config.main, null, 2);
+        document.getElementById('115_subs').value = config.subs.map(s => JSON.stringify(s)).join('\n');
+        document.getElementById('115_content').value = config.content;
+    }
+}
 
-        async function save115Config() {
-            try {
-                const main = {
-                    name: "主账号",
-                    cookies: JSON.parse(document.getElementById('115_main').value)
-                };
-                const subs = JSON.parse(document.getElementById('115_subs').value)
-                    .map(cookies => ({ name: "小号", cookies }));
-                const content = document.getElementById('115_content').value;
-                const schedule = document.getElementById('115_schedule').value;
+// 保存配置
+async function save115Config() {
+    const main = JSON.parse(document.getElementById('115_main').value);
+    const subs = document.getElementById('115_subs').value.split('\n').map(s => JSON.parse(s));
+    const content = document.getElementById('115_content').value;
+    
+    const res = await fetch('/115_config', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            main: main,
+            subs: subs,
+            content: content
+        })
+    });
+    
+    if(res.ok) alert('配置保存成功');
+}
 
-                const res = await fetch('/115_config', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        main: main,
-                        subs: subs,
-                        content: content,
-                        schedule: schedule
-                    })
-                });
-                
-                if(res.ok) {
-                    addLogEntry('配置保存成功', 'success');
-                }
-            } catch (e) {
-                addLogEntry(`配置保存失败: ${e.message}`, 'error');
-            }
-        }
+// 执行任务
+async function run115Task() {
+    const res = await fetch('/run_115_task', {method: 'POST'});
+    const result = await res.json();
+    alert(result.message);
+}
 
-        async function run115Task() {
-            try {
-                const res = await fetch('/run_115_task', {method: 'POST'});
-                const result = await res.json();
-                addLogEntry(result.message, result.success ? 'success' : 'error');
-            } catch (e) {
-                addLogEntry('任务执行失败: ' + e.message, 'error');
-            }
-        }
-
-        function addLogEntry(message, type = 'info') {
-            const logEntry = document.createElement('div');
-            logEntry.className = 'log-entry';
-            
-            const timestamp = new Date().toLocaleTimeString();
-            const typeIcon = {
-                success: '✅',
-                error: '❌',
-                info: 'ℹ️'
-            }[type] || '';
-
-            logEntry.innerHTML = `
-                <span class="log-time">${timestamp}</span>
-                <span class="log-${type}">${typeIcon} ${message}</span>
-            `;
-            
-            document.getElementById('output').appendChild(logEntry);
-            output.scrollTop = output.scrollHeight;
-        }
-
-        // 初始化时加载配置
-        document.addEventListener('DOMContentLoaded', () => {
-            checkLoginStatus();
-            load115Config();
-        });
+// 在DOMContentLoaded事件中添加
+document.addEventListener('DOMContentLoaded', () => {
+    checkLoginStatus();
+    load115Config();
+});
         
     </script>
 </body>
