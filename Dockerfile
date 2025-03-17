@@ -10,9 +10,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# 先安装 requirements 以利用缓存
+# 修改Dockerfile的requirements.txt部分
 COPY requirements.txt .
 RUN pip install --user --no-cache-dir -r requirements.txt \
+    && pip install --user p115client
 
 # 第二阶段：运行环境
 FROM python:3.12-slim-bookworm
