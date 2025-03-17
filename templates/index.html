@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>123Media_STRM</title>
+    <style>
+        :root {
+            --primary-color: #00f3ff;
+            --secondary-color: #0066ff;
+            --neon-effect: 0 0 8px rgba(0, 243, 255, 0.3);
+            --background-color: #0a1420;
+            --text-color: #e0e0e0;
+        }
+
+        canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            z-index: -1;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: var(--background-color);
+            color: var(--text-color);
+            margin: 0;
+            height: 100vh;
+            overflow: auto;
+            display: flex;
+            flex-direction: column;
+            min-height: 720px;
+        }
+
+        /* 登录容器 */
+        .login-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            width: 100%;
+            padding: 2rem;
+            box-sizing: border-box;
+        }
+
+        .login-form {
+            background: rgba(25, 40, 60, 0.9);
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: var(--neon-effect);
+            width: 100%;
+            max-width: 400px;
+            text-align: center;
+            box-sizing: border-box;
+            border: 1px solid rgba(0, 243, 255, 0.3);
+            backdrop-filter: blur(3px);
+        }
+
+        .login-form h3 {
+            margin: 0 0 1.5rem 0;
+            font-size: 1.6rem;
+            color: var(--primary-color);
+        }
+
+        .login-form input {
+            width: calc(100% - 2rem);
+            padding: 0.8rem 1rem;
+            margin: 0.5rem auto; /* 调整上下间距 居中 */
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(0, 243, 255, 0.2);
+            border-radius: 8px;
+            font-size: 1rem;
+            color: var(--text-color);
+            transition: border-color 0.3s ease;
+        }
+
+
+        .login-form input:focus {
+            border-color: var(--primary-color);
+            outline: none;
+        }
+
+        .login-form button {
+            width: 50%; /* 按钮宽度调整为50% */
+            padding: 0.8rem;
+            margin: 1rem auto; /* 居中 */
+            background: linear-gradient(45deg, var(--secondary-color), var(--primary-color));
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: transform 0.2s ease;
+            display: block;
+        }
+
+        .login-form button:hover {
+            transform: scale(1.02);
+        }
+
+        .version-info {
+            margin: 1.5rem 1rem 0 1rem;
+            font-size: 0.9rem;
+            color: #666;
+        }
+
+        /* 主界面容器 */
+        .container {
+            flex: 1;
+            margin: 20px;
+            background: rgba(20, 30, 45, 0.95);
+            border-radius: 12px;
+            box-shadow: var(--neon-effect);
+            padding: 1.2rem;
+            display: none;
+            grid-template-areas: 
+                "header header"
+                "user-area log-panel"
+                "config-panel log-panel";
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: auto auto 1fr;
+            gap: 1.2rem;
+            min-height: 680px;
+            overflow: hidden;
+            box-sizing: border-box;
+            border: 1px solid rgba(0, 243, 255, 0.2);
+            backdrop-filter: blur(5px);
+        }
+
+        .header {
+            grid-area: header;
+            text-align: center;
+            margin-bottom: 0.8rem;
+        }
+
+        .logo {
+            color: var(--primary-color);
+            font-size: 1.7rem;
+            font-weight: bold;
+            margin-bottom: 0.2rem;
+        }
+
+        .header p {
+            color: var(--text-color);
+            font-size: 0.88rem;
+            margin-bottom: 0.6rem;
+        }
+
+        .header .divider {
+            width: 88%;
+            height: 1px;
+            background: rgba(255, 255, 255, 0.1);
+            margin: 0.6rem auto;
+        }
+
+        .header .version {
+            color: #6c757d;
+            font-size: 0.82rem;
+            margin-top: 0.8rem;
+        }
+
+        .user-area {
+            grid-area: user-area;
+            display: flex;
+            justify-content: center;
+            align-items: center; /* 0315新增：垂直居中 */
+            padding: 1rem;
+            width: 100%;
+        }
+
+        .auth-panel {
+            background: rgba(0, 0, 0, 0.6);
+            padding: 1.5rem 2rem;
+            border-radius: 8px;
+            box-shadow: 0 0 8px rgba(0, 243, 255, 0.2);
+            width: 100%;
+            max-width: 380px;
+            display: none;
+            border: 1px solid rgba(0, 243, 255, 0.2);
+            text-align: center; /* 0315新增：内容居中 */
+        }
+
+        .auth-panel.active {
+            display: block !important;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .auth-panel h3 {
+            margin-bottom: 1.5rem;
+        }
+
+        .auth-panel div {
+            margin: 0.8rem 0;
+            text-align: center; /* 0315新增：文本JZ */
+            display: block; /* 0315新增：确保每个字段单独一行 */
+            width: 100%;/*0315 确保宽度占满容器 */
+        }
+
+        .config-panel {
+            grid-area: config-panel;
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 1rem;
+            align-content: start;
+        }
+
+        #configForm {
+            display: contents;
+        }
+
+        .form-group {
+            margin-bottom: 0.8rem;
+            min-width: 0;
+        }
+
+        .form-group.extension-group {
+            grid-column: span 1;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 0.4rem;
+            font-weight: 500;
+            color: var(--text-color);
+            font-size: 0.9rem;
+        }
+
+        input {
+            padding: 0.6rem;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(0, 243, 255, 0.2);
+            border-radius: 6px;
+            font-size: 0.9rem;
+            color: var(--text-color);
+            transition: all 0.3s ease;
+        }
+
+        input:focus {
+            border-color: var(--primary-color);
+            outline: none;
+        }
+
+        .log-panel {
+            grid-area: log-panel;
+            background: rgba(0, 0, 0, 0.7);
+            border-radius: 8px;
+            padding: 1rem;
+            font-family: 'Consolas', monospace;
+            font-size: 0.8rem;
+            line-height: 1.4;
+            height: 62vh;
+            overflow-y: auto;
+            border: 1px solid rgba(0, 243, 255, 0.2);
+        }
+
+        .log-entry {
+            margin: 0.25rem 0;
+            word-break: break-all;
+            color: var(--primary-color);
+        }
+
+        .log-time {
+            color: #6c757d;
+            margin-right: 0.8rem;
+        }
+
+        button {
+            background: linear-gradient(45deg, var(--secondary-color), var(--primary-color));
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1rem;
+            margin: 1rem auto;
+            display: block;
+            transition: transform 0.2s ease;
+        }
+
+        button:hover:not(:disabled) {
+            transform: scale(1.02);
+        }
+
+        .logout-btn {
+            background: linear-gradient(45deg, #ff006a, #dc3545) !important;
+            width: 150px;
+            margin-top: 1.5rem;
+        }
+
+        .logout-btn:hover {
+            background: linear-gradient(45deg, #dc3545, #bb2d3b) !important;
+        }
+
+        button:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 1rem;
+            color: var(--primary-color);
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body>
+    <canvas id="background"></canvas>
+
+    <!-- 登录界面 -->
+    <div class="login-container">
+        <div class="login-form">
+            <h3>用户登录</h3>
+            <input type="text" id="passport" placeholder="123云盘账号">
+            <input type="password" id="password" placeholder="123云盘密码">
+            <button onclick="handleLogin()">登录</button>
+            <div class="version-info">
+                版本号: v2.0.1 | 作者: dinding
+            </div>
+        </div>
+    </div>
+
+    <!-- 主界面 -->
+    <div class="container">
+        <div class="header">
+            <div class="logo">123Media_STRM</div>
+            <p>感谢🈲贫大佬，祝🈲贫大佬长命百岁</p>
+            <div class="divider"></div>
+            <div class="version">版本号: v2.0.1 | 作者: dinding</div>
+        </div>
+
+        <div class="user-area">
+            <div class="auth-panel login-form" id="loginForm"></div>
+            <div class="auth-panel user-info" id="userInfo">
+                <h2>👤 用户信息</h2>
+                <div><span>📛 昵称: <span id="nickname"></span></span></div>
+                <div><span>🆔 用户ID: <span id="uid"></span></span></div>
+                <div><span>📱 手机号: <span id="phone"></span></span></div>
+                <div><span>💽 永久空间: <span id="spacePermanent"></span></span></div>
+                <div><span>💾 已用空间: <span id="spaceUsed"></span></span></div>
+                <button class="logout-btn" onclick="handleLogout()">退出</button>
+            </div>
+        </div>
+
+        <div class="config-panel">
+            <form id="configForm" action="/generate" method="GET">
+                <div class="form-group">
+                    <label for="direct_link_url">直连地址</label>
+                    <input type="url" id="direct_link_url" name="direct_link_url" value="http://172.17.0.1:8123" required>
+                </div>
+                <div class="form-group">
+                    <label for="parent_id">起始目录ID</label>
+                    <input type="number" id="parent_id" name="parent_id" value="0">
+                </div>
+                <div class="form-group">
+                    <label for="max_retries">重试次数</label>
+                    <input type="number" id="max_retries" name="max_retries" value="3" min="0">
+                </div>
+                <div class="form-group">
+                    <label for="request_delay">请求间隔（秒）</label>
+                    <input type="number" id="request_delay" name="request_delay" value="1" min="0" step="0.1">
+                </div>
+                <div class="form-group">
+                    <label for="dir_delay">目录间隔（秒）</label>
+                    <input type="number" id="dir_delay" name="dir_delay" value="2" min="0" step="0.1">
+                </div>
+                <div class="form-group">
+                    <label for="timeout">下载超时（秒）</label>
+                    <input type="number" id="timeout" name="timeout" value="30" min="1">
+                </div>
+                <div class="form-group extension-group">
+                    <label for="video_exts">视频扩展名</label>
+                    <input type="text" id="video_exts" name="video_exts" value=".mp4,.mkv,.avi,.mov,.flv,.ts,.iso,.rmvb,.m2ts">
+                </div>
+                <div class="form-group extension-group">
+                    <label for="subtitle_exts">字幕扩展名</label>
+                    <input type="text" id="subtitle_exts" name="subtitle_exts" value=".srt,.ass,.ssa,.sub,.txt,.vtt,.ttml,.dfxp">
+                </div>
+            </form>
+        </div>
+
+        <div class="log-panel" id="output"></div>
+    </div>
+
+    <div id="generateButtonContainer" style="display: none;">
+        <button type="submit" form="configForm" id="generateBtn" disabled>生成STRM</button>
+        <div class="loading" id="loading">⏳ 正在生成中，请稍候...</div>
+    </div>
+
+    <script>
+        // 背景线条优化
+        const canvas = document.getElementById('background');
+        const ctx = canvas.getContext('2d');
+        let lines = [];
+
+        class Line {
+            constructor() {
+                this.reset();
+                this.lineWidth = Math.random() * 0.8 + 0.2;
+            }
+
+            reset() {
+                this.x = Math.random() * canvas.width;
+                this.y = Math.random() * canvas.height;
+                this.speed = Math.random() * 1.5 + 0.5;
+                this.angle = Math.random() * Math.PI * 2;
+                this.alpha = Math.random() * 0.2 + 0.1;
+            }
+
+            update() {
+                this.x += Math.cos(this.angle) * this.speed;
+                this.y += Math.sin(this.angle) * this.speed;
+                
+                if (this.x < 0 || this.x > canvas.width || 
+                    this.y < 0 || this.y > canvas.height) {
+                    this.reset();
+                }
+            }
+
+            draw() {
+                ctx.beginPath();
+                ctx.strokeStyle = `rgba(0, 243, 255, ${this.alpha})`;
+                ctx.lineWidth = this.lineWidth;
+                ctx.moveTo(this.x, this.y);
+                ctx.lineTo(
+                    this.x - Math.cos(this.angle) * 50,
+                    this.y - Math.sin(this.angle) * 50
+                );
+                ctx.stroke();
+            }
+        }
+
+        function initBackground() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            lines = Array(50).fill().map(() => new Line());
+        }
+
+        function animate() {
+            ctx.fillStyle = 'rgba(10, 20, 30, 0.08)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            lines.forEach(line => {
+                line.update();
+                line.draw();
+            });
+
+            requestAnimationFrame(animate);
+        }
+
+        window.addEventListener('resize', initBackground);
+        initBackground();
+        animate();
+
+        // 原有应用逻辑
+        const form = document.getElementById('configForm');
+        const output = document.getElementById('output');
+        const loading = document.getElementById('loading');
+        const generateBtn = document.getElementById('generateBtn');
+        const generateButtonContainer = document.getElementById('generateButtonContainer');
+
+        async function checkLoginStatus() {
+            const res = await fetch('/user_info');
+            const data = await res.json();
+            
+            if (data.logged_in) {
+                document.querySelector('.login-container').style.display = 'none';
+                document.querySelector('.container').style.display = 'grid';
+                generateButtonContainer.style.display = 'block';
+                const info = data.user_info;
+                document.getElementById('uid').textContent = info.uid;
+                document.getElementById('nickname').textContent = info.nickname;
+                document.getElementById('phone').textContent = info.passport;
+                document.getElementById('spaceUsed').textContent = formatSize(info.spaceUsed);
+                document.getElementById('spacePermanent').textContent = formatSize(info.spacePermanent);
+                document.getElementById('userInfo').classList.add('active');
+                generateBtn.disabled = false;
+            } else {
+                document.querySelector('.login-container').style.display = 'flex';
+                document.querySelector('.container').style.display = 'none';
+                generateButtonContainer.style.display = 'none';
+                generateBtn.disabled = true;
+            }
+        }
+
+        function formatSize(bytes) {
+            const units = ['字节', 'KB', 'MB', 'GB', 'TB'];
+            let unitIndex = 0;
+            while (bytes >= 1024 && unitIndex < 4) {
+                bytes /= 1024;
+                unitIndex++;
+            }
+            return `${bytes.toFixed(2)} ${units[unitIndex]}`;
+        }
+
+        async function handleLogin() {
+            const passport = document.getElementById('passport').value;
+            const password = document.getElementById('password').value;
+            
+            const res = await fetch('/login', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({passport, password})
+            });
+            
+            const result = await res.json();
+            if (result.success) {
+                await checkLoginStatus();
+            } else {
+                alert(`登录失败: ${result.message}`);
+            }
+        }
+
+        async function handleLogout() {
+            await fetch('/logout');
+            location.reload();
+        }
+
+        document.addEventListener('DOMContentLoaded', checkLoginStatus);
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const userInfoRes = await fetch('/user_info');
+            const userInfo = await userInfoRes.json();
+            if (!userInfo.logged_in) {
+                alert('请先登录！');
+                return;
+            }
+
+            const password = document.getElementById('password').value;
+            
+            output.innerHTML = '';
+            loading.style.display = 'block';
+
+            const formData = new FormData(form);
+            formData.append('p123_user', userInfo.user_info.passport);
+            formData.append('p123_pass', password);
+
+            const eventSource = new EventSource(`/generate?${new URLSearchParams(formData)}`);
+
+            eventSource.onmessage = (event) => {
+                const rawLine = event.data.replace('data: ', '').trim();
+                const logEntry = document.createElement('div');
+                logEntry.className = 'log-entry';
+
+                if (rawLine.includes('PROCESS_EXIT_CODE:')) {
+                    const code = rawLine.split(':')[1];
+                    loading.style.display = 'none';
+                    eventSource.close();
+                    if (code !== '0') {
+                        logEntry.innerHTML = `
+                            <span class="log-time">${new Date().toLocaleTimeString()}</span>
+                            <span class="log-error">生成过程出现错误，退出码: ${code}</span>
+                        `;
+                    } else {
+                        logEntry.innerHTML = `
+                            <span class="log-time">${new Date().toLocaleTimeString()}</span>
+                            <span class="log-success">任务完成，退出码: ${code}</span>
+                        `;
+                    }
+                } else if (rawLine.startsWith('[SUCCESS]')) {
+                    logEntry.innerHTML = `
+                        <span class="log-time">${new Date().toLocaleTimeString()}</span>
+                        <span class="log-success">${rawLine.replace('[SUCCESS] ', '')}</span>
+                    `;
+                } else if (rawLine.startsWith('[PROCESS]')) {
+                    logEntry.innerHTML = `
+                        <span class="log-time">${new Date().toLocaleTimeString()}</span>
+                        <span class="log-process">${rawLine.replace('[PROCESS] ', '')}</span>
+                    `;
+                } else if (rawLine.startsWith('[ERROR]')) {
+                    logEntry.innerHTML = `
+                        <span class="log-time">${new Date().toLocaleTimeString()}</span>
+                        <span class="log-error">${rawLine.replace('[ERROR] ', '')}</span>
+                    `;
+                } else {
+                    logEntry.innerHTML = `
+                        <span class="log-time">${new Date().toLocaleTimeString()}</span>
+                        <span class="log-file">${rawLine}</span>
+                    `;
+                }
+
+                output.appendChild(logEntry);
+                output.scrollTop = output.scrollHeight;
+            };
+
+            eventSource.addEventListener('error', function(event) {
+                const errorMsg = event.data || '连接中断，请检查网络状态';
+                const logEntry = document.createElement('div');
+                logEntry.className = 'log-entry';
+                logEntry.innerHTML = `
+                    <span class="log-time">${new Date().toLocaleTimeString()}</span>
+                    <span class="log-error">${errorMsg}</span>
+                `;
+                output.appendChild(logEntry);
+                loading.style.display = 'none';
+                eventSource.close();
+            });
+        });
+    </script>
+</body>
+</html>
