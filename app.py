@@ -4,22 +4,20 @@ import os
 import logging
 import sys
 import io
+import sqlite3
+import json
 from dotenv import load_dotenv
-from auth import get_user_info_with_password  # 导入 get_user_info_with_password 函数
-from werkzeug.serving import WSGIRequestHandler  # 修复导入路径
+from auth import get_user_info_with_password
+from werkzeug.serving import WSGIRequestHandler
 
-# 加载环境变量
 load_dotenv()
 
-# 初始化 Flask 应用
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
-# 强制标准输出和错误输出使用 UTF-8 编码
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
-# 配置日志（简化格式）
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(message)s',
@@ -29,36 +27,21 @@ logging.basicConfig(
     ]
 )
 
-# 自定义 SilentWSGIRequestHandler 以禁用 Werkzeug 日志
 class SilentWSGIRequestHandler(WSGIRequestHandler):
     def log(self, type: str, message: str, *args) -> None:
-        pass  # 完全禁用 Werkzeug 的日志输出
+        pass
 
-# 禁用 Flask 和 Werkzeug 的默认日志
-logging.getLogger('werkzeug').disabled = True  # 禁用 Werkzeug 日志
-logging.getLogger('flask.app').setLevel(logging.ERROR)  # 设置 Flask 日志级别为 ERROR
-
-# 禁用 httpx 和 p123 的日志输出
+logging.getLogger('werkzeug').disabled = True
+logging.getLogger('flask.app').setLevel(logging.ERROR)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
 logging.getLogger("p123").setLevel(logging.WARNING)
 
-
-        
-
-
-# DeepSeek 风格配色
-DEEPSEEK_COLORS = {
-    "primary": "#2d6ae3",
-    "secondary": "#5b8def",
-    "background": "#f8f9fa",
-    "text": "#2d3846"
-}
+CACHE_DB = "/app/cache/download_cache.db"
 
 @app.route('/')
 def index():
-    """首页路由"""
-    return render_template('index.html', colors=DEEPSEEK_COLORS)
+    return render_template('index.html')
 
 @app.route('/login', methods=['POST'])
 def login():
@@ -67,12 +50,10 @@ def login():
         passport = data.get('passport')
         password = data.get('password')
         
-        # 调用验证接口
         user_info = get_user_info_with_password(passport, password)
         if user_info.get("code") != 0:
             return jsonify({"success": False, "message": user_info.get("message", "登录失败")})
 
-        # 存储用户信息到session
         session['logged_in'] = True
         session['user_info'] = {
             'uid': user_info['data']['uid'],
@@ -100,72 +81,79 @@ def get_user_info():
         "user_info": session['user_info']
     })
 
-####115网盘
-@app.route('/115_config', methods=['POST'])
-def save_115_config():
+@app.route('/115_config', methods=['GET', 'POST'])
+def handle_115_config():
     if not session.get('logged_in'):
         return jsonify({"success": False})
     
-    data = request.json
     user_id = session['user_info']['uid']
     
-    # 连接main.py使用的数据库
-    with sqlite3.connect(CACHE_DB) as conn:
-        conn.execute('''
-            INSERT OR REPLACE INTO auto115_config 
-            (user_id, main_cookies, sub_accounts, wish_content)
-            VALUES (?, ?, ?, ?)
-        ''', (
-            user_id,
-            json.dumps(data['main']),
-            json.dumps(data['subs']),
-            data['content']
-        ))
-    return jsonify({"success": True})
+    if request.method == 'POST':
+        data = request.json
+        try:
+            with sqlite3.connect(CACHE_DB) as conn:
+                conn.execute('''
+                    INSERT OR REPLACE INTO auto115_config 
+                    (user_id, main_cookies, sub_accounts, wish_content, schedule_time)
+                    VALUES (?, ?, ?, ?, ?)
+                ''', (
+                    user_id,
+                    json.dumps(data.get('main')),
+                    json.dumps(data.get('subs')),
+                    data.get('content', '求一本钢铁是怎样炼成得书'),
+                    data.get('schedule', '08:00')
+                ))
+            return jsonify({"success": True})
+        except Exception as e:
+            logging.error(f"配置保存失败: {str(e)}")
+            return jsonify({"success": False, "message": "配置保存失败"})
+    
+    else:
+        try:
+            with sqlite3.connect(CACHE_DB) as conn:
+                row = conn.execute('''
+                    SELECT main_cookies, sub_accounts, wish_content, schedule_time 
+                    FROM auto115_config WHERE user_id = ?
+                ''', (user_id,)).fetchone()
+            
+            if row:
+                return jsonify({
+                    "main": json.loads(row[0]),
+                    "subs": json.loads(row[1]),
+                    "content": row[2],
+                    "schedule_time": row[3]
+                })
+            return jsonify({})
+        except Exception as e:
+            logging.error(f"配置读取失败: {str(e)}")
+            return jsonify({})
 
-@app.route('/115_config')
-def get_115_config():
+@app.route('/115_run_now', methods=['POST'])
+def run_115_now():
     if not session.get('logged_in'):
-        return jsonify({})
+        return jsonify({"success": False})
     
-    user_id = session['user_info']['uid']
-    with sqlite3.connect(CACHE_DB) as conn:
-        row = conn.execute('''
-            SELECT main_cookies, sub_accounts, wish_content 
-            FROM auto115_config WHERE user_id = ?
-        ''', (user_id,)).fetchone()
-    
-    return jsonify({
-        "main": json.loads(row[0]) if row else None,
-        "subs": json.loads(row[1]) if row else [],
-        "content": row[2] if row else ""
-    })
-    
+    try:
+        user_id = session['user_info']['uid']
+        subprocess.Popen([
+            'python', '/app/main.py',
+            '--execute-115', user_id
+        ])
+        return jsonify({"success": True})
+    except Exception as e:
+        logging.error(f"立即执行失败: {str(e)}")
+        return jsonify({"success": False})
 
 @app.route('/generate', methods=['GET'])
 def generate_strm():
-    """生成 STRM 文件的路由"""
+    if not session.get('logged_in'):
+        def generate_error():
+            yield "event: error\ndata: 请先登录\n\n"
+            yield "event: close\ndata: \n\n"
+        return Response(stream_with_context(generate_error()), content_type='text/event-stream')
+
     try:
-        # 检查用户是否登录
-        if not session.get('logged_in'):
-            def generate_error():
-                yield "event: error\ndata: 请先登录\n\n"
-                yield "event: close\ndata: \n\n"
-            return Response(stream_with_context(generate_error()), content_type='text/event-stream')
-
-        # 从 session 中获取用户凭证
         user_info = session.get('user_info', {})
-        p123_user = user_info.get('passport', '')
-        p123_pass = request.args.get('p123_pass', '')  # 实际应从加密参数解析
-
-        # 验证凭证有效性
-        if not p123_user or not p123_pass:
-            def generate_error():
-                yield "event: error\ndata: 凭证无效\n\n"
-                yield "event: close\ndata: \n\n"
-            return Response(stream_with_context(generate_error()), content_type='text/event-stream')
-
-        # 获取 URL 参数
         config_params = {
             'parent_id': request.args.get('parent_id', '0'),
             'local_path': request.args.get('local_path', './EmbyLibrary'),
@@ -178,11 +166,10 @@ def generate_strm():
             'direct_link_url': request.args.get('direct_link_url', 'http://172.17.0.1:8123')
         }
 
-        # 构造环境变量
         env = os.environ.copy()
         env.update({
-            'P123_USER': p123_user,
-            'P123_PASS': p123_pass,
+            'P123_USER': user_info.get('passport', ''),
+            'P123_PASS': request.args.get('p123_pass', ''),
             'PARENT_ID': config_params['parent_id'],
             'LIBRARY_PATH': config_params['local_path'],
             'VIDEO_EXTS': config_params['video_exts'],
@@ -194,14 +181,13 @@ def generate_strm():
             'DIRECT_LINK_URL': config_params['direct_link_url']
         })
 
-        # 生成器函数，用于流式输出日志
         def generate():
             try:
                 process = subprocess.Popen(
                     ['python', 'generate_strm.py'],
                     env=env,
                     stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT,  # 将 stderr 合并到 stdout
+                    stderr=subprocess.STDOUT,
                     text=True,
                     encoding='utf-8'
                 )
@@ -210,29 +196,25 @@ def generate_strm():
                     yield f"data: {line}\n\n"
                 process.stdout.close()
                 return_code = process.wait()
-                yield f"data: PROCESS_EXIT_CODE:{return_code}\n\n"  # 发送退出码
-                yield "event: close\ndata: \n\n"  # 发送关闭事件
+                yield f"data: PROCESS_EXIT_CODE:{return_code}\n\n"
+                yield "event: close\ndata: \n\n"
             except Exception as e:
                 yield f"event: error\ndata: 子进程启动失败: {str(e)}\n\n"
                 yield "event: close\ndata: \n\n"
 
-        # 返回 SSE 响应
         return Response(stream_with_context(generate()), content_type='text/event-stream')
 
     except Exception as e:
-        logging.error(f"[ERROR] 生成失败: {str(e)}")
         def generate_error():
             yield f"event: error\ndata: 生成失败: {str(e)}\n\n"
             yield "event: close\ndata: \n\n"
         return Response(stream_with_context(generate_error()), content_type='text/event-stream')
 
-# 启动日志优化
 logger = logging.getLogger('strm_generator')
 logger.info("=== WEBUI已启动 ===")
 logger.info("WEBUI地址: http://0.0.0.0:8124")
 
 if __name__ == '__main__':
-    # 使用自定义的 SilentWSGIRequestHandler 并禁用调试模式
     from werkzeug.serving import run_simple
     run_simple(
         hostname='0.0.0.0',
