@@ -49,6 +49,15 @@ def init_db():
                 ON download_cache (expire_time)
             ''')
             
+            # 新增115配置表
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS auto115_config (
+                user_id TEXT PRIMARY KEY,
+                main_cookies TEXT,
+                sub_accounts TEXT,
+                wish_content TEXT DEFAULT '求一本钢铁是怎样炼成得书'
+            )''')
+            
             # 创建自动清理触发器
             conn.execute('''
                 CREATE TRIGGER IF NOT EXISTS auto_clean 
