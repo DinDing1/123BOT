@@ -195,6 +195,55 @@
             display: block; /* 0315新增：确保每个字段单独一行 */
             width: 100%;/*0315 确保宽度占满容器 */
         }
+        
+        /* 115配置面板 */
+.config-115-panel {
+    grid-area: 115-config;
+    background: rgba(0, 30, 60, 0.9);
+    padding: 1.5rem;
+    border-radius: 8px;
+    border: 1px solid rgba(0, 243, 255, 0.2);
+}
+
+.sub-account-list {
+    margin: 1rem 0;
+}
+
+.sub-account-item {
+    position: relative;
+    margin: 0.8rem 0;
+}
+
+.remove-sub {
+    position: absolute;
+    right: -10px;
+    top: -10px;
+    background: #dc3545;
+    border-radius: 50%;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+}
+
+.form-group-115 textarea {
+    width: 100%;
+    background: rgba(255,255,255,0.1);
+    border: 1px solid var(--primary-color);
+    color: var(--text-color);
+    padding: 0.8rem;
+}
+
+.115-buttons {
+    display: flex;
+    gap: 1rem;
+    margin-top: 1.5rem;
+}
+
+.115-buttons button {
+    flex: 1;
+    padding: 0.8rem;
+}
+
 
         .config-panel {
             grid-area: config-panel;
@@ -347,6 +396,35 @@
                 <button class="logout-btn" onclick="handleLogout()">退出</button>
             </div>
         </div>
+        
+        <!-- 在用户信息区域下方添加115配置区域 -->
+<div class="config-115-panel">
+    <h3>⚙️ 115自动任务配置</h3>
+    
+    <div class="form-group-115">
+        <label>主账号Cookie:</label>
+        <textarea id="mainCookie" rows="3"></textarea>
+    </div>
+    
+    <div class="sub-account-list">
+        <div class="sub-account-item">
+            <label>小号Cookie:</label>
+            <textarea rows="2"></textarea>
+            <button class="remove-sub">×</button>
+        </div>
+    </div>
+    <button class="add-sub">➕ 添加小号</button>
+    
+    <div class="schedule-config">
+        <label>定时执行:</label>
+        <input type="time" id="scheduleTime" value="08:00">
+    </div>
+    
+    <div class="115-buttons">
+        <button class="save-115" onclick="save115Config()">💾 保存配置</button>
+        <button class="run-now" onclick="run115Now()">⚡ 立即执行</button>
+    </div>
+</div>
 
         <div class="config-panel">
             <form id="configForm" action="/generate" method="GET">
