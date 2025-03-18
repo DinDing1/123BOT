@@ -104,7 +104,7 @@
             color: #666;
         }
 
-        /* 主界面容器 */
+        /* 主容器布局 */
         .container {
             flex: 1;
             margin: 20px;
@@ -114,18 +114,28 @@
             padding: 1.2rem;
             display: grid;
             grid-template-areas: 
-                "header header"
-                "user-area config-115"
-                "config-panel log-panel"
-                "generate-button generate-button"; /* 新增第四行 */
+                "header    header"
+                "left-col  log-panel"
+                "left-col  log-panel"
+                "generate  generate";
             grid-template-columns: 1fr 1fr;
-            grid-template-rows: auto auto 1fr auto; /* 调整行数 */
+            grid-template-rows: auto 200px 1fr auto;
             gap: 1.2rem;
-            min-height: 680px;
+            min-height: 720px;
             overflow: hidden;
             box-sizing: border-box;
             border: 1px solid rgba(0, 243, 255, 0.2);
             backdrop-filter: blur(5px);
+        }
+        
+        /* 左侧纵向容器 */
+        .left-col {
+            grid-area: left-col;
+            display: grid;
+            grid-template-rows: auto auto 1fr;
+            gap: 1.2rem;
+            height: 100%;
+            min-height: 600px;
         }
 
         .header {
@@ -160,14 +170,17 @@
             margin-top: 0.8rem;
         }
 
+        /* 用户信息区域 */
         .user-area {
-            grid-area: user-area;
-            display: flex;
-            justify-content: center;
-            align-items: center; /* 0315新增：垂直居中 */
-            padding: 1rem;
-            width: 100%;
+            background: rgba(0, 0, 0, 0.6);
+            border-radius: 8px;
+            padding: 1.5rem;
+            border: 1px solid rgba(0, 243, 255, 0.2);
+            min-height: 220px;
+            max-height: 280px;
+            overflow-y: auto;
         }
+        
 
         .auth-panel {
             background: rgba(0, 0, 0, 0.6);
@@ -196,15 +209,17 @@
             display: block; /* 0315新增：确保每个字段单独一行 */
             width: 100%;/*0315 确保宽度占满容器 */
         }
-        
-        /* 115配置面板 */
-.config-115-panel {
-    grid-area: config-115;
-    background: rgba(0, 30, 60, 0.9);
-    padding: 1.5rem;
-    border-radius: 8px;
-    border: 1px solid rgba(0, 243, 255, 0.2);
-}
+    
+        /* 115配置区域 */
+        .config-115-panel {
+            background: rgba(0, 30, 60, 0.9);
+            border-radius: 8px;
+            padding: 1.5rem;
+            border: 1px solid rgba(0, 243, 255, 0.2);
+            min-height: 280px;
+            max-height: 320px;
+            overflow-y: auto;
+        }
 
 .sub-account-list {
     margin: 1rem 0;
@@ -246,12 +261,14 @@
 }
 
 
+        /* 原始配置区域 */
         .config-panel {
-            grid-area: config-panel;
-            display: grid;
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-            gap: 1rem;
-            align-content: start;
+            background: rgba(20, 40, 60, 0.9);
+            border-radius: 8px;
+            padding: 1.2rem;
+            border: 1px solid rgba(0, 243, 255, 0.2);
+            min-height: 300px;
+            overflow-y: auto;
         }
 
         #configForm {
@@ -290,17 +307,13 @@
             outline: none;
         }
 
+        /* 日志区域 */
         .log-panel {
             grid-area: log-panel;
-            background: rgba(0, 0, 0, 0.7);
-            border-radius: 8px;
-            padding: 1rem;
-            font-family: 'Consolas', monospace;
-            font-size: 0.8rem;
-            line-height: 1.4;
-            height: 62vh;
-            overflow-y: auto;
-            border: 1px solid rgba(0, 243, 255, 0.2);
+            height: calc(100vh - 340px);
+            min-height: 500px;
+            max-height: 720px;
+            margin-top: -0.8rem;
         }
 
         .log-entry {
@@ -353,11 +366,32 @@
             padding: 1rem;
             color: var(--primary-color);
         }
-        /* 新增生成按钮区域样式 */
+        /* 生成按钮容器 */
         .generate-button {
-            grid-area: generate-button;
+            grid-area: generate;
             text-align: center;
-            margin: 1rem 0;
+            padding-top: 1.5rem;
+            border-top: 1px solid rgba(0, 243, 255, 0.1);
+            margin-top: 1rem;
+        }
+
+        /* 滚动条样式 */
+        ::-webkit-scrollbar {
+            width: 8px;
+            background: rgba(0, 0, 0, 0.2);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--primary-color);
+            border-radius: 4px;
+        }
+
+        /* 响应式调整 */
+        @media (max-height: 800px) {
+            .user-area { min-height: 180px; }
+            .config-115-panel { min-height: 240px; }
+            .log-panel { min-height: 400px; }
+            .container { grid-template-rows: auto 180px 1fr auto; }
         }
 
         @keyframes fadeIn {
@@ -390,49 +424,48 @@
             <div class="divider"></div>
             <div class="version">版本号: v2.0.1 | 作者: dinding</div>
         </div>
-
-        <div class="user-area">
-            <div class="auth-panel login-form" id="loginForm"></div>
-            <div class="auth-panel user-info" id="userInfo">
-                <h2>👤 用户信息</h2>
-                <div><span>📛 昵称: <span id="nickname"></span></span></div>
-                <div><span>🆔 用户ID: <span id="uid"></span></span></div>
-                <div><span>📱 手机号: <span id="phone"></span></span></div>
-                <div><span>💽 永久空间: <span id="spacePermanent"></span></span></div>
-                <div><span>💾 已用空间: <span id="spaceUsed"></span></span></div>
-                <button class="logout-btn" onclick="handleLogout()">退出</button>
-            </div>
-        </div>
         
-        <!-- 在用户信息区域下方添加115配置区域 -->
-<div class="config-115-panel">
-    <h3>⚙️ 115自动任务配置</h3>
-    
-    <div class="form-group-115">
-        <label>主账号Cookie:</label>
-        <textarea id="mainCookie" rows="3"></textarea>
-    </div>
-    
-    <div class="sub-account-list">
-        <div class="sub-account-item">
-            <label>小号Cookie:</label>
-            <textarea rows="2"></textarea>
-            <button class="remove-sub">×</button>
-        </div>
-    </div>
-    <button class="add-sub">➕ 添加小号</button>
-    
-    <div class="schedule-config">
-        <label>定时执行:</label>
-        <input type="time" id="scheduleTime" value="08:00">
-    </div>
-    
-    <div class="115-buttons">
-        <button class="save-115" onclick="save115Config()">💾 保存配置</button>
-        <button class="run-now" onclick="run115Now()">⚡ 立即执行</button>
-    </div>
-</div>
+                <!-- 左侧纵向容器 -->
+        <div class="left-col">
+            <!-- 用户信息 -->
+            <div class="user-area">
+                <div class="auth-panel login-form" id="loginForm"></div>
+                <div class="auth-panel user-info" id="userInfo">
+                    <h2>👤 用户信息</h2>
+                    <div><span>📛 昵称: <span id="nickname"></span></span></div>
+                    <div><span>🆔 用户ID: <span id="uid"></span></span></div>
+                    <div><span>📱 手机号: <span id="phone"></span></span></div>
+                    <div><span>💽 永久空间: <span id="spacePermanent"></span></span></div>
+                    <div><span>💾 已用空间: <span id="spaceUsed"></span></span></div>
+                    <button class="logout-btn" onclick="handleLogout()">退出</button>
+                </div>
+            </div>
 
+            <!-- 115配置 -->
+            <div class="config-115-panel">
+                <h3>⚙️ 115自动任务配置</h3>
+                <div class="form-group-115">
+                    <label>主账号Cookie:</label>
+                    <textarea id="mainCookie" rows="3"></textarea>
+                </div>
+                <div class="sub-account-list">
+                    <div class="sub-account-item">
+                        <label>小号Cookie:</label>
+                        <textarea rows="2"></textarea>
+                        <button class="remove-sub">×</button>
+                    </div>
+                </div>
+                <button class="add-sub">➕ 添加小号</button>
+                <div class="schedule-config">
+                    <label>定时执行:</label>
+                    <input type="time" id="scheduleTime" value="08:00">
+                </div>
+                <div class="115-buttons">
+                    <button class="save-115" onclick="save115Config()">💾 保存配置</button>
+                    <button class="run-now" onclick="run115Now()">⚡ 立即执行</button>
+                </div>
+            </div>
+        
         <div class="config-panel">
             <form id="configForm" action="/generate" method="GET">
                 <div class="form-group">
@@ -470,11 +503,12 @@
             </form>
         </div>
 
-        <div class="log-panel" id="output"></div>
-    </div>
+        <!-- 日志区域 -->
+        <div class="log-panel" id="output">
+            <!-- 日志内容动态生成 -->
+        </div>
 
-    
-        <!-- 新增生成按钮容器 -->
+        <!-- 生成按钮 -->
         <div class="generate-button" id="generateButtonContainer" style="display: none;">
             <button type="submit" form="configForm" id="generateBtn" disabled>生成STRM</button>
             <div class="loading" id="loading">⏳ 正在生成中，请稍候...</div>
