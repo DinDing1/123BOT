@@ -1,198 +1,835 @@
-#!/usr/bin/env python3
-# encoding: utf-8
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>123Media_STRM</title>
+    <style>
+        :root {
+            --primary-color: #00f3ff;
+            --secondary-color: #0066ff;
+            --neon-effect: 0 0 8px rgba(0, 243, 255, 0.3);
+            --background-color: #0a1420;
+            --text-color: #e0e0e0;
+        }
 
-"""
-115综合自动化脚本（支持配置文件）
-功能：全账号签到 → 许愿树流程（小号许愿 → 主号助愿 → 小号采纳）
-"""
+        canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            z-index: -1;
+        }
 
-__version__ = "3.1.0"
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: var(--background-color);
+            color: var(--text-color);
+            margin: 0;
+            height: 100vh;
+            overflow: auto;
+            display: flex;
+            flex-direction: column;
+            min-height: 720px;
+        }
 
-import argparse
-import json
-import sys
-import time
-from pathlib import Path
-from typing import Dict, List
+        /* 登录容器 */
+        .login-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            width: 100%;
+            padding: 2rem;
+            box-sizing: border-box;
+        }
 
-from p115client import P115Client, check_response
+        .login-form {
+            background: rgba(25, 40, 60, 0.9);
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: var(--neon-effect);
+            width: 100%;
+            max-width: 400px;
+            text-align: center;
+            box-sizing: border-box;
+            border: 1px solid rgba(0, 243, 255, 0.3);
+            backdrop-filter: blur(3px);
+        }
 
-# 日志文件路径
-LOG_FILE = "115_auto_operation.log"
+        .login-form h3 {
+            margin: 0 0 1.5rem 0;
+            font-size: 1.6rem;
+            color: var(--primary-color);
+        }
 
-class Logger:
-    """日志记录器"""
-    
-    def __init__(self, log_file: str):
-        self.log_file = Path(log_file)
-        self.log_file.parent.mkdir(parents=True, exist_ok=True)
+        .login-form input {
+            width: calc(100% - 2rem);
+            padding: 0.8rem 1rem;
+            margin: 0.5rem auto;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(0, 243, 255, 0.2);
+            border-radius: 8px;
+            font-size: 1rem;
+            color: var(--text-color);
+            transition: border-color 0.3s ease;
+        }
 
-    def log(self, message: str, level: str = "INFO", console: bool = True):
-        """记录带时间戳的日志"""
-        timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
-        log_entry = f"[{timestamp}] [{level}] {message}"
-        
-        with open(self.log_file, "a", encoding="utf-8") as f:
-            f.write(log_entry + "\n")
-        
-        if console:
-            print(log_entry)
+        .login-form input:focus {
+            border-color: var(--primary-color);
+            outline: none;
+        }
 
-logger = Logger(LOG_FILE).log
+        .login-form button {
+            width: 50%;
+            padding: 0.8rem;
+            margin: 1rem auto;
+            background: linear-gradient(45deg, var(--secondary-color), var(--primary-color));
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: transform 0.2s ease;
+            display: block;
+        }
 
-def load_config_from_file(config_path: str) -> Dict:
-    """从指定路径加载配置文件"""
-    try:
-        with open(config_path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception as e:
-        logger(f"配置文件加载失败: {str(e)}", "ERROR")
-        sys.exit(1)
+        .login-form button:hover {
+            transform: scale(1.02);
+        }
 
-def checkin_single(cookies: Dict) -> bool:
-    """执行单个账号签到"""
-    try:
-        client = P115Client(cookies, check_for_relogin=True)
-        result = client.user_points_sign_post()
-        if result.get("state"):
-            days = result.get("data", {}).get("continuous_day", 0)
-            logger(f"签到成功，已连续签到{days}天")
-            return True
-        logger(f"签到失败: {result.get('message')}", "WARNING")
-        return False
-    except Exception as e:
-        logger(f"签到异常: {str(e)}", "ERROR")
-        return False
+        .version-info {
+            margin: 1.5rem 1rem 0 1rem;
+            font-size: 0.9rem;
+            color: #666;
+        }
 
-def checkin_all(config: Dict):
-    """执行全部账号签到"""
-    accounts = [config["wish_main"]] + config["wish_subs"]
-    total = len(accounts)
-    success = 0
-    
-    logger(f"开始签到任务，共 {total} 个账号")
-    for idx, account in enumerate(accounts, 1):
-        name = account.get("name", f"账号{idx}")
-        logger(f"正在签到 ({idx}/{total}): {name}")
-        if checkin_single(account["cookies"]):
-            success += 1
-        time.sleep(10)  # 账号间间隔
-    
-    logger(f"签到完成，成功 {success}/{total} 个账号")
-    return success == total
+        /* 主界面容器 */
+        .container {
+            flex: 1;
+            margin: 20px;
+            background: rgba(20, 30, 45, 0.95);
+            border-radius: 12px;
+            box-shadow: var(--neon-effect);
+            padding: 1.2rem;
+            display: none;
+            grid-template-areas: 
+                "header header"
+                "user-area log-panel"
+                "config-panel log-panel";
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: auto 1fr;
+            gap: 1.2rem;
+            min-height: 680px;
+            overflow: hidden;
+            box-sizing: border-box;
+            border: 1px solid rgba(0, 243, 255, 0.2);
+            backdrop-filter: blur(5px);
+        }
 
-class WishManager:
-    """许愿树操作管理器"""
-    
-    def __init__(self, main_cookies: Dict, sub_cookies: List[Dict]):
-        self.main_client = P115Client(main_cookies, check_for_relogin=True)
-        self.sub_clients = [P115Client(sub["cookies"], check_for_relogin=True) for sub in sub_cookies]
-    
-    def wish_workflow(self, test_mode: bool = False):
-        """完整的许愿工作流程"""
-        total_subs = len(self.sub_clients)
-        success_count = 0
-        
-        for idx, sub_client in enumerate(self.sub_clients, 1):
-            try:
-                # 小号许愿
-                wish_id = self.create_wish(sub_client)
-                logger(f"({idx}/{total_subs}) 小号许愿成功，ID: {wish_id}")
+        .header {
+            grid-area: header;
+            text-align: center;
+            margin-bottom: 0.8rem;
+        }
 
-                # 增加等待时间
-                logger("等待许愿审核通过...")
-                time.sleep(60)
+        .logo {
+            color: var(--primary-color);
+            font-size: 1.7rem;
+            font-weight: bold;
+            margin-bottom: 0.2rem;
+        }
+
+        .header p {
+            color: var(--text-color);
+            font-size: 0.88rem;
+            margin-bottom: 0.6rem;
+        }
+
+        .header .divider {
+            width: 88%;
+            height: 1px;
+            background: rgba(255, 255, 255, 0.1);
+            margin: 0.6rem auto;
+        }
+
+        .header .version {
+            color: #6c757d;
+            font-size: 0.82rem;
+            margin-top: 0.8rem;
+        }
+
+        .user-area {
+            grid-area: user-area;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 1rem;
+            width: 100%;
+        }
+
+        .auth-panel {
+            background: rgba(0, 0, 0, 0.6);
+            padding: 1.5rem 2rem;
+            border-radius: 8px;
+            box-shadow: 0 0 8px rgba(0, 243, 255, 0.2);
+            width: 100%;
+            max-width: 380px;
+            display: none;
+            border: 1px solid rgba(0, 243, 255, 0.2);
+            text-align: center;
+        }
+
+        .auth-panel.active {
+            display: block !important;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .auth-panel h3 {
+            margin-bottom: 1.5rem;
+        }
+
+        .auth-panel div {
+            margin: 0.8rem 0;
+            text-align: center;
+            display: block;
+            width: 100%;
+        }
+
+        .config-panel {
+            grid-area: config-panel;
+            display: grid;
+            grid-template-columns: 1.2fr 1fr;
+            gap: 1.5rem;
+            align-content: start;
+        }
+
+        .config-section {
+            background: rgba(25, 40, 60, 0.9);
+            padding: 1.5rem;
+            border-radius: 8px;
+            border: 1px solid rgba(0, 243, 255, 0.2);
+        }
+
+        .grid-form {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1.2rem;
+            align-items: start;
+        }
+
+        .grid-form .form-group {
+            margin-bottom: 1rem;
+        }
+
+        .grid-form label {
+            text-align: center;
+            display: block;
+            margin-bottom: 0.5rem;
+        }
+
+        .form-group {
+            margin-bottom: 0.8rem;
+            min-width: 0;
+        }
+
+        .form-group.extension-group {
+            grid-column: span 1;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 0.4rem;
+            font-weight: 500;
+            color: var(--text-color);
+            font-size: 0.9rem;
+        }
+
+        input {
+            padding: 0.6rem;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(0, 243, 255, 0.2);
+            border-radius: 6px;
+            font-size: 0.9rem;
+            color: var(--text-color);
+            transition: all 0.3s ease;
+        }
+
+        input:focus {
+            border-color: var(--primary-color);
+            outline: none;
+        }
+
+        .log-panel {
+            grid-area: log-panel;
+            background: rgba(0, 0, 0, 0.7);
+            border-radius: 8px;
+            padding: 1rem;
+            font-family: 'Consolas', monospace;
+            font-size: 0.8rem;
+            line-height: 1.4;
+            height: calc(100% - 2.4rem); /* 调整高度，与配置区域对齐 */
+            overflow-y: auto;
+            border: 1px solid rgba(0, 243, 255, 0.2);
+        }
+
+        .log-entry {
+            margin: 0.25rem 0;
+            word-break: break-all;
+            color: var(--primary-color);
+        }
+
+        .log-time {
+            color: #6c757d;
+            margin-right: 0.8rem;
+        }
+
+        button {
+            background: linear-gradient(45deg, var(--secondary-color), var(--primary-color));
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1rem;
+            margin: 1rem auto;
+            display: block;
+            transition: transform 0.2s ease;
+        }
+
+        button:hover:not(:disabled) {
+            transform: scale(1.02);
+        }
+
+        .logout-btn {
+            background: linear-gradient(45deg, #ff006a, #dc3545) !important;
+            width: 150px;
+            margin-top: 1.5rem;
+        }
+
+        .logout-btn:hover {
+            background: linear-gradient(45deg, #dc3545, #bb2d3b) !important;
+        }
+
+        button:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 1rem;
+            color: var(--primary-color);
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* 新增样式 */
+        .full-width {
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        .sub-account-container {
+            position: relative;
+            margin: 0.8rem 0;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .sub-account-container textarea {
+            flex: 1;
+            min-height: 80px;
+        }
+
+        .removeSub {
+            background: #dc3545;
+            border: none;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            color: white;
+            cursor: pointer;
+            font-size: 1.2rem;
+            line-height: 1;
+            flex-shrink: 0;
+        }
+
+        .removeSub:hover {
+            background: #bb2d3b;
+        }
+
+        .add-btn {
+            width: 100%;
+            margin-top: 0.5rem;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 1rem;
+            justify-content: space-between;
+            margin-top: 1rem;
+        }
+
+/* 统一输入框样式 */
+        input, textarea {
+            padding: 0.6rem;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(0, 243, 255, 0.2);
+            border-radius: 6px;
+            font-size: 0.9rem;
+            color: var(--text-color);
+            transition: all 0.3s ease;
+            width: 100%;
+            box-sizing: border-box;
+       }
+
+        input:focus, textarea:focus {
+            border-color: var(--primary-color);
+            outline: none;
+       }
+
+/* 主账号Cookie和小号配置输入框 */
+        #mainCookie, .subCookie {
+            height: 80px; /* 统一高度 */
+            resize: vertical; /* 允许垂直调整大小 */
+       }
+
+/* 生成配置输入框 */
+        #direct_link_url, #parent_id, #max_retries, #request_delay, #dir_delay, #timeout, #video_exts, #subtitle_exts {
+            height: 40px; /* 统一高度 */
+       }
+
+        /* 响应式布局 */
+        @media (max-width: 768px) {
+            .grid-form {
+                grid-template-columns: 1fr;
+            }
+            
+            .config-panel {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <canvas id="background"></canvas>
+
+    <!-- 登录界面 -->
+    <div class="login-container">
+        <div class="login-form">
+            <h3>用户登录</h3>
+            <input type="text" id="passport" placeholder="123云盘账号">
+            <input type="password" id="password" placeholder="123云盘密码">
+            <button onclick="handleLogin()">登录</button>
+            <div class="version-info">
+                版本号: v2.0.1 | 作者: dinding
+            </div>
+        </div>
+    </div>
+
+    <!-- 主界面 -->
+    <div class="container">
+        <div class="header">
+            <div class="logo">123Media_STRM</div>
+            <div class="divider"></div>
+            <div class="version">版本号: v2.0.1 | 作者: dinding</div>
+        </div>
+
+        <div class="user-area">
+            <div class="auth-panel login-form" id="loginForm"></div>
+            <div class="auth-panel user-info" id="userInfo">
+                <h2>👤 用户信息</h2>
+                <div><span>📛 昵称: <span id="nickname"></span></span></div>
+                <div><span>🆔 用户ID: <span id="uid"></span></span></div>
+                <div><span>📱 手机号: <span id="phone"></span></span></div>
+                <div><span>💽 永久空间: <span id="spacePermanent"></span></span></div>
+                <div><span>💾 已用空间: <span id="spaceUsed"></span></span></div>
+                <button class="logout-btn" onclick="handleLogout()">退出</button>
+            </div>
+        </div>
+
+        <div class="config-panel">
+            <!-- 115配置区块 -->
+            <div class="config-section">
+                <h3 style="text-align: center;">⚙️ 115自动化配置</h3>
+                <div class="form-group">
+                    <label>主账号Cookie</label>
+                    <textarea id="mainCookie" rows="3" 
+                        placeholder="请输入主账号Cookie（JSON格式）" class="full-width"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>小号配置</label>
+                    <div id="subAccounts">
+                        <div class="sub-account-container">
+                            <textarea class="subCookie" rows="2"
+                                placeholder="小号Cookie（JSON格式）"></textarea>
+                            <button class="removeSub" onclick="removeSub(this)">×</button>
+                        </div>
+                    </div>
+                    <button class="add-btn" onclick="addSubAccount()">+ 添加小号</button>
+                </div>
+                <div class="form-group inline-group">
+                    <div>
+                        <label>定时执行</label>
+                        <input type="time" id="scheduleTime" value="08:00">
+                    </div>
+                </div>
+                <div class="action-buttons">
+                    <button class="save-btn" onclick="save115Config()">💾 保存配置</button>
+                    <button class="run-btn" onclick="run115Now()">🚀 立即执行</button>
+                </div>
+            </div>
+
+            <!-- STRM生成配置区块 -->
+            <div class="config-section">
+                <h3 style="text-align: center;">⚙️ STRM生成配置</h3>
+                <form id="configForm" action="/generate" method="GET" class="grid-form">
+                    <div class="form-group">
+                        <label for="direct_link_url">直连地址</label>
+                        <input type="url" id="direct_link_url" name="direct_link_url" value="http://172.17.0.1:8123" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="parent_id">起始目录ID</label>
+                        <input type="number" id="parent_id" name="parent_id" value="0">
+                    </div>
+                    <div class="form-group">
+                        <label for="max_retries">重试次数</label>
+                        <input type="number" id="max_retries" name="max_retries" value="3" min="0">
+                    </div>
+                    <div class="form-group">
+                        <label for="request_delay">请求间隔（秒）</label>
+                        <input type="number" id="request_delay" name="request_delay" value="1" min="0" step="0.1">
+                    </div>
+                    <div class="form-group">
+                        <label for="dir_delay">目录间隔（秒）</label>
+                        <input type="number" id="dir_delay" name="dir_delay" value="2" min="0" step="0.1">
+                    </div>
+                    <div class="form-group">
+                        <label for="timeout">下载超时（秒）</label>
+                        <input type="number" id="timeout" name="timeout" value="30" min="1">
+                    </div>
+                    <div class="form-group">
+                        <label for="video_exts">视频扩展名</label>
+                        <input type="text" id="video_exts" name="video_exts" value=".mp4,.mkv,.avi,.mov,.flv,.ts,.iso,.rmvb,.m2ts">
+                    </div>
+                    <div class="form-group">
+                        <label for="subtitle_exts">字幕扩展名</label>
+                        <input type="text" id="subtitle_exts" name="subtitle_exts" value=".srt,.ass,.ssa,.sub,.txt,.vtt,.ttml,.dfxp">
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="log-panel" id="output"></div>
+    </div>
+
+    <div id="generateButtonContainer" style="display: none;">
+        <button type="submit" form="configForm" id="generateBtn" disabled>生成STRM</button>
+        <div class="loading" id="loading">⏳ 正在生成中，请稍候...</div>
+    </div>
+
+    <script>
+        // ====================== 核心修复部分 ======================
+        // 确保 handleLogin 函数在全局作用域正确定义
+        async function handleLogin() {
+            const passport = document.getElementById('passport').value;
+            const password = document.getElementById('password').value;
+
+            try {
+                const res = await fetch('/login', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({passport, password})
+                    credentials: 'include'  // 添加此行
+                });
                 
-                # 主号助愿
-                aid_id = self.create_aid(wish_id)
-                logger(f"主号助愿成功，ID: {aid_id}")
+                const result = await res.json();
+                if (result.success) {
+                    await checkLoginStatus();
+                } else {
+                    alert(`登录失败: ${result.message}`);
+                }
+            } catch (error) {
+                console.error('登录请求失败:', error);
+                alert('网络请求异常，请检查控制台');
+            }
+        }
+        
+        // 背景线条优化
+        const canvas = document.getElementById('background');
+        const ctx = canvas.getContext('2d');
+        let lines = [];
 
-                # 增加等待时间
-                logger("等待助愿审核通过...")
-                time.sleep(60)
+        class Line {
+            constructor() {
+                this.reset();
+                this.lineWidth = Math.random() * 0.8 + 0.2;
+            }
+
+            reset() {
+                this.x = Math.random() * canvas.width;
+                this.y = Math.random() * canvas.height;
+                this.speed = Math.random() * 1.5 + 0.5;
+                this.angle = Math.random() * Math.PI * 2;
+                this.alpha = Math.random() * 0.2 + 0.1;
+            }
+
+            update() {
+                this.x += Math.cos(this.angle) * this.speed;
+                this.y += Math.sin(this.angle) * this.speed;
                 
-                # 小号采纳
-                if self.adopt_aid(sub_client, wish_id, aid_id, test_mode):
-                    success_count += 1
-                    break  # 成功则跳出重试循环
+                if (this.x < 0 || this.x > canvas.width || 
+                    this.y < 0 || this.y > canvas.height) {
+                    this.reset();
+                }
+            }
 
-           except Exception as e:
-                logger(f"流程异常 (重试 {retry + 1}/{retry_count}): {str(e)}", "ERROR")
-                if retry < retry_count - 1:
-                    time.sleep(10)  # 重试间隔
-                else:
-                    logger(f"小号 {idx} 许愿流程失败，已达最大重试次数", "ERROR")
-        
-        time.sleep(5)  # 流程间间隔
-    
-    logger(f"许愿任务完成，成功 {success_count}/{total_subs} 个账号")
-    return success_count
+            draw() {
+                ctx.beginPath();
+                ctx.strokeStyle = `rgba(0, 243, 255, ${this.alpha})`;
+                ctx.lineWidth = this.lineWidth;
+                ctx.moveTo(this.x, this.y);
+                ctx.lineTo(
+                    this.x - Math.cos(this.angle) * 50,
+                    this.y - Math.sin(this.angle) * 50
+                );
+                ctx.stroke();
+            }
+        }
 
+        function initBackground() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            lines = Array(50).fill().map(() => new Line());
+        }
 
-    @staticmethod
-    def create_wish(client: P115Client) -> str:
-        """创建许愿"""
-        return check_response(client.act_xys_wish(
-            {"rewardSpace": 5, "content": "求一本钢铁是怎样炼成得书"}
-        ))["data"]["xys_id"]
-    
-    def create_aid(self, wish_id: str) -> str:
-        """主号创建助愿"""
-        check_response(self.main_client.act_xys_get_desire_info(wish_id))
-        return check_response(
-            self.main_client.act_xys_aid_desire({
-                "id": wish_id, 
-                "content": "希望这本书可以帮到你", 
-                "file_ids": ""
-            })
-        )["data"]["aid_id"]
-    
-    @staticmethod
-    def adopt_aid(client: P115Client, wish_id: str, aid_id: str, test_mode: bool) -> bool:
-        """采纳助愿"""
-        if test_mode:
-            logger("[测试模式] 跳过采纳操作", "DEBUG")
-            return True
-        
-        result = check_response(client.act_xys_adopt({
-            "did": wish_id, 
-            "aid": aid_id, 
-            "to_cid": 0
-        }))
-        return result.get("state", False)
+        function animate() {
+            ctx.fillStyle = 'rgba(10, 20, 30, 0.08)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-def main():
-    parser = argparse.ArgumentParser(description="115综合自动化工具")
-    parser.add_argument("--config", type=str, help="配置文件路径")  # 新增参数
-    parser.add_argument("--skip-checkin", action="store_true", help="跳过签到步骤")
-    parser.add_argument("--skip-wish", action="store_true", help="跳过许愿步骤")
-    parser.add_argument("-t", "--test", action="store_true", help="测试模式（不执行实际采纳）")
-    args = parser.parse_args()
+            lines.forEach(line => {
+                line.update();
+                line.draw();
+            });
 
-    config = load_config_from_file(args.config) if args.config else load_config()
-    
-    # 执行签到流程
-    if not args.skip_checkin:
-        logger("开始执行签到流程".center(50, "="))
-        checkin_all(config)
-    
-    # 执行许愿流程
-    if not args.skip_wish:
-        logger("开始执行许愿流程".center(50, "="))
-        try:
-            manager = WishManager(
-                main_cookies=config["wish_main"]["cookies"],
-                sub_cookies=config["wish_subs"]
-            )
-            manager.wish_workflow(args.test)
-        except Exception as e:
-            logger(f"许愿流程初始化失败: {str(e)}", "ERROR")
-    
-    logger("全部任务执行完成".center(50, "="))
+            requestAnimationFrame(animate);
+        }
 
-if __name__ == "__main__":
-    try:
-        main()
-    except KeyboardInterrupt:
-        logger("用户中断操作", "WARNING")
-        sys.exit(1)
+        window.addEventListener('resize', initBackground);
+        initBackground();
+        animate();
+
+        // 原有应用逻辑
+        const form = document.getElementById('configForm');
+        const output = document.getElementById('output');
+        const loading = document.getElementById('loading');
+        const generateBtn = document.getElementById('generateBtn');
+        const generateButtonContainer = document.getElementById('generateButtonContainer');
+
+        async function checkLoginStatus() {
+            const res = await fetch('/user_info', {
+                credentials: 'include'  // 添加此行
+            });
+            const data = await res.json();
+            
+            if (data.logged_in) {
+                document.querySelector('.login-container').style.display = 'none';
+                document.querySelector('.container').style.display = 'grid';
+                generateButtonContainer.style.display = 'block';
+                const info = data.user_info;
+                document.getElementById('uid').textContent = info.uid;
+                document.getElementById('nickname').textContent = info.nickname;
+                document.getElementById('phone').textContent = info.passport;
+                document.getElementById('spaceUsed').textContent = formatSize(info.spaceUsed);
+                document.getElementById('spacePermanent').textContent = formatSize(info.spacePermanent);
+                document.getElementById('userInfo').classList.add('active');
+                generateBtn.disabled = false;
+            } else {
+                document.querySelector('.login-container').style.display = 'flex';
+                document.querySelector('.container').style.display = 'none';
+                generateButtonContainer.style.display = 'none';
+                generateBtn.disabled = true;
+            }
+        }
+
+        function formatSize(bytes) {
+            const units = ['字节', 'KB', 'MB', 'GB', 'TB'];
+            let unitIndex = 0;
+            while (bytes >= 1024 && unitIndex < 4) {
+                bytes /= 1024;
+                unitIndex++;
+            }
+            return `${bytes.toFixed(2)} ${units[unitIndex]}`;
+        }
+
+        async function handleLogout() {
+            await fetch('/logout');
+            location.reload();
+        }
+
+        document.addEventListener('DOMContentLoaded', checkLoginStatus);
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const userInfoRes = await fetch('/user_info');
+            const userInfo = await userInfoRes.json();
+            if (!userInfo.logged_in) {
+                alert('请先登录！');
+                return;
+            }
+
+            const password = document.getElementById('password').value;
+            
+            output.innerHTML = '';
+            loading.style.display = 'block';
+
+            const formData = new FormData(form);
+            formData.append('p123_user', userInfo.user_info.passport);
+            formData.append('p123_pass', password);
+
+            const eventSource = new EventSource(`/generate?${new URLSearchParams(formData)}`);
+
+            eventSource.onmessage = (event) => {
+                const rawLine = event.data.replace('data: ', '').trim();
+                const logEntry = document.createElement('div');
+                logEntry.className = 'log-entry';
+
+                if (rawLine.includes('PROCESS_EXIT_CODE:')) {
+                    const code = rawLine.split(':')[1];
+                    loading.style.display = 'none';
+                    eventSource.close();
+                    if (code !== '0') {
+                        logEntry.innerHTML = `
+                            <span class="log-time">${new Date().toLocaleTimeString()}</span>
+                            <span class="log-error">生成过程出现错误，退出码: ${code}</span>
+                        `;
+                    } else {
+                        logEntry.innerHTML = `
+                            <span class="log-time">${new Date().toLocaleTimeString()}</span>
+                            <span class="log-success">任务完成，退出码: ${code}</span>
+                        `;
+                    }
+                } else if (rawLine.startsWith('[SUCCESS]')) {
+                    logEntry.innerHTML = `
+                        <span class="log-time">${new Date().toLocaleTimeString()}</span>
+                        <span class="log-success">${rawLine.replace('[SUCCESS] ', '')}</span>
+                    `;
+                } else if (rawLine.startsWith('[PROCESS]')) {
+                    logEntry.innerHTML = `
+                        <span class="log-time">${new Date().toLocaleTimeString()}</span>
+                        <span class="log-process">${rawLine.replace('[PROCESS] ', '')}</span>
+                    `;
+                } else if (rawLine.startsWith('[ERROR]')) {
+                    logEntry.innerHTML = `
+                        <span class="log-time">${new Date().toLocaleTimeString()}</span>
+                        <span class="log-error">${rawLine.replace('[ERROR] ', '')}</span>
+                    `;
+                } else {
+                    logEntry.innerHTML = `
+                        <span class="log-time">${new Date().toLocaleTimeString()}</span>
+                        <span class="log-file">${rawLine}</span>
+                    `;
+                }
+
+                output.appendChild(logEntry);
+                output.scrollTop = output.scrollHeight;
+            };
+
+            eventSource.addEventListener('error', function(event) {
+                const errorMsg = event.data || '连接中断，请检查网络状态';
+                const logEntry = document.createElement('div');
+                logEntry.className = 'log-entry';
+                logEntry.innerHTML = `
+                    <span class="log-time">${new Date().toLocaleTimeString()}</span>
+                    <span class="log-error">${errorMsg}</span>
+                `;
+                output.appendChild(logEntry);
+                loading.style.display = 'none';
+                eventSource.close();
+            });
+        });
+
+        // ====================== 115配置管理 ======================
+// 修复函数作用域问题
+async function load115Config() {
+    const res = await fetch('/115_config');
+    if (!res.ok) return;
+    
+    const config = await res.json();
+    document.getElementById('mainCookie').value = config.main ? JSON.stringify(config.main, null, 2) : '';
+    document.getElementById('scheduleTime').value = config.schedule_time || '08:00';
+
+    // 加载小号
+    const subAccounts = document.getElementById('subAccounts');
+    subAccounts.innerHTML = ''; // 清空现有小号
+    if (config.subs) {
+        config.subs.forEach(sub => addSubAccount(JSON.stringify(sub, null, 2)));
+    }
+}
+
+// 添加小号
+function addSubAccount(value = '') {
+    const container = document.createElement('div');
+    container.className = 'sub-account-container';
+    container.innerHTML = `
+        <textarea class="subCookie" rows="2" placeholder="小号Cookie（JSON格式）">${value}</textarea>
+        <button class="removeSub" onclick="removeSub(this)">×</button>
+    `;
+    document.getElementById('subAccounts').appendChild(container);
+}
+
+// 删除小号
+function removeSub(btn) {
+    btn.parentElement.remove();
+}
+
+async function save115Config() {
+    const config = {
+        main: JSON.parse(document.getElementById('mainCookie').value),
+        subs: Array.from(document.querySelectorAll('.subCookie'))
+            .map(el => JSON.parse(el.value)),
+        schedule: document.getElementById('scheduleTime').value
+    };
+
+    const res = await fetch('/115_config', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(config)
+    });
+
+    if (res.ok) {
+        await load115Config();  // 保存后立即重新加载
+        alert('配置保存成功');
+    } else {
+        alert('保存失败');
+    }
+}
+
+async function run115Now() {
+    const res = await fetch('/115_run_now', { method: 'POST' });
+    if (res.ok) {
+        alert('任务已触发，请查看日志');
+    } else {
+        alert('触发失败');
+    }
+}
+
+// ====================== 初始化逻辑 ======================
+document.addEventListener('DOMContentLoaded', () => {
+    checkLoginStatus();
+    load115Config();
+    
+    // 确保所有按钮事件绑定
+    document.querySelector('.logout-btn').addEventListener('click', handleLogout);
+    document.querySelector('.add-btn').addEventListener('click', addSubAccount);
+});
+    </script>
+</body>
+</html>
