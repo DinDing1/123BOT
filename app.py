@@ -39,6 +39,27 @@ logging.getLogger("p123").setLevel(logging.WARNING)
 
 CACHE_DB = "/app/cache/download_cache.db"
 
+def init_db():
+    """初始化数据库结构"""
+    try:
+        with sqlite3.connect(CACHE_DB) as conn:
+            # 强制删除旧表（如果存在）
+            conn.execute('DROP TABLE IF EXISTS auto115_config')
+            # 创建新表（包含所有字段）
+            conn.execute('''
+                CREATE TABLE auto115_config (
+                    user_id TEXT PRIMARY KEY,
+                    main_cookies TEXT,
+                    sub_accounts TEXT,
+                    wish_content TEXT DEFAULT '求一本钢铁是怎样炼成得书',
+                    schedule_time TEXT DEFAULT '08:00'
+                )''')
+            conn.commit()
+            logger.info("数据库表重建完成")
+    except Exception as e:
+        logger.error(f"数据库初始化失败: {str(e)}")
+        raise
+
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -92,8 +113,9 @@ def handle_115_config():
         data = request.json
         try:
             with sqlite3.connect(CACHE_DB) as conn:
+                # 使用 REPLACE 语法强制覆盖旧数据
                 conn.execute('''
-                    INSERT OR REPLACE INTO auto115_config 
+                    REPLACE INTO auto115_config 
                     (user_id, main_cookies, sub_accounts, wish_content, schedule_time)
                     VALUES (?, ?, ?, ?, ?)
                 ''', (
@@ -135,9 +157,10 @@ def run_115_now():
     
     try:
         user_id = session['user_info']['uid']
+        config_path = f"/app/cache/115_{str(user_id)}.json"  # 确保转换为字符串
         subprocess.Popen([
-            'python', '/app/main.py',
-            '--execute-115', user_id
+            'python', '/app/115_auto.py',
+            '--config', config_path
         ])
         return jsonify({"success": True})
     except Exception as e:
