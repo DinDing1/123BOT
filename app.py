@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, session
+from flask import Flask, request, jsonify, render_template, session
 from collections import deque
 import os
 import logging
@@ -69,7 +69,7 @@ def init_db():
 @app.route('/')
 def index():
     """主页面"""
-    return "Welcome to 115 Automation Service"
+    return render_template('index.html')
 
 @app.route('/login', methods=['POST'])
 def login():
