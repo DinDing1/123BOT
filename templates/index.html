@@ -106,14 +106,14 @@
 
         /* 主容器布局 */
         .container {
-            display: grid;
+            display: none;
             grid-template-areas: 
                 "header header"
-                "user-info config-115"
+                "user-info 115-config"
                 "main-config log-panel"
                 "generate generate";
             grid-template-columns: 1fr 1fr;
-            grid-template-rows: auto auto 1fr auto;
+            grid-template-rows: auto 300px 1fr auto;
             gap: 1.2rem;
             height: 100vh;
             padding: 20px;
@@ -168,9 +168,9 @@
         .user-area {
             grid-area: user-info;
             background: rgba(0, 0, 0, 0.6);
-            padding: 1.5rem;
             border-radius: 8px;
-            height: 200px;
+            padding: 1.5rem;
+            height: 100%;
         }
         
 
@@ -204,11 +204,13 @@
     
         /* 115配置区域 */
         .config-115-panel {
-            grid-area: config-115;
+            grid-area: 115-config;
             background: rgba(0, 30, 60, 0.9);
             padding: 1.5rem;
             border-radius: 8px;
-            height: 200px;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
         }
 
         .sub-account-list {
@@ -239,20 +241,29 @@
             padding: 0.8rem;
         }
 
-        /* 按钮布局优化 */
+        /* 优化后的按钮布局 */
         .115-buttons {
             display: flex;
             gap: 1rem;
-            margin-top: 1rem;
+            margin-top: auto;
+            padding-top: 1rem;
         }
 
         /* 添加小号按钮样式 */
+        .sub-account-item {
+            position: relative;
+            margin: 1rem 0;
+        }
+
         .add-sub {
-            width: 30px;
-            height: 30px;
+            position: absolute;
+            right: 0;
+            bottom: 5px;
+            width: 28px;
+            height: 28px;
             padding: 0;
-            margin-left: 0.5rem;
             border-radius: 50%;
+            font-size: 1.2rem;
         }
 
 
@@ -262,11 +273,15 @@
             background: rgba(20, 40, 60, 0.9);
             padding: 1.2rem;
             border-radius: 8px;
-            height: calc(100vh - 500px);
+            height: 100%;
         }
 
+        /* 配置表单布局 */
         #configForm {
-            display: contents;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1rem;
+            height: 100%;
         }
 
         .form-group {
@@ -307,7 +322,7 @@
             background: rgba(0, 30, 60, 0.9);
             padding: 1.2rem;
             border-radius: 8px;
-            height: calc(100vh - 300px);
+            height: 100%;
         }
 
         .log-entry {
@@ -364,12 +379,17 @@
         .generate-button {
             grid-area: generate;
             text-align: center;
-            padding: 1.5rem;
+            padding: 1rem;
         }
 
-        /* 禁用所有滚动条 */
+
+        /* 新增滚动条隐藏 */
+        *::-webkit-scrollbar {
+            display: none;
+        }
         * {
-            overflow: hidden !important;
+            -ms-overflow-style: none;
+            scrollbar-width: none;
         }
 
         @keyframes fadeIn {
@@ -419,16 +439,16 @@
                 </div>
             </div>
 
-        <!-- 115配置 -->
+        <!-- 115配置区域 -->
         <div class="config-115-panel">
             <h3>⚙️ 115自动配置</h3>
             <div class="form-group-115">
                 <label>主账号Cookie:</label>
-                <textarea rows="2" style="width: 90%"></textarea>
+                <textarea rows="3"></textarea>
             </div>
-            <div class="sub-account-item" style="position:relative">
+            <div class="sub-account-item">
                 <label>小号Cookie:</label>
-                <textarea rows="1" style="width: 80%"></textarea>
+                <textarea rows="2"></textarea>
                 <button class="add-sub">+</button>
             </div>
             <div class="115-buttons">
@@ -483,7 +503,7 @@
 
         <!-- 生成按钮 -->
         <div class="generate-button">
-            <button id="generateBtn" style="width: 200px;">生成STRM</button>
+            <button id="generateBtn">生成STRM</button>
         </div>
     </div>
 
