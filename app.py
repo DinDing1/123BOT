@@ -57,6 +57,14 @@ def init_db():
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
+@app.before_first_request
+def startup_event():
+    """在第一个请求到达时初始化任务"""
+    init_db()
+    scheduler = BackgroundScheduler()
+    scheduler.add_job(run_115_task)  # 启动时初始化定时任务
+    scheduler.start()
+
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -145,13 +153,6 @@ def run_115_now():
     except Exception as e:
         logging.error(f"立即执行失败: {str(e)}")
         return jsonify({"success": False})
-
-@app.on_event("startup")
-def startup_event():
-    init_db()
-    scheduler = BackgroundScheduler()
-    scheduler.add_job(run_115_task)  # 启动时初始化定时任务
-    scheduler.start()
 
 logger = logging.getLogger('strm_generator')
 logger.info("=== WEBUI已启动 ===")
