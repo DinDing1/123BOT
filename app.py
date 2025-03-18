@@ -77,6 +77,8 @@ def handle_log():
 def get_logs():
     """获取存储的日志"""
     return jsonify({"logs": list(log_store)})
+    
+    
 
 @app.route('/')
 def index():
