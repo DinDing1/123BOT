@@ -169,7 +169,7 @@ def run_115_now():
         user_id = session['user_info']['uid']
         subprocess.Popen([
             'python', '/app/115_auto.py',
-            '--config', f"/app/cache/115_{user_id}.json"
+            '--config', f"/app/cache/config/115_{user_id}.json"
         ])
         return jsonify({"success": True})
     except Exception as e:
