@@ -81,7 +81,11 @@ def execute_115_job(user_id: str):
             ]
         }
         
-        config_path = f"/app/cache/115_{user_id}.json"
+        # 确保配置文件目录存在
+        config_dir = "/app/cache"
+        os.makedirs(config_dir, exist_ok=True)
+        
+        config_path = f"{config_dir}/115_{user_id}.json"
         with open(config_path, "w") as f:
             json.dump(config, f, ensure_ascii=False)
         
