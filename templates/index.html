@@ -752,18 +752,19 @@
             if (!res.ok) return;
             
             const config = await res.json();
-            document.getElementById('mainCookie').value = JSON.stringify(config.main || {}, null, 2);
-            document.getElementById('wishContent').value = config.content || '求一本钢铁是怎样炼成得书';
+            document.getElementById('mainCookie').value = config.main ? JSON.stringify(config.main, null, 2) : '';
+               // 填充其他字段
             document.getElementById('scheduleTime').value = config.schedule_time || '08:00';
             
+            
             // 加载小号
-            const subs = config.subs || [];
             const container = document.getElementById('subAccounts');
             container.innerHTML = '';
-            subs.forEach(sub => {
-                addSubAccount(JSON.stringify(sub, null, 2));
-            });
-        }
+            if (config.subs) {
+                config.subs.forEach(sub => {
+                    addSubAccount(JSON.stringify(sub, null, 2));
+                });
+            }
 
         function addSubAccount(value = '') {
             const container = document.createElement('div');
@@ -795,6 +796,7 @@
             });
 
             if (res.ok) {
+                await load115Config();  // 保存后立即重新加载
                 alert('配置保存成功');
                 load115Config();
             } else {
