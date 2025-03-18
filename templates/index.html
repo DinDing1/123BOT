@@ -762,7 +762,13 @@
             const config = await res.json();
             document.getElementById('mainCookie').value = config.main ? JSON.stringify(config.main, null, 2) : '';
             document.getElementById('scheduleTime').value = config.schedule_time || '08:00';
-            
+
+            document.addEventListener('DOMContentLoaded', function () {
+                document.querySelector('.add-btn').addEventListener('click', function () {
+                    addSubAccount();
+                });
+            });
+                    
             // 加载小号
             function addSubAccount(value = '') {
                 const container = document.createElement('div');
@@ -776,13 +782,6 @@
             function removeSub(btn) {
                 btn.parentElement.remove();
             }
-                // 绑定事件
-            document.addEventListener('DOMContentLoaded', function () {
-                // 确保“添加小号”按钮只绑定一次
-                document.querySelector('.add-btn').addEventListener('click', function () {
-                    ddSubAccount();
-                });
-            });
         
         function addSubAccount(value = '') {
             const container = document.createElement('div');
