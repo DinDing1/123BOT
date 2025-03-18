@@ -103,6 +103,18 @@
             color: #666;
         }
 
+        .action-buttons {
+            display: flex;
+            justify-content: space-between;
+            gap: 1rem;
+            margin-top: 1.5rem;
+        }
+
+        .action-buttons button {
+        flex: 1;
+        margin: 0;
+        }
+
         /* 主界面容器 */
         .container {
             flex: 1;
@@ -117,7 +129,7 @@
                 "user-area log-panel"
                 "config-panel log-panel";
             grid-template-columns: 1fr 1fr;
-            grid-template-rows: auto auto 1fr;
+            grid-template-rows: auto 1fr;
             gap: 1.2rem;
             min-height: 680px;
             overflow: hidden;
@@ -201,6 +213,7 @@
             grid-template-columns: 1.2fr 1fr;
             gap: 1.5rem;
             align-content: start;
+            height: calc(100% - 2.4rem);
         }
 
         .config-section {
@@ -263,13 +276,15 @@
             grid-area: log-panel;
             background: rgba(0, 0, 0, 0.7);
             border-radius: 8px;
-            padding: 1rem;
+            padding: 1.5rem;
             font-family: 'Consolas', monospace;
             font-size: 0.8rem;
             line-height: 1.4;
-            height: 62vh;
+            height: calc(100% - 3rem);
             overflow-y: auto;
             border: 1px solid rgba(0, 243, 255, 0.2);
+            box-sizing: border-box;
+            margin-right: 1.5rem;
         }
 
         .log-entry {
@@ -281,6 +296,25 @@
         .log-time {
             color: #6c757d;
             margin-right: 0.8rem;
+        }
+
+/* 优化滚动条样式 */
+        .log-panel::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .log-panel::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+        }
+
+        .log-panel::-webkit-scrollbar-thumb {
+            background: var(--primary-color);
+            border-radius: 3px;
+        }
+
+        .log-panel::-webkit-scrollbar-thumb:hover {
+            background: #00c4cc;
         }
 
         button {
@@ -360,6 +394,13 @@
             flex-shrink: 0;
         }
 
+/* 调整输入框高度 */
+        #mainCookie,
+        .subCookie {
+            min-height: 120px;
+            resize: vertical;
+        }
+
         .removeSub:hover {
             background: #bb2d3b;
         }
@@ -375,9 +416,6 @@
                 grid-template-columns: 1fr;
             }
             
-            .config-panel {
-                grid-template-columns: 1fr;
-            }
         }
     </style>
 </head>
@@ -432,19 +470,13 @@
                     <label>小号配置</label>
                     <div id="subAccounts">
                         <div class="sub-account-container">
-                            <textarea class="subCookie" rows="2"
+                            <textarea class="subCookie" rows="3"
                                 placeholder="小号Cookie（JSON格式）"></textarea>
                             <button class="removeSub" onclick="removeSub(this)">×</button>
                         </div>
                     </div>
                     <button class="add-btn" onclick="addSubAccount()">+ 添加小号</button>
                 </div>
-                <div class="form-group inline-group">
-                    <div>
-                        <label>许愿内容</label>
-                        <input type="text" id="wishContent" 
-                            value="求一本钢铁是怎样炼成得书">
-                    </div>
                     <div>
                         <label>定时执行</label>
                         <input type="time" id="scheduleTime" value="08:00">
@@ -495,7 +527,7 @@
                 </form>
             </div>
         </div>
-
+<!-- 修改后的日志区域 -->
         <div class="log-panel" id="output"></div>
     </div>
 
@@ -739,7 +771,7 @@
             const container = document.createElement('div');
             container.className = 'sub-account-container';
             container.innerHTML = `
-                <textarea class="subCookie" rows="2">${value}</textarea>
+                <textarea class="subCookie" rows="3">${value}</textarea>
                 <button class="removeSub" onclick="removeSub(this)">×</button>
             `;
             document.getElementById('subAccounts').appendChild(container);
