@@ -2,7 +2,7 @@
 # encoding: utf-8
 
 """
-115综合自动化脚本（简化配置版）
+115综合自动化脚本（支持配置文件）
 功能：全账号签到 → 许愿树流程（小号许愿 → 主号助愿 → 小号采纳）
 """
 
@@ -17,14 +17,9 @@ from typing import Dict, List
 
 from p115client import P115Client, check_response
 
-# 配置文件路径
-CONFIG_FILE = "115_auto_config.json"
 # 日志文件路径
 LOG_FILE = "115_auto_operation.log"
 
-######################
-#  通用功能模块
-######################
 class Logger:
     """日志记录器"""
     
@@ -45,31 +40,15 @@ class Logger:
 
 logger = Logger(LOG_FILE).log
 
-def load_config() -> Dict:
-    """加载配置文件"""
-    config_path = Path(CONFIG_FILE)
-    if not config_path.exists():
-        logger(f"配置文件 {CONFIG_FILE} 不存在", "ERROR")
-        sys.exit(1)
-    
+def load_config_from_file(config_path: str) -> Dict:
+    """从指定路径加载配置文件"""
     try:
         with open(config_path, "r", encoding="utf-8") as f:
-            config = json.load(f)
+            return json.load(f)
     except Exception as e:
         logger(f"配置文件加载失败: {str(e)}", "ERROR")
         sys.exit(1)
-    
-    required_keys = {"wish_main", "wish_subs"}
-    if not required_keys.issubset(config.keys()):
-        missing = required_keys - config.keys()
-        logger(f"配置文件缺少必要字段: {missing}", "ERROR")
-        sys.exit(1)
-    
-    return config
 
-######################
-#  签到功能模块
-######################
 def checkin_single(cookies: Dict) -> bool:
     """执行单个账号签到"""
     try:
@@ -87,7 +66,6 @@ def checkin_single(cookies: Dict) -> bool:
 
 def checkin_all(config: Dict):
     """执行全部账号签到"""
-    # 获取所有账号（主号 + 小号）
     accounts = [config["wish_main"]] + config["wish_subs"]
     total = len(accounts)
     success = 0
@@ -103,9 +81,6 @@ def checkin_all(config: Dict):
     logger(f"签到完成，成功 {success}/{total} 个账号")
     return success == total
 
-######################
-#  许愿树功能模块
-######################
 class WishManager:
     """许愿树操作管理器"""
     
@@ -171,17 +146,15 @@ class WishManager:
         }))
         return result.get("state", False)
 
-######################
-#  主程序
-######################
 def main():
     parser = argparse.ArgumentParser(description="115综合自动化工具")
+    parser.add_argument("--config", type=str, help="配置文件路径")  # 新增参数
     parser.add_argument("--skip-checkin", action="store_true", help="跳过签到步骤")
     parser.add_argument("--skip-wish", action="store_true", help="跳过许愿步骤")
     parser.add_argument("-t", "--test", action="store_true", help="测试模式（不执行实际采纳）")
     args = parser.parse_args()
 
-    config = load_config()
+    config = load_config_from_file(args.config) if args.config else load_config()
     
     # 执行签到流程
     if not args.skip_checkin:
