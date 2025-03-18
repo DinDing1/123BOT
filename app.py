@@ -10,6 +10,11 @@ import json
 from auth import get_user_info_with_password
 from werkzeug.serving import WSGIRequestHandler
 from flask_cors import CORS
+from flask import Flask, request, jsonify
+from collections import deque
+
+# 日志存储（使用 deque 限制最大日志条数）
+log_store = deque(maxlen=1000)  # 最多存储 1000 条日志
 
 # 配置日志
 logging.basicConfig(
@@ -58,6 +63,20 @@ def init_db():
 app = Flask(__name__)
 CORS(app, supports_credentials=True)  # 添加此行
 app.secret_key = os.urandom(24)  # 确保 secret_key 已设置
+
+@app.route('/log', methods=['POST'])
+def handle_log():
+    """接收日志并存储"""
+    data = request.json
+    if data and "message" in data:
+        log_store.append(data["message"])
+        return jsonify({"success": True})
+    return jsonify({"success": False, "message": "无效的日志数据"}), 400
+
+@app.route('/get_logs', methods=['GET'])
+def get_logs():
+    """获取存储的日志"""
+    return jsonify({"logs": list(log_store)})
 
 @app.route('/')
 def index():
