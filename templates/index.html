@@ -104,38 +104,33 @@
             color: #666;
         }
 
-        /* 主容器布局 */
+        /* 主界面容器 */
         .container {
+            flex: 1;
+            margin: 20px;
+            background: rgba(20, 30, 45, 0.95);
+            border-radius: 12px;
+            box-shadow: var(--neon-effect);
+            padding: 1.2rem;
             display: none;
             grid-template-areas: 
                 "header header"
-                "user-info 115-config"
-                "main-config log-panel"
-                "generate generate";
+                "user-area log-panel"
+                "config-panel log-panel";
             grid-template-columns: 1fr 1fr;
-            grid-template-rows: auto 300px 1fr auto;
-            gap: 1.2rem;
-            height: 100vh;
-            padding: 20px;
-        }
-        
-        /* 左侧纵向容器 */
-        .left-col {
-            grid-area: left-col;
-            display: grid;
             grid-template-rows: auto auto 1fr;
             gap: 1.2rem;
-            height: 100%;
-            min-height: 600px;
+            min-height: 680px;
+            overflow: hidden;
+            box-sizing: border-box;
+            border: 1px solid rgba(0, 243, 255, 0.2);
+            backdrop-filter: blur(5px);
         }
 
-        /* Header样式 */
         .header {
             grid-area: header;
-            background: rgba(20, 30, 45, 0.95);
-            padding: 1.2rem;
-            border-radius: 12px;
-            box-shadow: var(--neon-effect);
+            text-align: center;
+            margin-bottom: 0.8rem;
         }
 
         .logo {
@@ -164,15 +159,14 @@
             margin-top: 0.8rem;
         }
 
-        /* 用户信息区域 */
         .user-area {
-            grid-area: user-info;
-            background: rgba(0, 0, 0, 0.6);
-            border-radius: 8px;
-            padding: 1.5rem;
-            height: 100%;
+            grid-area: user-area;
+            display: flex;
+            justify-content: center;
+            align-items: center; /* 0315新增：垂直居中 */
+            padding: 1rem;
+            width: 100%;
         }
-        
 
         .auth-panel {
             background: rgba(0, 0, 0, 0.6);
@@ -201,87 +195,17 @@
             display: block; /* 0315新增：确保每个字段单独一行 */
             width: 100%;/*0315 确保宽度占满容器 */
         }
-    
-        /* 115配置区域 */
-        .config-115-panel {
-            grid-area: 115-config;
-            background: rgba(0, 30, 60, 0.9);
-            padding: 1.5rem;
-            border-radius: 8px;
-            height: 100%;
-            display: flex;
-            flex-direction: column;
-        }
 
-        .sub-account-list {
-            margin: 1rem 0;
-        }
-
-        .sub-account-item {
-            position: relative;
-            margin: 0.8rem 0;
-        }
-
-        .remove-sub {
-            position: absolute;
-            right: -10px;
-            top: -10px;
-            background: #dc3545;
-            border-radius: 50%;
-            width: 24px;
-            height: 24px;
-            padding: 0;
-        }
-
-        .form-group-115 textarea {
-            width: 100%;
-            background: rgba(255,255,255,0.1);
-            border: 1px solid var(--primary-color);
-            color: var(--text-color);
-            padding: 0.8rem;
-        }
-
-        /* 优化后的按钮布局 */
-        .115-buttons {
-            display: flex;
-            gap: 1rem;
-            margin-top: auto;
-            padding-top: 1rem;
-        }
-
-        /* 添加小号按钮样式 */
-        .sub-account-item {
-            position: relative;
-            margin: 1rem 0;
-        }
-
-        .add-sub {
-            position: absolute;
-            right: 0;
-            bottom: 5px;
-            width: 28px;
-            height: 28px;
-            padding: 0;
-            border-radius: 50%;
-            font-size: 1.2rem;
-        }
-
-
-        /* 原始配置区域 */
         .config-panel {
-            grid-area: main-config;
-            background: rgba(20, 40, 60, 0.9);
-            padding: 1.2rem;
-            border-radius: 8px;
-            height: 100%;
+            grid-area: config-panel;
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 1rem;
+            align-content: start;
         }
 
-        /* 配置表单布局 */
         #configForm {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 1rem;
-            height: 100%;
+            display: contents;
         }
 
         .form-group {
@@ -316,13 +240,17 @@
             outline: none;
         }
 
-        /* 日志区域 */
         .log-panel {
             grid-area: log-panel;
-            background: rgba(0, 30, 60, 0.9);
-            padding: 1.2rem;
+            background: rgba(0, 0, 0, 0.7);
             border-radius: 8px;
-            height: 100%;
+            padding: 1rem;
+            font-family: 'Consolas', monospace;
+            font-size: 0.8rem;
+            line-height: 1.4;
+            height: 62vh;
+            overflow-y: auto;
+            border: 1px solid rgba(0, 243, 255, 0.2);
         }
 
         .log-entry {
@@ -375,22 +303,6 @@
             padding: 1rem;
             color: var(--primary-color);
         }
-        /* 生成按钮容器 */
-        .generate-button {
-            grid-area: generate;
-            text-align: center;
-            padding: 1rem;
-        }
-
-
-        /* 新增滚动条隐藏 */
-        *::-webkit-scrollbar {
-            display: none;
-        }
-        * {
-            -ms-overflow-style: none;
-            scrollbar-width: none;
-        }
 
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(10px); }
@@ -422,92 +334,64 @@
             <div class="divider"></div>
             <div class="version">版本号: v2.0.1 | 作者: dinding</div>
         </div>
-        
-                <!-- 左侧纵向容器 -->
-        <div class="left-col">
-            <!-- 用户信息 -->
-            <div class="user-area">
-                <div class="auth-panel login-form" id="loginForm"></div>
-                <div class="auth-panel user-info" id="userInfo">
-                    <h2>👤 用户信息</h2>
-                    <div><span>📛 昵称: <span id="nickname"></span></span></div>
-                    <div><span>🆔 用户ID: <span id="uid"></span></span></div>
-                    <div><span>📱 手机号: <span id="phone"></span></span></div>
-                    <div><span>💽 永久空间: <span id="spacePermanent"></span></span></div>
-                    <div><span>💾 已用空间: <span id="spaceUsed"></span></span></div>
-                    <button class="logout-btn" onclick="handleLogout()">退出</button>
-                </div>
-            </div>
 
-        <!-- 115配置区域 -->
-        <div class="config-115-panel">
-            <h3>⚙️ 115自动配置</h3>
-            <div class="form-group-115">
-                <label>主账号Cookie:</label>
-                <textarea rows="3"></textarea>
-            </div>
-            <div class="sub-account-item">
-                <label>小号Cookie:</label>
-                <textarea rows="2"></textarea>
-                <button class="add-sub">+</button>
-            </div>
-            <div class="115-buttons">
-                <button class="save-115">💾 保存配置</button>
-                <button class="run-now">⚡ 立即执行</button>
+        <div class="user-area">
+            <div class="auth-panel login-form" id="loginForm"></div>
+            <div class="auth-panel user-info" id="userInfo">
+                <h2>👤 用户信息</h2>
+                <div><span>📛 昵称: <span id="nickname"></span></span></div>
+                <div><span>🆔 用户ID: <span id="uid"></span></span></div>
+                <div><span>📱 手机号: <span id="phone"></span></span></div>
+                <div><span>💽 永久空间: <span id="spacePermanent"></span></span></div>
+                <div><span>💾 已用空间: <span id="spaceUsed"></span></span></div>
+                <button class="logout-btn" onclick="handleLogout()">退出</button>
             </div>
         </div>
-        
+
         <div class="config-panel">
             <form id="configForm" action="/generate" method="GET">
-                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem;">
-                    <div class="form-group">
-                        <label for="direct_link_url">直连地址</label>
-                        <input type="url" id="direct_link_url" name="direct_link_url" value="http://172.17.0.1:8123" required>
-                     </div>
-                    <div class="form-group">
-                        <label for="parent_id">起始目录ID</label>
-                        <input type="number" id="parent_id" name="parent_id" value="0">
-                     </div>
-                    <div class="form-group">
-                        <label for="max_retries">重试次数</label>
-                        <input type="number" id="max_retries" name="max_retries" value="3" min="0">
-                     </div>
-                    <div class="form-group">
-                        <label for="request_delay">请求间隔（秒）</label>
-                        <input type="number" id="request_delay" name="request_delay" value="1" min="0" step="0.1">
-                     </div>
-                    <div class="form-group">
-                        <label for="dir_delay">目录间隔（秒）</label>
-                        <input type="number" id="dir_delay" name="dir_delay" value="2" min="0" step="0.1">
-                     </div>
-                    <div class="form-group">
-                        <label for="request_delay">请求间隔（秒）</label>
-                        <input type="number" id="timeout" name="timeout" value="30" min="1">
-                     </div>
-                    <div class="form-group extension-group">
-                        <label for="video_exts">视频扩展名</label>
-                        <input type="text" id="video_exts" name="video_exts" value=".mp4,.mkv,.avi,.mov,.flv,.ts,.iso,.rmvb,.m2ts">
-                     </div>
-                    <div class="form-group extension-group">
-                        <label for="subtitle_exts">字幕扩展名</label>
-                        <input type="text" id="subtitle_exts" name="subtitle_exts" value=".srt,.ass,.ssa,.sub,.txt,.vtt,.ttml,.dfxp">
-                     </div>   
+                <div class="form-group">
+                    <label for="direct_link_url">直连地址</label>
+                    <input type="url" id="direct_link_url" name="direct_link_url" value="http://172.17.0.1:8123" required>
+                </div>
+                <div class="form-group">
+                    <label for="parent_id">起始目录ID</label>
+                    <input type="number" id="parent_id" name="parent_id" value="0">
+                </div>
+                <div class="form-group">
+                    <label for="max_retries">重试次数</label>
+                    <input type="number" id="max_retries" name="max_retries" value="3" min="0">
+                </div>
+                <div class="form-group">
+                    <label for="request_delay">请求间隔（秒）</label>
+                    <input type="number" id="request_delay" name="request_delay" value="1" min="0" step="0.1">
+                </div>
+                <div class="form-group">
+                    <label for="dir_delay">目录间隔（秒）</label>
+                    <input type="number" id="dir_delay" name="dir_delay" value="2" min="0" step="0.1">
+                </div>
+                <div class="form-group">
+                    <label for="timeout">下载超时（秒）</label>
+                    <input type="number" id="timeout" name="timeout" value="30" min="1">
+                </div>
+                <div class="form-group extension-group">
+                    <label for="video_exts">视频扩展名</label>
+                    <input type="text" id="video_exts" name="video_exts" value=".mp4,.mkv,.avi,.mov,.flv,.ts,.iso,.rmvb,.m2ts">
+                </div>
+                <div class="form-group extension-group">
+                    <label for="subtitle_exts">字幕扩展名</label>
+                    <input type="text" id="subtitle_exts" name="subtitle_exts" value=".srt,.ass,.ssa,.sub,.txt,.vtt,.ttml,.dfxp">
                 </div>
             </form>
         </div>
 
-        <!-- 日志区域 -->
-        <div class="log-panel" id="output">
-            <!-- 日志内容动态生成 -->
-        </div>
-
-        <!-- 生成按钮 -->
-        <div class="generate-button">
-            <button id="generateBtn">生成STRM</button>
-        </div>
+        <div class="log-panel" id="output"></div>
     </div>
 
-
+    <div id="generateButtonContainer" style="display: none;">
+        <button type="submit" form="configForm" id="generateBtn" disabled>生成STRM</button>
+        <div class="loading" id="loading">⏳ 正在生成中，请稍候...</div>
+    </div>
 
     <script>
         // 背景线条优化
@@ -581,91 +465,6 @@
         const generateBtn = document.getElementById('generateBtn');
         const generateButtonContainer = document.getElementById('generateButtonContainer');
 
-        // 115配置功能
-        function addSubAccount() {
-            const subList = document.getElementById('subAccountList');
-            const newItem = document.createElement('div');
-            newItem.className = 'sub-account-item';
-            newItem.innerHTML = `
-                <label>小号Cookie:</label>
-                <textarea rows="2" placeholder="请输入小号Cookie（JSON格式）"></textarea>
-                <button class="remove-sub" onclick="removeSubAccount(this)">×</button>
-            `;
-            subList.appendChild(newItem);
-        }
-
-        function removeSubAccount(btn) {
-            btn.parentElement.remove();
-        }
-
-        async function save115Config() {
-            try {
-                const mainCookie = document.getElementById('mainCookie').value;
-                const subs = Array.from(document.querySelectorAll('.sub-account-item textarea'))
-                               .map(t => {
-                                   try { return JSON.parse(t.value.trim()); } 
-                                   catch { return null; }
-                               })
-                               .filter(v => v);
-                               
-                const schedule = document.getElementById('scheduleTime').value;
-
-                const res = await fetch('/115_config', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        main: JSON.parse(mainCookie),
-                        subs: subs,
-                        schedule: schedule
-                    })
-                });
-                
-                if(res.ok) {
-                    alert('配置保存成功！');
-                    await load115Config();
-                }
-            } catch (e) {
-                alert(`保存失败: ${e.message}`);
-            }
-        }
-
-        async function run115Now() {
-            const res = await fetch('/115_run_now', {method: 'POST'});
-            if(res.ok) {
-                alert('任务已加入执行队列，请查看日志');
-            } else {
-                alert('任务启动失败');
-            }
-        }
-
-        async function load115Config() {
-            try {
-                const res = await fetch('/115_config');
-                const config = await res.json();
-                
-                if(config.main) {
-                    document.getElementById('mainCookie').value = JSON.stringify(config.main, null, 2);
-                    document.getElementById('scheduleTime').value = config.schedule_time || '08:00';
-                    
-                    const subList = document.querySelector('.sub-account-list');
-                    subList.innerHTML = '';
-                    config.subs.forEach(sub => {
-                        const item = document.createElement('div');
-                        item.className = 'sub-account-item';
-                        item.innerHTML = `
-                            <label>小号Cookie:</label>
-                            <textarea rows="2">${JSON.stringify(sub, null, 2)}</textarea>
-                            <button class="remove-sub" onclick="removeSubAccount(this)">×</button>
-                        `;
-                        subList.appendChild(item);
-                    });
-                }
-            } catch (e) {
-                console.error('配置加载失败:', e);
-            }
-        }
-
-        // 增强的登录状态检查
         async function checkLoginStatus() {
             const res = await fetch('/user_info');
             const data = await res.json();
@@ -682,9 +481,6 @@
                 document.getElementById('spacePermanent').textContent = formatSize(info.spacePermanent);
                 document.getElementById('userInfo').classList.add('active');
                 generateBtn.disabled = false;
-                
-                // 加载115配置
-                await load115Config();
             } else {
                 document.querySelector('.login-container').style.display = 'flex';
                 document.querySelector('.container').style.display = 'none';
@@ -693,7 +489,6 @@
             }
         }
 
-        // 保持原有格式转换函数
         function formatSize(bytes) {
             const units = ['字节', 'KB', 'MB', 'GB', 'TB'];
             let unitIndex = 0;
@@ -704,7 +499,6 @@
             return `${bytes.toFixed(2)} ${units[unitIndex]}`;
         }
 
-        // 原有登录/注销功能
         async function handleLogin() {
             const passport = document.getElementById('passport').value;
             const password = document.getElementById('password').value;
@@ -728,14 +522,8 @@
             location.reload();
         }
 
-        // 初始化
-        document.addEventListener('DOMContentLoaded', () => {
-            checkLoginStatus();
-            // 动态绑定事件
-            document.querySelector('.add-sub').addEventListener('click', addSubAccount);
-        });
+        document.addEventListener('DOMContentLoaded', checkLoginStatus);
 
-        // 保持原有表单提交逻辑
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
             
