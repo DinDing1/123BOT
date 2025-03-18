@@ -535,6 +535,31 @@
     </div>
 
     <script>
+        // ====================== 核心修复部分 ======================
+        // 确保 handleLogin 函数在全局作用域正确定义
+        async function handleLogin() {
+            const passport = document.getElementById('passport').value;
+            const password = document.getElementById('password').value;
+
+            try {
+                const res = await fetch('/login', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({passport, password})
+                });
+                
+                const result = await res.json();
+                if (result.success) {
+                    await checkLoginStatus();
+                } else {
+                    alert(`登录失败: ${result.message}`);
+                }
+            } catch (error) {
+                console.error('登录请求失败:', error);
+                alert('网络请求异常，请检查控制台');
+            }
+        }
+        
         // 背景线条优化
         const canvas = document.getElementById('background');
         const ctx = canvas.getContext('2d');
@@ -640,24 +665,6 @@
             return `${bytes.toFixed(2)} ${units[unitIndex]}`;
         }
 
-        async function handleLogin() {
-            const passport = document.getElementById('passport').value;
-            const password = document.getElementById('password').value;
-            
-            const res = await fetch('/login', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({passport, password})
-            });
-            
-            const result = await res.json();
-            if (result.success) {
-                await checkLoginStatus();
-            } else {
-                alert(`登录失败: ${result.message}`);
-            }
-        }
-
         async function handleLogout() {
             await fetch('/logout');
             location.reload();
@@ -746,16 +753,15 @@
             });
         });
 
-        // 新增115配置相关JS
+        // ====================== 115配置管理 ======================
+        // 修复函数作用域问题
         async function load115Config() {
             const res = await fetch('/115_config');
             if (!res.ok) return;
             
             const config = await res.json();
             document.getElementById('mainCookie').value = config.main ? JSON.stringify(config.main, null, 2) : '';
-               // 填充其他字段
             document.getElementById('scheduleTime').value = config.schedule_time || '08:00';
-            
             
             // 加载小号
             const container = document.getElementById('subAccounts');
@@ -765,6 +771,7 @@
                     addSubAccount(JSON.stringify(sub, null, 2));
                 });
             }
+        }  // 修复：这里缺少的闭合括号已添加
 
         function addSubAccount(value = '') {
             const container = document.createElement('div');
@@ -813,10 +820,14 @@
             }
         }
 
-        // 初始化时加载配置
+        // ====================== 初始化逻辑 ======================
         document.addEventListener('DOMContentLoaded', () => {
             checkLoginStatus();
             load115Config();
+            
+            // 确保所有按钮事件绑定
+            document.querySelector('.logout-btn').addEventListener('click', handleLogout);
+            document.querySelector('.add-btn').addEventListener('click', addSubAccount);
         });
     </script>
 </body>
