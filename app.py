@@ -71,10 +71,12 @@ def login():
         passport = data.get('passport')
         password = data.get('password')
         
+        # 调用 auth.py 中的函数验证用户信息
         user_info = get_user_info_with_password(passport, password)
         if user_info.get("code") != 0:
             return jsonify({"success": False, "message": user_info.get("message", "登录失败")})
 
+        # 登录成功，保存用户信息到 session
         session['logged_in'] = True
         session['user_info'] = {
             'uid': user_info['data']['uid'],
