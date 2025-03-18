@@ -14,6 +14,7 @@ import sys
 import time
 from pathlib import Path
 from typing import Dict, List
+import requests  # 新增：用于发送日志到 Web 页面
 
 from p115client import P115Client, check_response
 
@@ -23,22 +24,33 @@ LOG_FILE = "115_auto_operation.log"
 class Logger:
     """日志记录器"""
     
-    def __init__(self, log_file: str):
+    def __init__(self, log_file: str, web_log_url: str = None):
         self.log_file = Path(log_file)
         self.log_file.parent.mkdir(parents=True, exist_ok=True)
+        self.web_log_url = web_log_url  # Web 页面的日志接口地址
 
-    def log(self, message: str, level: str = "INFO", console: bool = True):
+    def log(self, message: str, level: str = "INFO", console: bool = False):
         """记录带时间戳的日志"""
         timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
         log_entry = f"[{timestamp}] [{level}] {message}"
         
+        # 写入日志文件
         with open(self.log_file, "a", encoding="utf-8") as f:
             f.write(log_entry + "\n")
         
+        # 发送日志到 Web 页面
+        if self.web_log_url:
+            try:
+                requests.post(self.web_log_url, json={"message": log_entry}, timeout=5)
+            except Exception as e:
+                print(f"无法发送日志到 Web 页面: {str(e)}")
+        
+        # 控制台输出（默认关闭）
         if console:
             print(log_entry)
 
-logger = Logger(LOG_FILE).log
+# 初始化 Logger
+logger = Logger(LOG_FILE, web_log_url="http://localhost:8124/log")
 
 def load_config_from_file(config_path: str) -> Dict:
     """从指定路径加载配置文件"""
@@ -46,7 +58,7 @@ def load_config_from_file(config_path: str) -> Dict:
         with open(config_path, "r", encoding="utf-8") as f:
             return json.load(f)
     except Exception as e:
-        logger(f"配置文件加载失败: {str(e)}", "ERROR")
+        logger.log(f"配置文件加载失败: {str(e)}", "ERROR")
         sys.exit(1)
 
 def checkin_single(cookies: Dict) -> bool:
@@ -56,12 +68,12 @@ def checkin_single(cookies: Dict) -> bool:
         result = client.user_points_sign_post()
         if result.get("state"):
             days = result.get("data", {}).get("continuous_day", 0)
-            logger(f"签到成功，已连续签到{days}天")
+            logger.log(f"签到成功，已连续签到{days}天")
             return True
-        logger(f"签到失败: {result.get('message')}", "WARNING")
+        logger.log(f"签到失败: {result.get('message')}", "WARNING")
         return False
     except Exception as e:
-        logger(f"签到异常: {str(e)}", "ERROR")
+        logger.log(f"签到异常: {str(e)}", "ERROR")
         return False
 
 def checkin_all(config: Dict):
@@ -70,15 +82,15 @@ def checkin_all(config: Dict):
     total = len(accounts)
     success = 0
     
-    logger(f"开始签到任务，共 {total} 个账号")
+    logger.log(f"开始签到任务，共 {total} 个账号")
     for idx, account in enumerate(accounts, 1):
         name = account.get("name", f"账号{idx}")
-        logger(f"正在签到 ({idx}/{total}): {name}")
+        logger.log(f"正在签到 ({idx}/{total}): {name}")
         if checkin_single(account["cookies"]):
             success += 1
         time.sleep(10)  # 账号间间隔
     
-    logger(f"签到完成，成功 {success}/{total} 个账号")
+    logger.log(f"签到完成，成功 {success}/{total} 个账号")
     return success == total
 
 class WishManager:
@@ -97,18 +109,18 @@ class WishManager:
             try:
                 # 小号许愿
                 wish_id = self.create_wish(sub_client)
-                logger(f"({idx}/{total_subs}) 小号许愿成功，ID: {wish_id}")
+                logger.log(f"({idx}/{total_subs}) 小号许愿成功，ID: {wish_id}")
                 
                 # 增加 120 秒延迟
-                logger(f"等待 120 秒后进行助愿...")
+                logger.log(f"等待 120 秒后进行助愿...")
                 time.sleep(120)
                 
                 # 主号助愿
                 aid_id = self.create_aid(wish_id)
-                logger(f"主号助愿成功，ID: {aid_id}")
+                logger.log(f"主号助愿成功，ID: {aid_id}")
                 
                 # 增加 120 秒延迟
-                logger(f"等待 120 秒后进行采纳...")
+                logger.log(f"等待 120 秒后进行采纳...")
                 time.sleep(120)
                 
                 # 小号采纳
@@ -116,13 +128,13 @@ class WishManager:
                     success_count += 1
                 
                 # 增加 120 秒延迟（为下一个账号做准备）
-                logger(f"等待 120 秒后处理下一个账号...")
+                logger.log(f"等待 120 秒后处理下一个账号...")
                 time.sleep(120)
                 
             except Exception as e:
-                logger(f"流程异常: {str(e)}", "ERROR")
+                logger.log(f"流程异常: {str(e)}", "ERROR")
         
-        logger(f"许愿任务完成，成功 {success_count}/{total_subs} 个账号")
+        logger.log(f"许愿任务完成，成功 {success_count}/{total_subs} 个账号")
         return success_count
     
     @staticmethod
@@ -147,7 +159,7 @@ class WishManager:
     def adopt_aid(client: P115Client, wish_id: str, aid_id: str, test_mode: bool) -> bool:
         """采纳助愿"""
         if test_mode:
-            logger("[测试模式] 跳过采纳操作", "DEBUG")
+            logger.log("[测试模式] 跳过采纳操作", "DEBUG")
             return True
         
         result = check_response(client.act_xys_adopt({
@@ -169,12 +181,12 @@ def main():
     
     # 执行签到流程
     if not args.skip_checkin:
-        logger("开始执行签到流程".center(50, "="))
+        logger.log("开始执行签到流程".center(50, "="))
         checkin_all(config)
     
     # 执行许愿流程
     if not args.skip_wish:
-        logger("开始执行许愿流程".center(50, "="))
+        logger.log("开始执行许愿流程".center(50, "="))
         try:
             manager = WishManager(
                 main_cookies=config["wish_main"]["cookies"],
@@ -182,13 +194,13 @@ def main():
             )
             manager.wish_workflow(args.test)
         except Exception as e:
-            logger(f"许愿流程初始化失败: {str(e)}", "ERROR")
+            logger.log(f"许愿流程初始化失败: {str(e)}", "ERROR")
     
-    logger("全部任务执行完成".center(50, "="))
+    logger.log("全部任务执行完成".center(50, "="))
 
 if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        logger("用户中断操作", "WARNING")
+        logger.log("用户中断操作", "WARNING")
         sys.exit(1)
