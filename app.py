@@ -57,6 +57,46 @@ def init_db():
 app = Flask(__name__)
 app.secret_key = os.urandom(24)  # 确保 secret_key 已设置
 
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+@app.route('/login', methods=['POST'])
+def login():
+    try:
+        data = request.json
+        passport = data.get('passport')
+        password = data.get('password')
+        
+        user_info = get_user_info_with_password(passport, password)
+        if user_info.get("code") != 0:
+            return jsonify({"success": False, "message": user_info.get("message", "登录失败")})
+
+        # 保存用户信息到会话
+        session['logged_in'] = True
+        session['user_info'] = {
+            'uid': user_info['data']['uid'],
+            'nickname': user_info['data']['nickname'],
+            'passport': user_info['data']['passport'],
+            'spaceUsed': user_info['data']['spaceUsed'],
+            'spacePermanent': user_info['data']['spacePermanent']
+        }
+        return jsonify({"success": True})
+    except Exception as e:
+        logging.error(f"登录失败: {str(e)}")
+        return jsonify({"success": False, "message": "服务器错误"})
+
+@app.route('/user_info')
+def get_user_info():
+    """获取用户登录状态"""
+    if not session.get('logged_in'):
+        return jsonify({"logged_in": False})
+    
+    return jsonify({
+        "logged_in": True,
+        "user_info": session['user_info']
+    })
+
 def execute_115_job(user_id: str):
     """执行指定用户的115任务"""
     try:
@@ -129,45 +169,7 @@ def startup_event():
     init_db()
     run_115_task()  # 启动时初始化定时任务
 
-@app.route('/')
-def index():
-    return render_template('index.html')
 
-@app.route('/login', methods=['POST'])
-def login():
-    try:
-        data = request.json
-        passport = data.get('passport')
-        password = data.get('password')
-        
-        user_info = get_user_info_with_password(passport, password)
-        if user_info.get("code") != 0:
-            return jsonify({"success": False, "message": user_info.get("message", "登录失败")})
-
-        # 保存用户信息到会话
-        session['logged_in'] = True
-        session['user_info'] = {
-            'uid': user_info['data']['uid'],
-            'nickname': user_info['data']['nickname'],
-            'passport': user_info['data']['passport'],
-            'spaceUsed': user_info['data']['spaceUsed'],
-            'spacePermanent': user_info['data']['spacePermanent']
-        }
-        return jsonify({"success": True})
-    except Exception as e:
-        logging.error(f"登录失败: {str(e)}")
-        return jsonify({"success": False, "message": "服务器错误"})
-
-@app.route('/user_info')
-def get_user_info():
-    """获取用户登录状态"""
-    if not session.get('logged_in'):
-        return jsonify({"logged_in": False})
-    
-    return jsonify({
-        "logged_in": True,
-        "user_info": session['user_info']
-    })
 
 @app.route('/115_config', methods=['GET', 'POST'])
 def handle_115_config():
