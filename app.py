@@ -9,6 +9,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 import json
 from auth import get_user_info_with_password
 from werkzeug.serving import WSGIRequestHandler
+from flask_cors import CORS
 
 # 配置日志
 logging.basicConfig(
@@ -55,6 +56,7 @@ def init_db():
         raise
 
 app = Flask(__name__)
+CORS(app, supports_credentials=True)  # 添加此行
 app.secret_key = os.urandom(24)  # 确保 secret_key 已设置
 
 @app.route('/')
