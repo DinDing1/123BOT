@@ -55,7 +55,7 @@ def init_db():
         raise
 
 app = Flask(__name__)
-app.secret_key = os.urandom(24)
+app.secret_key = os.urandom(24)  # 确保 secret_key 已设置
 
 def execute_115_job(user_id: str):
     """执行指定用户的115任务"""
@@ -140,6 +140,7 @@ def login():
         if user_info.get("code") != 0:
             return jsonify({"success": False, "message": user_info.get("message", "登录失败")})
 
+        # 保存用户信息到会话
         session['logged_in'] = True
         session['user_info'] = {
             'uid': user_info['data']['uid'],
@@ -152,6 +153,17 @@ def login():
     except Exception as e:
         logging.error(f"登录失败: {str(e)}")
         return jsonify({"success": False, "message": "服务器错误"})
+
+@app.route('/user_info')
+def get_user_info():
+    """获取用户登录状态"""
+    if not session.get('logged_in'):
+        return jsonify({"logged_in": False})
+    
+    return jsonify({
+        "logged_in": True,
+        "user_info": session['user_info']
+    })
 
 @app.route('/115_config', methods=['GET', 'POST'])
 def handle_115_config():
