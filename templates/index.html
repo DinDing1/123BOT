@@ -546,6 +546,7 @@
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({passport, password})
+                    credentials: 'include'  // 添加此行
                 });
                 
                 const result = await res.json();
@@ -632,7 +633,9 @@
         const generateButtonContainer = document.getElementById('generateButtonContainer');
 
         async function checkLoginStatus() {
-            const res = await fetch('/user_info');
+            const res = await fetch('/user_info', {
+                credentials: 'include'  // 添加此行
+            });
             const data = await res.json();
             
             if (data.logged_in) {
