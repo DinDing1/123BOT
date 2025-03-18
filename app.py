@@ -57,13 +57,73 @@ def init_db():
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
+def execute_115_job(user_id: str):
+    """执行指定用户的115任务"""
+    try:
+        with sqlite3.connect(CACHE_DB) as conn:
+            row = conn.execute('''
+                SELECT main_cookies, sub_accounts 
+                FROM auto115_config WHERE user_id = ?
+            ''', (user_id,)).fetchone()
+        
+        if not row:
+            logger.error(f"未找到用户配置: {user_id}")
+            return
+
+        config = {
+            "wish_main": {
+                "cookies": json.loads(row[0]),
+                "name": "主账号"
+            },
+            "wish_subs": [
+                {"cookies": json.loads(cookie), "name": f"小号{i}"} 
+                for i, cookie in enumerate(json.loads(row[1]))
+            ]
+        }
+        
+        config_path = f"/app/cache/115_{user_id}.json"
+        with open(config_path, "w") as f:
+            json.dump(config, f, ensure_ascii=False)
+        
+        subprocess.Popen([
+            'python', '/app/115_auto.py',
+            '--config', config_path
+        ])
+        logger.info(f"已启动115自动化任务 for user {user_id}")
+    except Exception as e:
+        logger.error(f"115任务执行失败: {str(e)}")
+
+def run_115_task():
+    """动态创建定时任务"""
+    try:
+        with sqlite3.connect(CACHE_DB) as conn:
+            users = conn.execute('''
+                SELECT user_id, schedule_time 
+                FROM auto115_config
+            ''').fetchall()
+
+        scheduler = BackgroundScheduler()
+        for user_id, schedule in users:
+            if not schedule:
+                schedule = "08:00"
+            hour, minute = schedule.split(":")
+            scheduler.add_job(
+                execute_115_job,
+                'cron',
+                hour=int(hour),
+                minute=int(minute),
+                args=[user_id]
+            )
+        scheduler.start()
+        logger.info("定时任务调度完成")
+    except Exception as e:
+        logger.error(f"定时任务创建失败: {str(e)}")
+
 @app.before_first_request
 def startup_event():
     """在第一个请求到达时初始化任务"""
     init_db()
-    scheduler = BackgroundScheduler()
-    scheduler.add_job(run_115_task)  # 启动时初始化定时任务
-    scheduler.start()
+    run_115_task()  # 启动时初始化定时任务
 
 @app.route('/')
 def index():
