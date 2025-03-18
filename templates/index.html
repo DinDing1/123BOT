@@ -106,26 +106,17 @@
 
         /* 主容器布局 */
         .container {
-            flex: 1;
-            margin: 20px;
-            background: rgba(20, 30, 45, 0.95);
-            border-radius: 12px;
-            box-shadow: var(--neon-effect);
-            padding: 1.2rem;
             display: grid;
             grid-template-areas: 
-                "header    header"
-                "left-col  log-panel"
-                "left-col  log-panel"
-                "generate  generate";
+                "header header"
+                "user-info config-115"
+                "main-config log-panel"
+                "generate generate";
             grid-template-columns: 1fr 1fr;
-            grid-template-rows: auto 200px 1fr auto;
+            grid-template-rows: auto auto 1fr auto;
             gap: 1.2rem;
-            min-height: 720px;
-            overflow: hidden;
-            box-sizing: border-box;
-            border: 1px solid rgba(0, 243, 255, 0.2);
-            backdrop-filter: blur(5px);
+            height: 100vh;
+            padding: 20px;
         }
         
         /* 左侧纵向容器 */
@@ -138,10 +129,13 @@
             min-height: 600px;
         }
 
+        /* Header样式 */
         .header {
             grid-area: header;
-            text-align: center;
-            margin-bottom: 0.8rem;
+            background: rgba(20, 30, 45, 0.95);
+            padding: 1.2rem;
+            border-radius: 12px;
+            box-shadow: var(--neon-effect);
         }
 
         .logo {
@@ -172,13 +166,11 @@
 
         /* 用户信息区域 */
         .user-area {
+            grid-area: user-info;
             background: rgba(0, 0, 0, 0.6);
-            border-radius: 8px;
             padding: 1.5rem;
-            border: 1px solid rgba(0, 243, 255, 0.2);
-            min-height: 220px;
-            max-height: 280px;
-            overflow-y: auto;
+            border-radius: 8px;
+            height: 200px;
         }
         
 
@@ -212,13 +204,11 @@
     
         /* 115配置区域 */
         .config-115-panel {
+            grid-area: config-115;
             background: rgba(0, 30, 60, 0.9);
-            border-radius: 8px;
             padding: 1.5rem;
-            border: 1px solid rgba(0, 243, 255, 0.2);
-            min-height: 280px;
-            max-height: 320px;
-            overflow-y: auto;
+            border-radius: 8px;
+            height: 200px;
         }
 
 .sub-account-list {
@@ -249,26 +239,30 @@
     padding: 0.8rem;
 }
 
-.115-buttons {
-    display: flex;
-    gap: 1rem;
-    margin-top: 1.5rem;
-}
+        /* 按钮布局优化 */
+        .115-buttons {
+            display: flex;
+            gap: 1rem;
+            margin-top: 1rem;
+        }
 
-.115-buttons button {
-    flex: 1;
-    padding: 0.8rem;
-}
+        /* 添加小号按钮样式 */
+        .add-sub {
+            width: 30px;
+            height: 30px;
+            padding: 0;
+            margin-left: 0.5rem;
+            border-radius: 50%;
+        }
 
 
         /* 原始配置区域 */
         .config-panel {
+            grid-area: main-config;
             background: rgba(20, 40, 60, 0.9);
-            border-radius: 8px;
             padding: 1.2rem;
-            border: 1px solid rgba(0, 243, 255, 0.2);
-            min-height: 300px;
-            overflow-y: auto;
+            border-radius: 8px;
+            height: calc(100vh - 500px);
         }
 
         #configForm {
@@ -310,10 +304,10 @@
         /* 日志区域 */
         .log-panel {
             grid-area: log-panel;
-            height: calc(100vh - 340px);
-            min-height: 500px;
-            max-height: 720px;
-            margin-top: -0.8rem;
+            background: rgba(0, 30, 60, 0.9);
+            padding: 1.2rem;
+            border-radius: 8px;
+            height: calc(100vh - 300px);
         }
 
         .log-entry {
@@ -370,28 +364,12 @@
         .generate-button {
             grid-area: generate;
             text-align: center;
-            padding-top: 1.5rem;
-            border-top: 1px solid rgba(0, 243, 255, 0.1);
-            margin-top: 1rem;
+            padding: 1.5rem;
         }
 
-        /* 滚动条样式 */
-        ::-webkit-scrollbar {
-            width: 8px;
-            background: rgba(0, 0, 0, 0.2);
-        }
-
-        ::-webkit-scrollbar-thumb {
-            background: var(--primary-color);
-            border-radius: 4px;
-        }
-
-        /* 响应式调整 */
-        @media (max-height: 800px) {
-            .user-area { min-height: 180px; }
-            .config-115-panel { min-height: 240px; }
-            .log-panel { min-height: 400px; }
-            .container { grid-template-rows: auto 180px 1fr auto; }
+        /* 禁用所有滚动条 */
+        * {
+            overflow: hidden !important;
         }
 
         @keyframes fadeIn {
@@ -441,64 +419,59 @@
                 </div>
             </div>
 
-            <!-- 115配置 -->
-            <div class="config-115-panel">
-                <h3>⚙️ 115自动任务配置</h3>
-                <div class="form-group-115">
-                    <label>主账号Cookie:</label>
-                    <textarea id="mainCookie" rows="3"></textarea>
-                </div>
-                <div class="sub-account-list">
-                    <div class="sub-account-item">
-                        <label>小号Cookie:</label>
-                        <textarea rows="2"></textarea>
-                        <button class="remove-sub">×</button>
-                    </div>
-                </div>
-                <button class="add-sub">➕ 添加小号</button>
-                <div class="schedule-config">
-                    <label>定时执行:</label>
-                    <input type="time" id="scheduleTime" value="08:00">
-                </div>
-                <div class="115-buttons">
-                    <button class="save-115" onclick="save115Config()">💾 保存配置</button>
-                    <button class="run-now" onclick="run115Now()">⚡ 立即执行</button>
-                </div>
+        <!-- 115配置 -->
+        <div class="config-115-panel">
+            <h3>⚙️ 115自动配置</h3>
+            <div class="form-group-115">
+                <label>主账号Cookie:</label>
+                <textarea rows="2" style="width: 90%"></textarea>
             </div>
+            <div class="sub-account-item" style="position:relative">
+                <label>小号Cookie:</label>
+                <textarea rows="1" style="width: 80%"></textarea>
+                <button class="add-sub">+</button>
+            </div>
+            <div class="115-buttons">
+                <button class="save-115">💾 保存配置</button>
+                <button class="run-now">⚡ 立即执行</button>
+            </div>
+        </div>
         
         <div class="config-panel">
             <form id="configForm" action="/generate" method="GET">
-                <div class="form-group">
-                    <label for="direct_link_url">直连地址</label>
-                    <input type="url" id="direct_link_url" name="direct_link_url" value="http://172.17.0.1:8123" required>
-                </div>
-                <div class="form-group">
-                    <label for="parent_id">起始目录ID</label>
-                    <input type="number" id="parent_id" name="parent_id" value="0">
-                </div>
-                <div class="form-group">
-                    <label for="max_retries">重试次数</label>
-                    <input type="number" id="max_retries" name="max_retries" value="3" min="0">
-                </div>
-                <div class="form-group">
-                    <label for="request_delay">请求间隔（秒）</label>
-                    <input type="number" id="request_delay" name="request_delay" value="1" min="0" step="0.1">
-                </div>
-                <div class="form-group">
-                    <label for="dir_delay">目录间隔（秒）</label>
-                    <input type="number" id="dir_delay" name="dir_delay" value="2" min="0" step="0.1">
-                </div>
-                <div class="form-group">
-                    <label for="timeout">下载超时（秒）</label>
-                    <input type="number" id="timeout" name="timeout" value="30" min="1">
-                </div>
-                <div class="form-group extension-group">
-                    <label for="video_exts">视频扩展名</label>
-                    <input type="text" id="video_exts" name="video_exts" value=".mp4,.mkv,.avi,.mov,.flv,.ts,.iso,.rmvb,.m2ts">
-                </div>
-                <div class="form-group extension-group">
-                    <label for="subtitle_exts">字幕扩展名</label>
-                    <input type="text" id="subtitle_exts" name="subtitle_exts" value=".srt,.ass,.ssa,.sub,.txt,.vtt,.ttml,.dfxp">
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem;">
+                    <div class="form-group">
+                        <label for="direct_link_url">直连地址</label>
+                        <input type="url" id="direct_link_url" name="direct_link_url" value="http://172.17.0.1:8123" required>
+                     </div>
+                    <div class="form-group">
+                        <label for="parent_id">起始目录ID</label>
+                        <input type="number" id="parent_id" name="parent_id" value="0">
+                     </div>
+                    <div class="form-group">
+                        <label for="max_retries">重试次数</label>
+                        <input type="number" id="max_retries" name="max_retries" value="3" min="0">
+                     </div>
+                    <div class="form-group">
+                        <label for="request_delay">请求间隔（秒）</label>
+                        <input type="number" id="request_delay" name="request_delay" value="1" min="0" step="0.1">
+                     </div>
+                    <div class="form-group">
+                        <label for="dir_delay">目录间隔（秒）</label>
+                        <input type="number" id="dir_delay" name="dir_delay" value="2" min="0" step="0.1">
+                     </div>
+                    <div class="form-group">
+                        <label for="request_delay">请求间隔（秒）</label>
+                        <input type="number" id="timeout" name="timeout" value="30" min="1">
+                     </div>
+                    <div class="form-group extension-group">
+                        <label for="video_exts">视频扩展名</label>
+                        <input type="text" id="video_exts" name="video_exts" value=".mp4,.mkv,.avi,.mov,.flv,.ts,.iso,.rmvb,.m2ts">
+                     </div>
+                    <div class="form-group extension-group">
+                        <label for="subtitle_exts">字幕扩展名</label>
+                        <input type="text" id="subtitle_exts" name="subtitle_exts" value=".srt,.ass,.ssa,.sub,.txt,.vtt,.ttml,.dfxp">
+                     </div>   
                 </div>
             </form>
         </div>
@@ -509,9 +482,8 @@
         </div>
 
         <!-- 生成按钮 -->
-        <div class="generate-button" id="generateButtonContainer" style="display: none;">
-            <button type="submit" form="configForm" id="generateBtn" disabled>生成STRM</button>
-            <div class="loading" id="loading">⏳ 正在生成中，请稍候...</div>
+        <div class="generate-button">
+            <button id="generateBtn" style="width: 200px;">生成STRM</button>
         </div>
     </div>
 
