@@ -545,7 +545,7 @@
                 const res = await fetch('/login', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({passport, password})
+                    body: JSON.stringify({passport, password}),
                     credentials: 'include'  // 添加此行
                 });
                 
