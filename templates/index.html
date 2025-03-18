@@ -754,90 +754,79 @@
         });
 
         // ====================== 115配置管理 ======================
-        // 修复函数作用域问题
-        async function load115Config() {
-            const res = await fetch('/115_config');
-            if (!res.ok) return;
-            
-            const config = await res.json();
-            document.getElementById('mainCookie').value = config.main ? JSON.stringify(config.main, null, 2) : '';
-            document.getElementById('scheduleTime').value = config.schedule_time || '08:00';
+// 修复函数作用域问题
+async function load115Config() {
+    const res = await fetch('/115_config');
+    if (!res.ok) return;
+    
+    const config = await res.json();
+    document.getElementById('mainCookie').value = config.main ? JSON.stringify(config.main, null, 2) : '';
+    document.getElementById('scheduleTime').value = config.schedule_time || '08:00';
 
-            document.addEventListener('DOMContentLoaded', function () {
-                document.querySelector('.add-btn').addEventListener('click', function () {
-                    addSubAccount();
-                });
-            });
-                    
-            // 加载小号
-            function addSubAccount(value = '') {
-                const container = document.createElement('div');
-                container.className = 'sub-account-container';
-                container.innerHTML = `
-                    <textarea class="subCookie" rows="2" placeholder="小号Cookie（JSON格式）">${value}</textarea>
-                    <button class="removeSub" onclick="removeSub(this)">×</button>
-                `;
-                document.getElementById('subAccounts').appendChild(container);
-                // 删除小号
-            function removeSub(btn) {
-                btn.parentElement.remove();
-            }
-        
-        function addSubAccount(value = '') {
-            const container = document.createElement('div');
-            container.className = 'sub-account-container';
-            container.innerHTML = `
-                <textarea class="subCookie" rows="3">${value}</textarea>
-                <button class="removeSub" onclick="removeSub(this)">×</button>
-            `;
-            document.getElementById('subAccounts').appendChild(container);
-        }
+    // 加载小号
+    const subAccounts = document.getElementById('subAccounts');
+    subAccounts.innerHTML = ''; // 清空现有小号
+    if (config.subs) {
+        config.subs.forEach(sub => addSubAccount(JSON.stringify(sub, null, 2)));
+    }
+}
 
-        function removeSub(btn) {
-            btn.parentElement.remove();
-        }
+// 添加小号
+function addSubAccount(value = '') {
+    const container = document.createElement('div');
+    container.className = 'sub-account-container';
+    container.innerHTML = `
+        <textarea class="subCookie" rows="2" placeholder="小号Cookie（JSON格式）">${value}</textarea>
+        <button class="removeSub" onclick="removeSub(this)">×</button>
+    `;
+    document.getElementById('subAccounts').appendChild(container);
+}
 
-        async function save115Config() {
-            const config = {
-                main: JSON.parse(document.getElementById('mainCookie').value),
-                subs: Array.from(document.querySelectorAll('.subCookie'))
-                    .map(el => JSON.parse(el.value)),
-                schedule: document.getElementById('scheduleTime').value
-            };
+// 删除小号
+function removeSub(btn) {
+    btn.parentElement.remove();
+}
 
-            const res = await fetch('/115_config', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify(config)
-            });
+async function save115Config() {
+    const config = {
+        main: JSON.parse(document.getElementById('mainCookie').value),
+        subs: Array.from(document.querySelectorAll('.subCookie'))
+            .map(el => JSON.parse(el.value)),
+        schedule: document.getElementById('scheduleTime').value
+    };
 
-            if (res.ok) {
-                await load115Config();  // 保存后立即重新加载
-                alert('配置保存成功');
-                load115Config();
-            } else {
-                alert('保存失败');
-            }
-        }
+    const res = await fetch('/115_config', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(config)
+    });
 
-        async function run115Now() {
-            const res = await fetch('/115_run_now', { method: 'POST' });
-            if (res.ok) {
-                alert('任务已触发，请查看日志');
-            } else {
-                alert('触发失败');
-            }
-        }
+    if (res.ok) {
+        await load115Config();  // 保存后立即重新加载
+        alert('配置保存成功');
+    } else {
+        alert('保存失败');
+    }
+}
 
-        // ====================== 初始化逻辑 ======================
-        document.addEventListener('DOMContentLoaded', () => {
-            checkLoginStatus();
-            load115Config();
-            
-            // 确保所有按钮事件绑定
-            document.querySelector('.logout-btn').addEventListener('click', handleLogout);
-            document.querySelector('.add-btn').addEventListener('click', addSubAccount);
-        });
+async function run115Now() {
+    const res = await fetch('/115_run_now', { method: 'POST' });
+    if (res.ok) {
+        alert('任务已触发，请查看日志');
+    } else {
+        alert('触发失败');
+    }
+}
+
+// ====================== 初始化逻辑 ======================
+document.addEventListener('DOMContentLoaded', () => {
+    checkLoginStatus();
+    load115Config();
+    
+    // 确保所有按钮事件绑定
+    document.querySelector('.logout-btn').addEventListener('click', handleLogout);
+    document.querySelector('.add-btn').addEventListener('click', addSubAccount);
+});
     </script>
 </body>
 </html>
