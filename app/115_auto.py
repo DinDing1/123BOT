@@ -98,22 +98,37 @@ class WishManager:
                 # 小号许愿
                 wish_id = self.create_wish(sub_client)
                 logger(f"({idx}/{total_subs}) 小号许愿成功，ID: {wish_id}")
+
+                # 增加等待时间
+                logger("等待许愿审核通过...")
+                time.sleep(60)
                 
                 # 主号助愿
                 aid_id = self.create_aid(wish_id)
                 logger(f"主号助愿成功，ID: {aid_id}")
+
+                # 增加等待时间
+                logger("等待助愿审核通过...")
+                time.sleep(60)
                 
                 # 小号采纳
                 if self.adopt_aid(sub_client, wish_id, aid_id, test_mode):
                     success_count += 1
-                
-                time.sleep(120)  # 流程间间隔
-            except Exception as e:
-                logger(f"流程异常: {str(e)}", "ERROR")
+                    break  # 成功则跳出重试循环
+
+           except Exception as e:
+                logger(f"流程异常 (重试 {retry + 1}/{retry_count}): {str(e)}", "ERROR")
+                if retry < retry_count - 1:
+                    time.sleep(10)  # 重试间隔
+                else:
+                    logger(f"小号 {idx} 许愿流程失败，已达最大重试次数", "ERROR")
         
-        logger(f"许愿任务完成，成功 {success_count}/{total_subs} 个账号")
-        return success_count
+        time.sleep(5)  # 流程间间隔
     
+    logger(f"许愿任务完成，成功 {success_count}/{total_subs} 个账号")
+    return success_count
+
+
     @staticmethod
     def create_wish(client: P115Client) -> str:
         """创建许愿"""
