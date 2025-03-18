@@ -2,63 +2,60 @@ from flask import Flask, render_template, request, jsonify, Response, stream_wit
 import subprocess
 import os
 import logging
-import sys
-import io
 import sqlite3
+from datetime import datetime, timedelta
+import hashlib
+from apscheduler.schedulers.background import BackgroundScheduler
 import json
-from dotenv import load_dotenv
 from auth import get_user_info_with_password
 from werkzeug.serving import WSGIRequestHandler
 
-load_dotenv()
-
-app = Flask(__name__)
-app.secret_key = os.urandom(24)
-
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
-
+# 配置日志
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(message)s',
-    handlers=[
-        logging.FileHandler("web_strm.log", encoding='utf-8'),
-        logging.StreamHandler(sys.stdout)
-    ]
+    handlers=[logging.StreamHandler()]
 )
 
-class SilentWSGIRequestHandler(WSGIRequestHandler):
-    def log(self, type: str, message: str, *args) -> None:
-        pass
-
-logging.getLogger('werkzeug').disabled = True
-logging.getLogger('flask.app').setLevel(logging.ERROR)
+# 禁用 Uvicorn 和 FastAPI 的默认日志
+logging.getLogger("uvicorn").setLevel(logging.WARNING)
+logging.getLogger("uvicorn.access").disabled = True
+logging.getLogger("uvicorn.error").disabled = True
+logging.getLogger("fastapi").setLevel(logging.WARNING)
+logging.getLogger("apscheduler").setLevel(logging.WARNING)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
 logging.getLogger("p123").setLevel(logging.WARNING)
 
+# 数据库配置
 CACHE_DB = "/app/cache/download_cache.db"
+CACHE_TTL = 20 * 60 * 60  # 20小时
 
 def init_db():
     """初始化数据库结构"""
     try:
         with sqlite3.connect(CACHE_DB) as conn:
-            # 强制删除旧表（如果存在）
-            conn.execute('DROP TABLE IF EXISTS auto115_config')
-            # 创建新表（包含所有字段）
             conn.execute('''
-                CREATE TABLE auto115_config (
+                CREATE TABLE IF NOT EXISTS download_cache (
+                    key TEXT PRIMARY KEY,
+                    url TEXT NOT NULL,
+                    expire_time TIMESTAMP NOT NULL
+                )''')
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS auto115_config (
                     user_id TEXT PRIMARY KEY,
                     main_cookies TEXT,
                     sub_accounts TEXT,
-                    wish_content TEXT DEFAULT '求一本钢铁是怎样炼成得书',
                     schedule_time TEXT DEFAULT '08:00'
                 )''')
             conn.commit()
-            logger.info("数据库表重建完成")
+            logger.info("数据库初始化完成")
     except Exception as e:
         logger.error(f"数据库初始化失败: {str(e)}")
         raise
+
+app = Flask(__name__)
+app.secret_key = os.urandom(24)
 
 @app.route('/')
 def index():
@@ -71,12 +68,10 @@ def login():
         passport = data.get('passport')
         password = data.get('password')
         
-        # 调用 auth.py 中的函数验证用户信息
         user_info = get_user_info_with_password(passport, password)
         if user_info.get("code") != 0:
             return jsonify({"success": False, "message": user_info.get("message", "登录失败")})
 
-        # 登录成功，保存用户信息到 session
         session['logged_in'] = True
         session['user_info'] = {
             'uid': user_info['data']['uid'],
@@ -90,20 +85,6 @@ def login():
         logging.error(f"登录失败: {str(e)}")
         return jsonify({"success": False, "message": "服务器错误"})
 
-@app.route('/logout')
-def logout():
-    session.clear()
-    return jsonify({"success": True})
-
-@app.route('/user_info')
-def get_user_info():
-    if not session.get('logged_in'):
-        return jsonify({"logged_in": False})
-    return jsonify({
-        "logged_in": True,
-        "user_info": session['user_info']
-    })
-
 @app.route('/115_config', methods=['GET', 'POST'])
 def handle_115_config():
     if not session.get('logged_in'):
@@ -115,16 +96,14 @@ def handle_115_config():
         data = request.json
         try:
             with sqlite3.connect(CACHE_DB) as conn:
-                # 使用 REPLACE 语法强制覆盖旧数据
                 conn.execute('''
                     REPLACE INTO auto115_config 
-                    (user_id, main_cookies, sub_accounts, wish_content, schedule_time)
-                    VALUES (?, ?, ?, ?, ?)
+                    (user_id, main_cookies, sub_accounts, schedule_time)
+                    VALUES (?, ?, ?, ?)
                 ''', (
                     user_id,
                     json.dumps(data.get('main')),
                     json.dumps(data.get('subs')),
-                    data.get('content', '求一本钢铁是怎样炼成得书'),
                     data.get('schedule', '08:00')
                 ))
             return jsonify({"success": True})
@@ -136,7 +115,7 @@ def handle_115_config():
         try:
             with sqlite3.connect(CACHE_DB) as conn:
                 row = conn.execute('''
-                    SELECT main_cookies, sub_accounts, wish_content, schedule_time 
+                    SELECT main_cookies, sub_accounts, schedule_time 
                     FROM auto115_config WHERE user_id = ?
                 ''', (user_id,)).fetchone()
             
@@ -144,8 +123,7 @@ def handle_115_config():
                 return jsonify({
                     "main": json.loads(row[0]),
                     "subs": json.loads(row[1]),
-                    "content": row[2],
-                    "schedule_time": row[3]
+                    "schedule_time": row[2]
                 })
             return jsonify({})
         except Exception as e:
@@ -159,93 +137,22 @@ def run_115_now():
     
     try:
         user_id = session['user_info']['uid']
-        config_path = f"/app/cache/115_{str(user_id)}.json"  # 确保转换为字符串
         subprocess.Popen([
             'python', '/app/115_auto.py',
-            '--config', config_path
+            '--config', f"/app/cache/115_{user_id}.json"
         ])
         return jsonify({"success": True})
     except Exception as e:
         logging.error(f"立即执行失败: {str(e)}")
         return jsonify({"success": False})
 
-@app.route('/generate', methods=['GET'])
-def generate_strm():
-    if not session.get('logged_in'):
-        def generate_error():
-            yield "event: error\ndata: 请先登录\n\n"
-            yield "event: close\ndata: \n\n"
-        return Response(stream_with_context(generate_error()), content_type='text/event-stream')
-
-    try:
-        user_info = session.get('user_info', {})
-        config_params = {
-            'parent_id': request.args.get('parent_id', '0'),
-            'local_path': request.args.get('local_path', './EmbyLibrary'),
-            'video_exts': request.args.get('video_exts', '.mp4,.mkv,.avi'),
-            'subtitle_exts': request.args.get('subtitle_exts', '.srt,.ass'),
-            'request_delay': request.args.get('request_delay', '1'),
-            'dir_delay': request.args.get('dir_delay', '2'),
-            'timeout': request.args.get('timeout', '30'),
-            'max_retries': request.args.get('max_retries', '3'),
-            'direct_link_url': request.args.get('direct_link_url', 'http://172.17.0.1:8123')
-        }
-
-        env = os.environ.copy()
-        env.update({
-            'P123_USER': user_info.get('passport', ''),
-            'P123_PASS': request.args.get('p123_pass', ''),
-            'PARENT_ID': config_params['parent_id'],
-            'LIBRARY_PATH': config_params['local_path'],
-            'VIDEO_EXTS': config_params['video_exts'],
-            'SUBTITLE_EXTS': config_params['subtitle_exts'],
-            'REQUEST_DELAY': config_params['request_delay'],
-            'DIR_DELAY': config_params['dir_delay'],
-            'TIMEOUT': config_params['timeout'],
-            'MAX_RETRIES': config_params['max_retries'],
-            'DIRECT_LINK_URL': config_params['direct_link_url']
-        })
-
-        def generate():
-            try:
-                process = subprocess.Popen(
-                    ['python', 'generate_strm.py'],
-                    env=env,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT,
-                    text=True,
-                    encoding='utf-8'
-                )
-
-                for line in iter(process.stdout.readline, ''):
-                    yield f"data: {line}\n\n"
-                process.stdout.close()
-                return_code = process.wait()
-                yield f"data: PROCESS_EXIT_CODE:{return_code}\n\n"
-                yield "event: close\ndata: \n\n"
-            except Exception as e:
-                yield f"event: error\ndata: 子进程启动失败: {str(e)}\n\n"
-                yield "event: close\ndata: \n\n"
-
-        return Response(stream_with_context(generate()), content_type='text/event-stream')
-
-    except Exception as e:
-        def generate_error():
-            yield f"event: error\ndata: 生成失败: {str(e)}\n\n"
-            yield "event: close\ndata: \n\n"
-        return Response(stream_with_context(generate_error()), content_type='text/event-stream')
+@app.on_event("startup")
+def startup_event():
+    init_db()
+    scheduler = BackgroundScheduler()
+    scheduler.add_job(run_115_task)  # 启动时初始化定时任务
+    scheduler.start()
 
 logger = logging.getLogger('strm_generator')
 logger.info("=== WEBUI已启动 ===")
 logger.info("WEBUI地址: http://0.0.0.0:8124")
-
-if __name__ == '__main__':
-    from werkzeug.serving import run_simple
-    run_simple(
-        hostname='0.0.0.0',
-        port=8124,
-        application=app,
-        request_handler=SilentWSGIRequestHandler,
-        use_debugger=False,
-        use_reloader=False
-    )
