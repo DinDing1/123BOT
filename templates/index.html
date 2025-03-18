@@ -672,26 +672,28 @@
     }
 
     // ====================== 日志动态加载 ======================
-    // 动态加载日志
-    async function loadLogs() {
-        const res = await fetch('/get_logs');
-        const data = await res.json();
-        const output = document.getElementById('output');
-        output.innerHTML = '';  // 清空现有日志
+async function loadLocalLogs() {
+    const res = await fetch('/get_local_logs');
+    const data = await res.json();
+    const output = document.getElementById('output');
+    output.innerHTML = '';  // 清空现有日志
 
-        data.logs.forEach(log => {
-            const logEntry = document.createElement('div');
-            logEntry.className = 'log-entry';
-            logEntry.textContent = log;
-            output.appendChild(logEntry);
-        });
+    data.logs.forEach(log => {
+        const logEntry = document.createElement('div');
+        logEntry.className = 'log-entry';
+        logEntry.textContent = log;
+        output.appendChild(logEntry);
+    });
 
-        // 自动滚动到底部
-        output.scrollTop = output.scrollHeight;
-    }
+    // 自动滚动到底部
+    output.scrollTop = output.scrollHeight;
+}
 
-    // 定时刷新日志（每 5 秒刷新一次）
-    setInterval(loadLogs, 5000);
+// 定时刷新日志（每 5 秒刷新一次）
+setInterval(loadLocalLogs, 5000);
+
+// 页面加载时立即加载日志
+document.addEventListener('DOMContentLoaded', loadLocalLogs);
 
     // ====================== 初始化逻辑 ======================
     document.addEventListener('DOMContentLoaded', () => {
