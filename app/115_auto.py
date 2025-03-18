@@ -14,22 +14,27 @@ import sys
 import time
 from pathlib import Path
 from typing import Dict, List
-import requests  # 新增：用于发送日志到 Web 页面
+import os  # 新增：用于读取环境变量
 
 from p115client import P115Client, check_response
 
-# 日志文件路径
-LOG_FILE = "115_auto_operation.log"
+# 日志文件路径（从环境变量读取，默认为 /app/logs/115_auto.log）
+LOG_FILE = os.getenv("LOG_FILE", "/app/cache/config/115_auto.log")
 
 class Logger:
     """日志记录器"""
     
-    def __init__(self, log_file: str, web_log_url: str = None):
+    def __init__(self, log_file: str, console: bool = False):
+        """
+        初始化日志记录器
+        :param log_file: 日志文件路径
+        :param console: 是否在控制台输出日志
+        """
         self.log_file = Path(log_file)
-        self.log_file.parent.mkdir(parents=True, exist_ok=True)
-        self.web_log_url = web_log_url  # Web 页面的日志接口地址
+        self.log_file.parent.mkdir(parents=True, exist_ok=True)  # 确保日志目录存在
+        self.console = console  # 是否在控制台输出日志
 
-    def log(self, message: str, level: str = "INFO", console: bool = False):
+    def log(self, message: str, level: str = "INFO"):
         """记录带时间戳的日志"""
         timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
         log_entry = f"[{timestamp}] [{level}] {message}"
@@ -38,19 +43,12 @@ class Logger:
         with open(self.log_file, "a", encoding="utf-8") as f:
             f.write(log_entry + "\n")
         
-        # 发送日志到 Web 页面
-        if self.web_log_url:
-            try:
-                requests.post(self.web_log_url, json={"message": log_entry}, timeout=5)
-            except Exception as e:
-                print(f"无法发送日志到 Web 页面: {str(e)}")
-        
-        # 控制台输出（默认关闭）
-        if console:
+        # 控制台输出（可选）
+        if self.console:
             print(log_entry)
 
 # 初始化 Logger
-logger = Logger(LOG_FILE, web_log_url="http://localhost:8124/log")
+logger = Logger(LOG_FILE, console=True)  # 日志文件路径和是否在控制台输出
 
 def load_config_from_file(config_path: str) -> Dict:
     """从指定路径加载配置文件"""
