@@ -764,17 +764,26 @@
             document.getElementById('scheduleTime').value = config.schedule_time || '08:00';
             
             // 加载小号
-            const container = document.getElementById('subAccounts');
-            container.innerHTML = '';
-            if (config.subs) {
-                config.subs.forEach(sub => {
-                    addSubAccount(JSON.stringify(sub, null, 2));
-                });
+            function addSubAccount(value = '') {
+                const container = document.createElement('div');
+                container.className = 'sub-account-container';
+                container.innerHTML = `
+                    <textarea class="subCookie" rows="2" placeholder="小号Cookie（JSON格式）">${value}</textarea>
+                    <button class="removeSub" onclick="removeSub(this)">×</button>
+                `;
+                document.getElementById('subAccounts').appendChild(container);
+                // 删除小号
+            function removeSub(btn) {
+                btn.parentElement.remove();
             }
-        }  // 修复：这里缺少的闭合括号已添加
-
+                // 绑定事件
+            document.addEventListener('DOMContentLoaded', function () {
+                // 确保“添加小号”按钮只绑定一次
+                document.querySelector('.add-btn').addEventListener('click', function () {
+                    ddSubAccount();
+                });
+            });
         
-
         function addSubAccount(value = '') {
             const container = document.createElement('div');
             container.className = 'sub-account-container';
