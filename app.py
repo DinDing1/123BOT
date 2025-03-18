@@ -190,6 +190,17 @@ def handle_log():
 def get_logs():
     """获取存储的日志"""
     return jsonify({"logs": list(log_store)})
+    
+@app.route('/get_local_logs', methods=['GET'])
+def get_local_logs():
+    """读取本地日志文件并返回日志内容"""
+    log_file = os.getenv("LOG_FILE", "/app/cache/config/115_auto.log")
+    try:
+        with open(log_file, "r", encoding="utf-8") as f:
+            logs = f.readlines()
+        return jsonify({"logs": logs})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
 
 # ------------------- 初始化逻辑 -------------------
 @app.before_first_request
