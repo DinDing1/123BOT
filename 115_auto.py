@@ -1,204 +1,203 @@
-#!/usr/bin/env python3
-# encoding: utf-8
-
-"""
-115综合自动化脚本（支持配置文件）
-功能：全账号签到 → 许愿树流程（小号许愿 → 主号助愿 → 小号采纳）
-"""
-
-__version__ = "3.1.0"
-
-import argparse
+from flask import Flask, request, jsonify, render_template, session
+from collections import deque
+import os
+import logging
+import sqlite3
+from datetime import datetime, timedelta
+import hashlib
+from apscheduler.schedulers.background import BackgroundScheduler
 import json
-import sys
-import time
-from pathlib import Path
-from typing import Dict, List
-import os  # 新增：用于读取环境变量
+from auth import get_user_info_with_password
+from werkzeug.serving import WSGIRequestHandler
+import subprocess  # 导入 subprocess 模块
 
-from p115client import P115Client, check_response
+# ------------------- 基础配置 -------------------
+# 日志存储（使用 deque 限制最大日志条数）
+log_store = deque(maxlen=1000)  # 最多存储 1000 条日志
 
-# 日志文件路径（从环境变量读取，默认为 /app/logs/115_auto.log）
-LOG_FILE = os.getenv("LOG_FILE", "/app/cache/config/115_auto.log")
+app = Flask(__name__)
+app.secret_key = os.urandom(24)  # 设置 session 密钥
 
-class Logger:
-    """日志记录器"""
-    
-    def __init__(self, log_file: str, console: bool = False):
-        """
-        初始化日志记录器
-        :param log_file: 日志文件路径
-        :param console: 是否在控制台输出日志
-        """
-        self.log_file = Path(log_file)
-        self.log_file.parent.mkdir(parents=True, exist_ok=True)  # 确保日志目录存在
-        self.console = console  # 是否在控制台输出日志
+# ------------------- 日志配置 -------------------
+# 禁用 Flask 默认日志
+logging.basicConfig(
+    level=logging.WARNING,
+    format='%(asctime)s - %(message)s',
+    handlers=[logging.StreamHandler()]
+)
 
-    def log(self, message: str, level: str = "INFO"):
-        """记录带时间戳的日志"""
-        timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
-        log_entry = f"[{timestamp}] [{level}] {message}"
-        
-        # 写入日志文件
-        with open(self.log_file, "a", encoding="utf-8") as f:
-            f.write(log_entry + "\n")
-        
-        # 控制台输出（可选）
-        if self.console:
-            print(log_entry)
+# 禁用第三方库的冗余日志
+logging.getLogger("uvicorn").setLevel(logging.WARNING)
+logging.getLogger("uvicorn.access").disabled = True
+logging.getLogger("uvicorn.error").disabled = True
+logging.getLogger("fastapi").setLevel(logging.WARNING)
+logging.getLogger("apscheduler").setLevel(logging.WARNING)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+logging.getLogger("p123").setLevel(logging.WARNING)
 
-# 初始化 Logger
-logger = Logger(LOG_FILE, console=True)  # 日志文件路径和是否在控制台输出
+# ------------------- 数据库配置 -------------------
+CACHE_DB = "/app/cache/download_cache.db"
+CACHE_TTL = 20 * 60 * 60  # 20小时
 
-def load_config_from_file(config_path: str) -> Dict:
-    """从指定路径加载配置文件"""
+def init_db():
+    """初始化数据库结构"""
     try:
-        with open(config_path, "r", encoding="utf-8") as f:
-            return json.load(f)
+        with sqlite3.connect(CACHE_DB) as conn:
+            # 下载缓存表
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS download_cache (
+                    key TEXT PRIMARY KEY,
+                    url TEXT NOT NULL,
+                    expire_time TIMESTAMP NOT NULL
+                )''')
+            
+            # 115配置表
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS auto115_config (
+                    user_id TEXT PRIMARY KEY,
+                    main_cookies TEXT,
+                    sub_accounts TEXT,
+                    schedule_time TEXT DEFAULT '08:00'
+                )''')
+            
+            conn.commit()
     except Exception as e:
-        logger.log(f"配置文件加载失败: {str(e)}", "ERROR")
-        sys.exit(1)
+        logging.error(f"数据库初始化失败: {str(e)}")
+        raise
 
-def checkin_single(cookies: Dict) -> bool:
-    """执行单个账号签到"""
+# ------------------- 核心功能路由 -------------------
+@app.route('/')
+def index():
+    """主页面"""
+    return render_template('index.html')
+
+@app.route('/login', methods=['POST'])
+def login():
+    """用户登录"""
     try:
-        client = P115Client(cookies, check_for_relogin=True)
-        result = client.user_points_sign_post()
-        if result.get("state"):
-            days = result.get("data", {}).get("continuous_day", 0)
-            logger.log(f"签到成功，已连续签到{days}天")
-            return True
-        logger.log(f"签到失败: {result.get('message')}", "WARNING")
-        return False
+        data = request.json
+        passport = data.get('passport')
+        password = data.get('password')
+        
+        user_info = get_user_info_with_password(passport, password)
+        if user_info.get("code") != 0:
+            return jsonify({"success": False, "message": user_info.get("message", "登录失败")})
+
+        # 保存用户信息到会话
+        session['logged_in'] = True
+        session['user_info'] = {
+            'uid': user_info['data']['uid'],
+            'nickname': user_info['data']['nickname'],
+            'passport': user_info['data']['passport'],
+            'spaceUsed': user_info['data']['spaceUsed'],
+            'spacePermanent': user_info['data']['spacePermanent']
+        }
+        return jsonify({"success": True})
     except Exception as e:
-        logger.log(f"签到异常: {str(e)}", "ERROR")
-        return False
+        logging.error(f"登录失败: {str(e)}")
+        return jsonify({"success": False, "message": "服务器错误"})
 
-def checkin_all(config: Dict):
-    """执行全部账号签到"""
-    accounts = [config["wish_main"]] + config["wish_subs"]
-    total = len(accounts)
-    success = 0
-    
-    logger.log(f"开始签到任务，共 {total} 个账号")
-    for idx, account in enumerate(accounts, 1):
-        name = account.get("name", f"账号{idx}")
-        logger.log(f"正在签到 ({idx}/{total}): {name}")
-        if checkin_single(account["cookies"]):
-            success += 1
-        time.sleep(10)  # 账号间间隔
-    
-    logger.log(f"签到完成，成功 {success}/{total} 个账号")
-    return success == total
+@app.route('/user_info')
+def get_user_info():
+    """获取用户登录状态"""
+    if not session.get('logged_in'):
+        return jsonify({"logged_in": False})
+    return jsonify({
+        "logged_in": True,
+        "user_info": session['user_info']
+    })
 
-class WishManager:
-    """许愿树操作管理器"""
-    
-    def __init__(self, main_cookies: Dict, sub_cookies: List[Dict]):
-        self.main_client = P115Client(main_cookies, check_for_relogin=True)
-        self.sub_clients = [P115Client(sub["cookies"], check_for_relogin=True) for sub in sub_cookies]
-    
-    def wish_workflow(self, test_mode: bool = False):
-        """完整的许愿工作流程"""
-        total_subs = len(self.sub_clients)
-        success_count = 0
-        
-        for idx, sub_client in enumerate(self.sub_clients, 1):
-            try:
-                # 小号许愿
-                wish_id = self.create_wish(sub_client)
-                logger.log(f"({idx}/{total_subs}) 小号许愿成功，ID: {wish_id}")
-                
-                # 增加 120 秒延迟
-                logger.log(f"等待 120 秒后进行助愿...")
-                time.sleep(120)
-                
-                # 主号助愿
-                aid_id = self.create_aid(wish_id)
-                logger.log(f"主号助愿成功，ID: {aid_id}")
-                
-                # 增加 120 秒延迟
-                logger.log(f"等待 120 秒后进行采纳...")
-                time.sleep(120)
-                
-                # 小号采纳
-                if self.adopt_aid(sub_client, wish_id, aid_id, test_mode):
-                    success_count += 1
-                
-                # 增加 120 秒延迟（为下一个账号做准备）
-                logger.log(f"等待 120 秒后处理下一个账号...")
-                time.sleep(120)
-                
-            except Exception as e:
-                logger.log(f"流程异常: {str(e)}", "ERROR")
-        
-        logger.log(f"许愿任务完成，成功 {success_count}/{total_subs} 个账号")
-        return success_count
-    
-    @staticmethod
-    def create_wish(client: P115Client) -> str:
-        """创建许愿"""
-        return check_response(client.act_xys_wish(
-            {"rewardSpace": 5, "content": "求一本钢铁是怎样炼成得书"}
-        ))["data"]["xys_id"]
-    
-    def create_aid(self, wish_id: str) -> str:
-        """主号创建助愿"""
-        check_response(self.main_client.act_xys_get_desire_info(wish_id))
-        return check_response(
-            self.main_client.act_xys_aid_desire({
-                "id": wish_id, 
-                "content": "希望这本书可以帮到你", 
-                "file_ids": ""
-            })
-        )["data"]["aid_id"]
-    
-    @staticmethod
-    def adopt_aid(client: P115Client, wish_id: str, aid_id: str, test_mode: bool) -> bool:
-        """采纳助愿"""
-        if test_mode:
-            logger.log("[测试模式] 跳过采纳操作", "DEBUG")
-            return True
-        
-        result = check_response(client.act_xys_adopt({
-            "did": wish_id, 
-            "aid": aid_id, 
-            "to_cid": 0
-        }))
-        return result.get("state", False)
+@app.route('/logout')
+def logout():
+    """用户登出"""
+    session.clear()
+    return jsonify({"success": True})
 
-def main():
-    parser = argparse.ArgumentParser(description="115综合自动化工具")
-    parser.add_argument("--config", type=str, help="配置文件路径")
-    parser.add_argument("--skip-checkin", action="store_true", help="跳过签到步骤")
-    parser.add_argument("--skip-wish", action="store_true", help="跳过许愿步骤")
-    parser.add_argument("-t", "--test", action="store_true", help="测试模式（不执行实际采纳）")
-    args = parser.parse_args()
-
-    config = load_config_from_file(args.config) if args.config else load_config()
+# ------------------- 115配置管理路由 -------------------
+@app.route('/115_config', methods=['GET', 'POST'])
+def handle_115_config():
+    """115配置管理"""
+    if not session.get('logged_in'):
+        return jsonify({"success": False})
     
-    # 执行签到流程
-    if not args.skip_checkin:
-        logger.log("开始执行签到流程".center(50, "="))
-        checkin_all(config)
+    user_id = session['user_info']['uid']
     
-    # 执行许愿流程
-    if not args.skip_wish:
-        logger.log("开始执行许愿流程".center(50, "="))
+    if request.method == 'POST':
+        data = request.json
         try:
-            manager = WishManager(
-                main_cookies=config["wish_main"]["cookies"],
-                sub_cookies=config["wish_subs"]
-            )
-            manager.wish_workflow(args.test)
+            with sqlite3.connect(CACHE_DB) as conn:
+                conn.execute('''
+                    REPLACE INTO auto115_config 
+                    (user_id, main_cookies, sub_accounts, schedule_time)
+                    VALUES (?, ?, ?, ?)
+                ''', (
+                    user_id,
+                    json.dumps(data.get('main')),
+                    json.dumps(data.get('subs')),
+                    data.get('schedule', '08:00')
+                ))
+            return jsonify({"success": True})
         except Exception as e:
-            logger.log(f"许愿流程初始化失败: {str(e)}", "ERROR")
+            logging.error(f"配置保存失败: {str(e)}")
+            return jsonify({"success": False, "message": "配置保存失败"})
+    else:
+        try:
+            with sqlite3.connect(CACHE_DB) as conn:
+                row = conn.execute('''
+                    SELECT main_cookies, sub_accounts, schedule_time 
+                    FROM auto115_config WHERE user_id = ?
+                ''', (user_id,)).fetchone()
+            
+            if row:
+                return jsonify({
+                    "main": json.loads(row[0]),
+                    "subs": json.loads(row[1]),
+                    "schedule_time": row[2]
+                })
+            return jsonify({})
+        except Exception as e:
+            logging.error(f"配置读取失败: {str(e)}")
+            return jsonify({})
+
+@app.route('/115_run_now', methods=['POST'])
+def run_115_now():
+    """立即执行115任务"""
+    if not session.get('logged_in'):
+        return jsonify({"success": False})
     
-    logger.log("全部任务执行完成".center(50, "="))
+    try:
+        user_id = session['user_info']['uid']
+        # 使用 subprocess 启动 115_auto.py
+        subprocess.Popen([
+            'python', '/app/115_auto.py',
+            '--config', f"/app/cache/config/115_{user_id}.json"
+        ])
+        return jsonify({"success": True})
+    except Exception as e:
+        logging.error(f"立即执行失败: {str(e)}")
+        return jsonify({"success": False})
+
+# ------------------- 日志管理路由 -------------------
+@app.route('/log', methods=['POST'])
+def handle_log():
+    """接收日志并存储"""
+    data = request.json
+    if data and "message" in data:
+        log_store.append(data["message"])
+        return jsonify({"success": True})
+    return jsonify({"success": False, "message": "无效的日志数据"}), 400
+
+@app.route('/get_logs', methods=['GET'])
+def get_logs():
+    """获取存储的日志"""
+    return jsonify({"logs": list(log_store)})
+
+# ------------------- 初始化逻辑 -------------------
+@app.before_first_request
+def startup_event():
+    """初始化任务"""
+    init_db()
 
 if __name__ == "__main__":
-    try:
-        main()
-    except KeyboardInterrupt:
-        logger.log("用户中断操作", "WARNING")
-        sys.exit(1)
+    app.run(host="0.0.0.0", port=8124)
