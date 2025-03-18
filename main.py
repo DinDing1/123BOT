@@ -53,8 +53,9 @@ def init_db():
                     WHERE expire_time <= strftime('%Y-%m-%d %H:%M:%S', 'now');
                 END;
             ''')
+            conn.execute('DROP TABLE IF EXISTS auto115_config')  # 删除旧表
             conn.execute('''
-                CREATE TABLE IF NOT EXISTS auto115_config (
+                CREATE TABLE auto115_config (
                     user_id TEXT PRIMARY KEY,
                     main_cookies TEXT,
                     sub_accounts TEXT,
@@ -109,7 +110,7 @@ def execute_115_job(user_id: str):
             "wish_subs": [{"cookies": json.loads(cookie)} for cookie in json.loads(row[1])]
         }
         
-        config_path = f"/app/cache/115_{user_id}.json"
+        config_path = f"/app/cache/115_{str(user_id)}.json"  # 强制转换为字符串
         with open(config_path, "w") as f:
             json.dump(config, f)
         
