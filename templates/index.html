@@ -103,18 +103,6 @@
             color: #666;
         }
 
-        .action-buttons {
-            display: flex;
-            justify-content: space-between;
-            gap: 1rem;
-            margin-top: 1.5rem;
-        }
-
-        .action-buttons button {
-        flex: 1;
-        margin: 0;
-        }
-
         /* 主界面容器 */
         .container {
             flex: 1;
@@ -213,7 +201,6 @@
             grid-template-columns: 1.2fr 1fr;
             gap: 1.5rem;
             align-content: start;
-            height: calc(100% - 2.4rem);
         }
 
         .config-section {
@@ -276,15 +263,13 @@
             grid-area: log-panel;
             background: rgba(0, 0, 0, 0.7);
             border-radius: 8px;
-            padding: 1.5rem;
+            padding: 1rem;
             font-family: 'Consolas', monospace;
             font-size: 0.8rem;
             line-height: 1.4;
-            height: calc(100% - 3rem);
+            height: calc(100% - 2.4rem); /* 调整高度，与配置区域对齐 */
             overflow-y: auto;
             border: 1px solid rgba(0, 243, 255, 0.2);
-            box-sizing: border-box;
-            margin-right: 1.5rem;
         }
 
         .log-entry {
@@ -296,25 +281,6 @@
         .log-time {
             color: #6c757d;
             margin-right: 0.8rem;
-        }
-
-/* 优化滚动条样式 */
-        .log-panel::-webkit-scrollbar {
-            width: 6px;
-        }
-
-        .log-panel::-webkit-scrollbar-track {
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 3px;
-        }
-
-        .log-panel::-webkit-scrollbar-thumb {
-            background: var(--primary-color);
-            border-radius: 3px;
-        }
-
-        .log-panel::-webkit-scrollbar-thumb:hover {
-            background: #00c4cc;
         }
 
         button {
@@ -394,13 +360,6 @@
             flex-shrink: 0;
         }
 
-/* 调整输入框高度 */
-        #mainCookie,
-        .subCookie {
-            min-height: 120px;
-            resize: vertical;
-        }
-
         .removeSub:hover {
             background: #bb2d3b;
         }
@@ -410,12 +369,51 @@
             margin-top: 0.5rem;
         }
 
+        .action-buttons {
+            display: flex;
+            gap: 1rem;
+            justify-content: space-between;
+            margin-top: 1rem;
+        }
+
+/* 统一输入框样式 */
+        input, textarea {
+            padding: 0.6rem;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(0, 243, 255, 0.2);
+            border-radius: 6px;
+            font-size: 0.9rem;
+            color: var(--text-color);
+            transition: all 0.3s ease;
+            width: 100%;
+            box-sizing: border-box;
+       }
+
+        input:focus, textarea:focus {
+            border-color: var(--primary-color);
+            outline: none;
+       }
+
+/* 主账号Cookie和小号配置输入框 */
+        #mainCookie, .subCookie {
+            height: 80px; /* 统一高度 */
+            resize: vertical; /* 允许垂直调整大小 */
+       }
+
+/* 生成配置输入框 */
+        #direct_link_url, #parent_id, #max_retries, #request_delay, #dir_delay, #timeout, #video_exts, #subtitle_exts {
+            height: 40px; /* 统一高度 */
+       }
+
         /* 响应式布局 */
         @media (max-width: 768px) {
             .grid-form {
                 grid-template-columns: 1fr;
             }
             
+            .config-panel {
+                grid-template-columns: 1fr;
+            }
         }
     </style>
 </head>
@@ -439,7 +437,6 @@
     <div class="container">
         <div class="header">
             <div class="logo">123Media_STRM</div>
-            <p>感谢🈲贫大佬，祝🈲贫大佬长命百岁</p>
             <div class="divider"></div>
             <div class="version">版本号: v2.0.1 | 作者: dinding</div>
         </div>
@@ -458,9 +455,9 @@
         </div>
 
         <div class="config-panel">
-            <!-- 新增的115配置区块 -->
+            <!-- 115配置区块 -->
             <div class="config-section">
-                <h3>115自动化配置</h3>
+                <h3 style="text-align: center;">⚙️ 115自动化配置</h3>
                 <div class="form-group">
                     <label>主账号Cookie</label>
                     <textarea id="mainCookie" rows="3" 
@@ -470,13 +467,14 @@
                     <label>小号配置</label>
                     <div id="subAccounts">
                         <div class="sub-account-container">
-                            <textarea class="subCookie" rows="3"
+                            <textarea class="subCookie" rows="2"
                                 placeholder="小号Cookie（JSON格式）"></textarea>
                             <button class="removeSub" onclick="removeSub(this)">×</button>
                         </div>
                     </div>
                     <button class="add-btn" onclick="addSubAccount()">+ 添加小号</button>
                 </div>
+                <div class="form-group inline-group">
                     <div>
                         <label>定时执行</label>
                         <input type="time" id="scheduleTime" value="08:00">
@@ -488,9 +486,9 @@
                 </div>
             </div>
 
-            <!-- 修改后的STRM生成配置区块 -->
+            <!-- STRM生成配置区块 -->
             <div class="config-section">
-                <h3 style="text-align: center;">STRM生成配置</h3>
+                <h3 style="text-align: center;">⚙️ STRM生成配置</h3>
                 <form id="configForm" action="/generate" method="GET" class="grid-form">
                     <div class="form-group">
                         <label for="direct_link_url">直连地址</label>
@@ -527,14 +525,14 @@
                 </form>
             </div>
         </div>
-<!-- 修改后的日志区域 -->
+
         <div class="log-panel" id="output"></div>
     </div>
 
     <div id="generateButtonContainer" style="display: none;">
         <button type="submit" form="configForm" id="generateBtn" disabled>生成STRM</button>
         <div class="loading" id="loading">⏳ 正在生成中，请稍候...</div>
-    </div>               
+    </div>
 
     <script>
         // 背景线条优化
