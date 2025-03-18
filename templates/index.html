@@ -773,6 +773,8 @@
             }
         }  // 修复：这里缺少的闭合括号已添加
 
+        
+
         function addSubAccount(value = '') {
             const container = document.createElement('div');
             container.className = 'sub-account-container';
@@ -792,7 +794,6 @@
                 main: JSON.parse(document.getElementById('mainCookie').value),
                 subs: Array.from(document.querySelectorAll('.subCookie'))
                     .map(el => JSON.parse(el.value)),
-                content: document.getElementById('wishContent').value,
                 schedule: document.getElementById('scheduleTime').value
             };
 
