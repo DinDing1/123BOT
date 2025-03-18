@@ -65,7 +65,7 @@
         .login-form input {
             width: calc(100% - 2rem);
             padding: 0.8rem 1rem;
-            margin: 0.5rem auto; /* 调整上下间距 居中 */
+            margin: 0.5rem auto;
             background: rgba(255, 255, 255, 0.08);
             border: 1px solid rgba(0, 243, 255, 0.2);
             border-radius: 8px;
@@ -74,16 +74,15 @@
             transition: border-color 0.3s ease;
         }
 
-
         .login-form input:focus {
             border-color: var(--primary-color);
             outline: none;
         }
 
         .login-form button {
-            width: 50%; /* 按钮宽度调整为50% */
+            width: 50%;
             padding: 0.8rem;
-            margin: 1rem auto; /* 居中 */
+            margin: 1rem auto;
             background: linear-gradient(45deg, var(--secondary-color), var(--primary-color));
             color: white;
             border: none;
@@ -163,7 +162,7 @@
             grid-area: user-area;
             display: flex;
             justify-content: center;
-            align-items: center; /* 0315新增：垂直居中 */
+            align-items: center;
             padding: 1rem;
             width: 100%;
         }
@@ -177,7 +176,7 @@
             max-width: 380px;
             display: none;
             border: 1px solid rgba(0, 243, 255, 0.2);
-            text-align: center; /* 0315新增：内容居中 */
+            text-align: center;
         }
 
         .auth-panel.active {
@@ -191,9 +190,9 @@
 
         .auth-panel div {
             margin: 0.8rem 0;
-            text-align: center; /* 0315新增：文本JZ */
-            display: block; /* 0315新增：确保每个字段单独一行 */
-            width: 100%;/*0315 确保宽度占满容器 */
+            text-align: center;
+            display: block;
+            width: 100%;
         }
 
         .config-panel {
@@ -308,6 +307,69 @@
             from { opacity: 0; transform: translateY(10px); }
             to { opacity: 1; transform: translateY(0); }
         }
+
+        /* 新增样式 */
+        .config-panel {
+            grid-template-columns: 1.2fr 1fr;
+            gap: 1.5rem;
+        }
+
+        .config-section {
+            background: rgba(25, 40, 60, 0.9);
+            padding: 1.2rem;
+            border-radius: 8px;
+            border: 1px solid rgba(0, 243, 255, 0.2);
+        }
+
+        .sub-account {
+            position: relative;
+            margin: 0.5rem 0;
+        }
+
+        .removeSub {
+            position: absolute;
+            right: 5px;
+            top: 5px;
+            background: #dc3545;
+            border: none;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            color: white;
+            cursor: pointer;
+            line-height: 1;
+        }
+
+        .add-btn {
+            background: #28a745;
+            padding: 0.4rem 0.8rem;
+            margin-top: 0.5rem;
+        }
+
+        .inline-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .save-btn { background: linear-gradient(45deg, #4CAF50, #2196F3); }
+        .run-btn { background: linear-gradient(45deg, #FF9800, #FF5722); }
+
+        textarea {
+            width: 100%;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(0, 243, 255, 0.2);
+            border-radius: 6px;
+            padding: 0.8rem;
+            color: var(--text-color);
+            resize: vertical;
+        }
     </style>
 </head>
 <body>
@@ -349,40 +411,80 @@
         </div>
 
         <div class="config-panel">
-            <form id="configForm" action="/generate" method="GET">
+            <!-- 新增的115配置区块 -->
+            <div class="config-section">
+                <h3>115自动化配置</h3>
                 <div class="form-group">
-                    <label for="direct_link_url">直连地址</label>
-                    <input type="url" id="direct_link_url" name="direct_link_url" value="http://172.17.0.1:8123" required>
-                </div>
-                <div class="form-group">
-                    <label for="parent_id">起始目录ID</label>
-                    <input type="number" id="parent_id" name="parent_id" value="0">
-                </div>
-                <div class="form-group">
-                    <label for="max_retries">重试次数</label>
-                    <input type="number" id="max_retries" name="max_retries" value="3" min="0">
+                    <label>主账号Cookie</label>
+                    <textarea id="mainCookie" rows="3" 
+                        placeholder="请输入主账号Cookie（JSON格式）"></textarea>
                 </div>
                 <div class="form-group">
-                    <label for="request_delay">请求间隔（秒）</label>
-                    <input type="number" id="request_delay" name="request_delay" value="1" min="0" step="0.1">
+                    <label>小号配置</label>
+                    <div id="subAccounts">
+                        <div class="sub-account">
+                            <textarea class="subCookie" rows="2"
+                                placeholder="小号Cookie（JSON格式）"></textarea>
+                            <button class="removeSub" onclick="removeSub(this)">×</button>
+                        </div>
+                    </div>
+                    <button class="add-btn" onclick="addSubAccount()">+ 添加小号</button>
                 </div>
-                <div class="form-group">
-                    <label for="dir_delay">目录间隔（秒）</label>
-                    <input type="number" id="dir_delay" name="dir_delay" value="2" min="0" step="0.1">
+                <div class="form-group inline-group">
+                    <div>
+                        <label>许愿内容</label>
+                        <input type="text" id="wishContent" 
+                            value="求一本钢铁是怎样炼成得书">
+                    </div>
+                    <div>
+                        <label>定时执行</label>
+                        <input type="time" id="scheduleTime" value="08:00">
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label for="timeout">下载超时（秒）</label>
-                    <input type="number" id="timeout" name="timeout" value="30" min="1">
+                <div class="action-buttons">
+                    <button class="save-btn" onclick="save115Config()">💾 保存配置</button>
+                    <button class="run-btn" onclick="run115Now()">🚀 立即执行</button>
                 </div>
-                <div class="form-group extension-group">
-                    <label for="video_exts">视频扩展名</label>
-                    <input type="text" id="video_exts" name="video_exts" value=".mp4,.mkv,.avi,.mov,.flv,.ts,.iso,.rmvb,.m2ts">
-                </div>
-                <div class="form-group extension-group">
-                    <label for="subtitle_exts">字幕扩展名</label>
-                    <input type="text" id="subtitle_exts" name="subtitle_exts" value=".srt,.ass,.ssa,.sub,.txt,.vtt,.ttml,.dfxp">
-                </div>
-            </form>
+            </div>
+
+            <!-- 原有的STRM配置区块 -->
+            <div class="config-section">
+                <h3>STRM生成配置</h3>
+                <form id="configForm" action="/generate" method="GET">
+                    <div class="form-group">
+                        <label for="direct_link_url">直连地址</label>
+                        <input type="url" id="direct_link_url" name="direct_link_url" value="http://172.17.0.1:8123" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="parent_id">起始目录ID</label>
+                        <input type="number" id="parent_id" name="parent_id" value="0">
+                    </div>
+                    <div class="form-group">
+                        <label for="max_retries">重试次数</label>
+                        <input type="number" id="max_retries" name="max_retries" value="3" min="0">
+                    </div>
+                    <div class="form-group">
+                        <label for="request_delay">请求间隔（秒）</label>
+                        <input type="number" id="request_delay" name="request_delay" value="1" min="0" step="0.1">
+                    </div>
+                    <div class="form-group">
+                        <label for="dir_delay">目录间隔（秒）</label>
+                        <input type="number" id="dir_delay" name="dir_delay" value="2" min="0" step="0.1">
+                    </div>
+                    <div class="form-group">
+                        <label for="timeout">下载超时（秒）</label>
+                        <input type="number" id="timeout" name="timeout" value="30" min="1">
+                    </div>
+                    <div class="form-group extension-group">
+                        <label for="video_exts">视频扩展名</label>
+                        <input type="text" id="video_exts" name="video_exts" value=".mp4,.mkv,.avi,.mov,.flv,.ts,.iso,.rmvb,.m2ts">
+                    </div>
+                    <div class="form-group extension-group">
+                        <label for="subtitle_exts">字幕扩展名</label>
+                        <input type="text" id="subtitle_exts" name="subtitle_exts" value=".srt,.ass,.ssa,.sub,.txt,.vtt,.ttml,.dfxp">
+                    </div>
+                </form>
+            </div>
         </div>
 
         <div class="log-panel" id="output"></div>
@@ -603,6 +705,77 @@
                 loading.style.display = 'none';
                 eventSource.close();
             });
+        });
+
+        // 新增115配置相关JS
+        async function load115Config() {
+            const res = await fetch('/115_config');
+            if (!res.ok) return;
+            
+            const config = await res.json();
+            document.getElementById('mainCookie').value = JSON.stringify(config.main || {}, null, 2);
+            document.getElementById('wishContent').value = config.content || '求一本钢铁是怎样炼成得书';
+            document.getElementById('scheduleTime').value = config.schedule_time || '08:00';
+            
+            // 加载小号
+            const subs = config.subs || [];
+            const container = document.getElementById('subAccounts');
+            container.innerHTML = '';
+            subs.forEach(sub => {
+                addSubAccount(JSON.stringify(sub, null, 2));
+            });
+        }
+
+        function addSubAccount(value = '') {
+            const div = document.createElement('div');
+            div.className = 'sub-account';
+            div.innerHTML = `
+                <textarea class="subCookie" rows="2">${value}</textarea>
+                <button class="removeSub" onclick="removeSub(this)">×</button>
+            `;
+            document.getElementById('subAccounts').appendChild(div);
+        }
+
+        function removeSub(btn) {
+            btn.parentElement.remove();
+        }
+
+        async function save115Config() {
+            const config = {
+                main: JSON.parse(document.getElementById('mainCookie').value),
+                subs: Array.from(document.querySelectorAll('.subCookie'))
+                    .map(el => JSON.parse(el.value)),
+                content: document.getElementById('wishContent').value,
+                schedule: document.getElementById('scheduleTime').value
+            };
+
+            const res = await fetch('/115_config', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(config)
+            });
+
+            if (res.ok) {
+                alert('配置保存成功');
+                load115Config();
+            } else {
+                alert('保存失败');
+            }
+        }
+
+        async function run115Now() {
+            const res = await fetch('/115_run_now', { method: 'POST' });
+            if (res.ok) {
+                alert('任务已触发，请查看日志');
+            } else {
+                alert('触发失败');
+            }
+        }
+
+        // 初始化时加载配置
+        document.addEventListener('DOMContentLoaded', () => {
+            checkLoginStatus();
+            load115Config();
         });
     </script>
 </body>
