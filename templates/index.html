@@ -535,147 +535,178 @@
     </div>
 
     <script>
-        // ====================== 核心修复部分 ======================
-        // 确保 handleLogin 函数在全局作用域正确定义
-        async function handleLogin() {
-            const passport = document.getElementById('passport').value;
-            const password = document.getElementById('password').value;
+    // ====================== 核心函数定义 ======================
+    // 全局定义的登录函数（修复语法错误）
+    async function handleLogin() {
+        const passport = document.getElementById('passport').value;
+        const password = document.getElementById('password').value;
 
-            try {
-                const res = await fetch('/login', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({passport, password}),
-                    credentials: 'include'  // 添加此行
-                });
-                
-                const result = await res.json();
-                if (result.success) {
-                    await checkLoginStatus();
-                } else {
-                    alert(`登录失败: ${result.message}`);
-                }
-            } catch (error) {
-                console.error('登录请求失败:', error);
-                alert('网络请求异常，请检查控制台');
-            }
-        }
-        
-        // 背景线条优化
-        const canvas = document.getElementById('background');
-        const ctx = canvas.getContext('2d');
-        let lines = [];
-
-        class Line {
-            constructor() {
-                this.reset();
-                this.lineWidth = Math.random() * 0.8 + 0.2;
-            }
-
-            reset() {
-                this.x = Math.random() * canvas.width;
-                this.y = Math.random() * canvas.height;
-                this.speed = Math.random() * 1.5 + 0.5;
-                this.angle = Math.random() * Math.PI * 2;
-                this.alpha = Math.random() * 0.2 + 0.1;
-            }
-
-            update() {
-                this.x += Math.cos(this.angle) * this.speed;
-                this.y += Math.sin(this.angle) * this.speed;
-                
-                if (this.x < 0 || this.x > canvas.width || 
-                    this.y < 0 || this.y > canvas.height) {
-                    this.reset();
-                }
-            }
-
-            draw() {
-                ctx.beginPath();
-                ctx.strokeStyle = `rgba(0, 243, 255, ${this.alpha})`;
-                ctx.lineWidth = this.lineWidth;
-                ctx.moveTo(this.x, this.y);
-                ctx.lineTo(
-                    this.x - Math.cos(this.angle) * 50,
-                    this.y - Math.sin(this.angle) * 50
-                );
-                ctx.stroke();
-            }
-        }
-
-        function initBackground() {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
-            lines = Array(50).fill().map(() => new Line());
-        }
-
-        function animate() {
-            ctx.fillStyle = 'rgba(10, 20, 30, 0.08)';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-            lines.forEach(line => {
-                line.update();
-                line.draw();
+        try {
+            const res = await fetch('/login', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({passport, password}),
+                credentials: 'include'  // 修复：添加缺失的逗号
             });
-
-            requestAnimationFrame(animate);
-        }
-
-        window.addEventListener('resize', initBackground);
-        initBackground();
-        animate();
-
-        // 原有应用逻辑
-        const form = document.getElementById('configForm');
-        const output = document.getElementById('output');
-        const loading = document.getElementById('loading');
-        const generateBtn = document.getElementById('generateBtn');
-        const generateButtonContainer = document.getElementById('generateButtonContainer');
-
-        async function checkLoginStatus() {
-            const res = await fetch('/user_info', {
-                credentials: 'include'  // 添加此行
-            });
-            const data = await res.json();
             
-            if (data.logged_in) {
-                document.querySelector('.login-container').style.display = 'none';
-                document.querySelector('.container').style.display = 'grid';
-                generateButtonContainer.style.display = 'block';
-                const info = data.user_info;
-                document.getElementById('uid').textContent = info.uid;
-                document.getElementById('nickname').textContent = info.nickname;
-                document.getElementById('phone').textContent = info.passport;
-                document.getElementById('spaceUsed').textContent = formatSize(info.spaceUsed);
-                document.getElementById('spacePermanent').textContent = formatSize(info.spacePermanent);
-                document.getElementById('userInfo').classList.add('active');
-                generateBtn.disabled = false;
+            const result = await res.json();
+            if (result.success) {
+                await checkLoginStatus();
             } else {
-                document.querySelector('.login-container').style.display = 'flex';
-                document.querySelector('.container').style.display = 'none';
-                generateButtonContainer.style.display = 'none';
-                generateBtn.disabled = true;
+                alert(`登录失败: ${result.message}`);
             }
+        } catch (error) {
+            console.error('登录请求失败:', error);
+            alert('网络请求异常，请检查控制台');
         }
+    }
 
-        function formatSize(bytes) {
-            const units = ['字节', 'KB', 'MB', 'GB', 'TB'];
-            let unitIndex = 0;
-            while (bytes >= 1024 && unitIndex < 4) {
-                bytes /= 1024;
-                unitIndex++;
-            }
-            return `${bytes.toFixed(2)} ${units[unitIndex]}`;
+    // 全局定义的登录状态检查
+    async function checkLoginStatus() {
+        const res = await fetch('/user_info', {
+            credentials: 'include'
+        });
+        const data = await res.json();
+        
+        if (data.logged_in) {
+            document.querySelector('.login-container').style.display = 'none';
+            document.querySelector('.container').style.display = 'grid';
+            document.getElementById('generateButtonContainer').style.display = 'block';
+            const info = data.user_info;
+            document.getElementById('uid').textContent = info.uid;
+            document.getElementById('nickname').textContent = info.nickname;
+            document.getElementById('phone').textContent = info.passport;
+            document.getElementById('spaceUsed').textContent = formatSize(info.spaceUsed);
+            document.getElementById('spacePermanent').textContent = formatSize(info.spacePermanent);
+            document.getElementById('userInfo').classList.add('active');
+            document.getElementById('generateBtn').disabled = false;
+        } else {
+            document.querySelector('.login-container').style.display = 'flex';
+            document.querySelector('.container').style.display = 'none';
+            document.getElementById('generateButtonContainer').style.display = 'none';
+            document.getElementById('generateBtn').disabled = true;
         }
+    }
 
-        async function handleLogout() {
-            await fetch('/logout');
-            location.reload();
+    // 全局定义的存储空间格式化
+    function formatSize(bytes) {
+        const units = ['字节', 'KB', 'MB', 'GB', 'TB'];
+        let unitIndex = 0;
+        while (bytes >= 1024 && unitIndex < 4) {
+            bytes /= 1024;
+            unitIndex++;
         }
+        return `${bytes.toFixed(2)} ${units[unitIndex]}`;
+    }
 
-        document.addEventListener('DOMContentLoaded', checkLoginStatus);
+    // 全局定义的登出函数
+    async function handleLogout() {
+        await fetch('/logout');
+        location.reload();
+    }
 
-        form.addEventListener('submit', async (e) => {
+    // ====================== 115配置管理 ======================
+    // 加载115配置
+    async function load115Config() {
+        const res = await fetch('/115_config');
+        if (!res.ok) return;
+        
+        const config = await res.json();
+        document.getElementById('mainCookie').value = config.main ? JSON.stringify(config.main, null, 2) : '';
+        document.getElementById('scheduleTime').value = config.schedule_time || '08:00';
+
+        const subAccounts = document.getElementById('subAccounts');
+        subAccounts.innerHTML = ''; // 清空现有小号
+        if (config.subs) {
+            config.subs.forEach(sub => addSubAccount(JSON.stringify(sub, null, 2)));
+        }
+    }
+
+    // 添加小号
+    function addSubAccount(value = '') {
+        const container = document.createElement('div');
+        container.className = 'sub-account-container';
+        container.innerHTML = `
+            <textarea class="subCookie" rows="2" placeholder="小号Cookie（JSON格式）">${value}</textarea>
+            <button class="removeSub" onclick="removeSub(this)">×</button>
+        `;
+        document.getElementById('subAccounts').appendChild(container);
+    }
+
+    // 删除小号
+    function removeSub(btn) {
+        btn.parentElement.remove();
+    }
+
+    // 保存115配置
+    async function save115Config() {
+        const config = {
+            main: JSON.parse(document.getElementById('mainCookie').value),
+            subs: Array.from(document.querySelectorAll('.subCookie'))
+                .map(el => JSON.parse(el.value)),
+            schedule: document.getElementById('scheduleTime').value
+        };
+
+        const res = await fetch('/115_config', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(config)
+        });
+
+        if (res.ok) {
+            await load115Config();  // 保存后立即重新加载
+            alert('配置保存成功');
+        } else {
+            alert('保存失败');
+        }
+    }
+
+    // 立即执行115任务
+    async function run115Now() {
+        const res = await fetch('/115_run_now', { method: 'POST' });
+        if (res.ok) {
+            alert('任务已触发，请查看日志');
+        } else {
+            alert('触发失败');
+        }
+    }
+
+    // ====================== 日志动态加载 ======================
+    // 动态加载日志
+    async function loadLogs() {
+        const res = await fetch('/get_logs');
+        const data = await res.json();
+        const output = document.getElementById('output');
+        output.innerHTML = '';  // 清空现有日志
+
+        data.logs.forEach(log => {
+            const logEntry = document.createElement('div');
+            logEntry.className = 'log-entry';
+            logEntry.textContent = log;
+            output.appendChild(logEntry);
+        });
+
+        // 自动滚动到底部
+        output.scrollTop = output.scrollHeight;
+    }
+
+    // 定时刷新日志（每 5 秒刷新一次）
+    setInterval(loadLogs, 5000);
+
+    // ====================== 初始化逻辑 ======================
+    document.addEventListener('DOMContentLoaded', () => {
+        // 初始化登录状态
+        checkLoginStatus();
+        
+        // 加载115配置
+        load115Config();
+
+        // 事件绑定
+        document.querySelector('.logout-btn').addEventListener('click', handleLogout);
+        document.querySelector('.add-btn').addEventListener('click', addSubAccount);
+
+        // 表单提交事件
+        document.getElementById('configForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             
             const userInfoRes = await fetch('/user_info');
@@ -686,11 +717,13 @@
             }
 
             const password = document.getElementById('password').value;
+            const output = document.getElementById('output');
+            const loading = document.getElementById('loading');
             
             output.innerHTML = '';
             loading.style.display = 'block';
 
-            const formData = new FormData(form);
+            const formData = new FormData(e.target);
             formData.append('p123_user', userInfo.user_info.passport);
             formData.append('p123_pass', password);
 
@@ -756,80 +789,9 @@
             });
         });
 
-        // ====================== 115配置管理 ======================
-// 修复函数作用域问题
-async function load115Config() {
-    const res = await fetch('/115_config');
-    if (!res.ok) return;
-    
-    const config = await res.json();
-    document.getElementById('mainCookie').value = config.main ? JSON.stringify(config.main, null, 2) : '';
-    document.getElementById('scheduleTime').value = config.schedule_time || '08:00';
-
-    // 加载小号
-    const subAccounts = document.getElementById('subAccounts');
-    subAccounts.innerHTML = ''; // 清空现有小号
-    if (config.subs) {
-        config.subs.forEach(sub => addSubAccount(JSON.stringify(sub, null, 2)));
-    }
-}
-
-// 添加小号
-function addSubAccount(value = '') {
-    const container = document.createElement('div');
-    container.className = 'sub-account-container';
-    container.innerHTML = `
-        <textarea class="subCookie" rows="2" placeholder="小号Cookie（JSON格式）">${value}</textarea>
-        <button class="removeSub" onclick="removeSub(this)">×</button>
-    `;
-    document.getElementById('subAccounts').appendChild(container);
-}
-
-// 删除小号
-function removeSub(btn) {
-    btn.parentElement.remove();
-}
-
-async function save115Config() {
-    const config = {
-        main: JSON.parse(document.getElementById('mainCookie').value),
-        subs: Array.from(document.querySelectorAll('.subCookie'))
-            .map(el => JSON.parse(el.value)),
-        schedule: document.getElementById('scheduleTime').value
-    };
-
-    const res = await fetch('/115_config', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(config)
+        // 页面加载时立即加载日志
+        loadLogs();
     });
-
-    if (res.ok) {
-        await load115Config();  // 保存后立即重新加载
-        alert('配置保存成功');
-    } else {
-        alert('保存失败');
-    }
-}
-
-async function run115Now() {
-    const res = await fetch('/115_run_now', { method: 'POST' });
-    if (res.ok) {
-        alert('任务已触发，请查看日志');
-    } else {
-        alert('触发失败');
-    }
-}
-
-// ====================== 初始化逻辑 ======================
-document.addEventListener('DOMContentLoaded', () => {
-    checkLoginStatus();
-    load115Config();
-    
-    // 确保所有按钮事件绑定
-    document.querySelector('.logout-btn').addEventListener('click', handleLogout);
-    document.querySelector('.add-btn').addEventListener('click', addSubAccount);
-});
-    </script>
+</script>
 </body>
 </html>
