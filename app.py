@@ -5,8 +5,11 @@ import logging
 import sys
 import io
 from dotenv import load_dotenv
-from auth import get_user_info_with_password  # 导入 get_user_info_with_password 函数
-from werkzeug.serving import WSGIRequestHandler  # 修复导入路径
+from auth import get_user_info_with_password
+from werkzeug.serving import WSGIRequestHandler
+from apscheduler.schedulers.background import BackgroundScheduler
+import json
+import time
 
 # 加载环境变量
 load_dotenv()
@@ -41,7 +44,10 @@ logging.getLogger('flask.app').setLevel(logging.ERROR)  # 设置 Flask 日志级
 # 禁用 httpx 和 p123 的日志输出
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
-logging.getLogger("p123").setLevel(logging.WARNING)       
+logging.getLogger("p123").setLevel(logging.WARNING)  
+
+# 115配置文件路径
+CONFIG115_PATH = os.getenv('CONFIG115_PATH', '/app/config/115_config.txt')
 
 
 # DeepSeek 风格配色
@@ -180,7 +186,126 @@ def generate_strm():
             yield f"event: error\ndata: 生成失败: {str(e)}\n\n"
             yield "event: close\ndata: \n\n"
         return Response(stream_with_context(generate_error()), content_type='text/event-stream')
+        
+############115配置路由
 
+# 初始化调度器
+scheduler = BackgroundScheduler()
+scheduler.start()
+
+def parse_115_config(content: str) -> dict:
+    """解析115配置文件内容"""
+    config = {"main": None, "subs": [], "params": {}}
+    current_section = None
+    for line in content.split('\n'):
+        line = line.strip()
+        if not line:
+            continue
+        if line.lower().startswith('main:'):
+            current_section = 'main'
+            continue
+        elif line.lower().startswith('subs:'):
+            current_section = 'subs'
+            continue
+        elif line.startswith('#'):
+            continue
+        
+        if current_section == 'main':
+            config['main'] = json.loads(line)
+        elif current_section == 'subs' and line.startswith('-'):
+            config['subs'].append(json.loads(line[1:].strip()))
+    return config
+
+def generate_115_config(config: dict) -> str:
+    """生成115配置文件内容"""
+    content = []
+    if config['main']:
+        content.append("Main:")
+        content.append(json.dumps(config['main'], ensure_ascii=False))
+    if config['subs']:
+        content.append("\nSubs:")
+        for sub in config['subs']:
+            content.append(f"- {json.dumps(sub, ensure_ascii=False)}")
+    return '\n'.join(content)
+
+@app.route('/115_config', methods=['GET', 'POST'])
+def handle_115_config():
+    if request.method == 'POST':
+        try:
+            # 构造配置文件内容
+            config_content = f"Main:\n{request.json['main_config']}\n\nSubs:\n"
+            config_content += '\n'.join([f"- {sub}" for sub in request.json['subs_config']])
+            
+            # 保存配置文件
+            with open(CONFIG115_PATH, 'w', encoding='utf-8') as f:
+                f.write(config_content)
+            
+            # 保存运行参数
+            with open(CONFIG115_PATH+'.params', 'w') as f:
+                json.dump({
+                    "max_wishes": request.json['max_wishes'],
+                    "delay": request.json['delay'],
+                    "schedule": request.json['schedule']
+                }, f)
+            
+            # 更新定时任务
+            if request.json['schedule']:
+                scheduler.add_job(
+                    run_115_task,
+                    'cron',
+                    hour=int(request.json['schedule'].split(':')[0]),
+                    minute=int(request.json['schedule'].split(':')[1]),
+                    id='115_daily_task'
+                )
+            
+            return jsonify(success=True)
+        except Exception as e:
+            return jsonify(success=False, message=str(e))
+    else:
+        try:
+            # 读取配置文件
+            with open(CONFIG115_PATH, 'r', encoding='utf-8') as f:
+                content = f.read()
+            config = parse_115_config(content)
+            
+            # 读取参数
+            with open(CONFIG115_PATH+'.params', 'r') as f:
+                params = json.load(f)
+            
+            return jsonify({
+                "main_config": json.dumps(config['main'], indent=2),
+                "subs_config": [json.dumps(sub, indent=2) for sub in config['subs']],
+                **params
+            })
+        except:
+            return jsonify({})
+
+@app.route('/run_115_task')
+def run_115_task():
+    def generate():
+        # 添加环境变量
+        env = os.environ.copy()
+        env.update({
+            'MAX_WISHES': str(request.args.get('max_wishes', 3)),
+            'DELAY': str(request.args.get('delay', 60))
+        })
+        
+        process = subprocess.Popen(
+            ['python', '115_auto.py'],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding='utf-8',
+            env=env
+        )
+        
+        for line in iter(process.stdout.readline, ''):
+            yield f"data: [115] {line}\n\n"
+        process.stdout.close()
+        yield "event: close\ndata: \n\n"
+    
+    return Response(stream_with_context(generate()), content_type='text/event-stream')
+        
 # 启动日志优化
 logger = logging.getLogger('strm_generator')
 logger.info("=== WEBUI已启动 ===")
