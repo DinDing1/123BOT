@@ -607,10 +607,14 @@
 
     // ====================== 115配置管理 ======================
     // 加载115配置
-    async function load115Config() {
+async function load115Config() {
+    try {
         const res = await fetch('/115_config');
-        if (!res.ok) return;
-        
+        if (!res.ok) {
+            console.error('加载配置失败:', res.statusText);
+            return;
+        }
+
         const config = await res.json();
         document.getElementById('mainCookie').value = config.main ? JSON.stringify(config.main, null, 2) : '';
         document.getElementById('scheduleTime').value = config.schedule_time || '08:00';
@@ -620,7 +624,10 @@
         if (config.subs) {
             config.subs.forEach(sub => addSubAccount(JSON.stringify(sub, null, 2)));
         }
+    } catch (error) {
+        console.error('加载配置失败:', error);
     }
+}
 
     // 添加小号
     function addSubAccount(value = '') {
