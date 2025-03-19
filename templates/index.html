@@ -514,6 +514,73 @@
         initBackground();
         animate();
 
+         // 115配置相关逻辑
+        async function save115Config() {
+            try {
+                const config = {
+                    main_config: document.getElementById('main_config').value,
+                    subs_config: document.getElementById('subs_config').value.split('\n').filter(l => l.trim()),
+                    max_wishes: parseInt(document.getElementById('max_wishes').value),
+                    delay: parseInt(document.getElementById('delay').value),
+                    schedule: document.getElementById('schedule_time').value
+                };
+
+                const res = await fetch('/115_config', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(config)
+                });
+                
+                if (!res.ok) throw new Error('保存失败');
+                alert('配置保存成功');
+            } catch (e) {
+                alert(`保存失败: ${e.message}`);
+            }
+        }
+
+        async function load115Config() {
+            try {
+                const res = await fetch('/115_config');
+                const config = await res.json();
+                
+                document.getElementById('main_config').value = config.main_config || '';
+                document.getElementById('subs_config').value = (config.subs_config || []).join('\n');
+                document.getElementById('max_wishes').value = config.max_wishes || 3;
+                document.getElementById('delay').value = config.delay || 60;
+                document.getElementById('schedule_time').value = config.schedule || '';
+            } catch (e) {
+                console.error('加载配置失败:', e);
+            }
+        }
+
+        function run115Task() {
+            const output = document.getElementById('output');
+            const eventSource = new EventSource('/run_115_task');
+            
+            eventSource.onmessage = (e) => {
+                const line = e.data.replace('data: ', '').trim();
+                const logEntry = document.createElement('div');
+                logEntry.className = 'log-entry';
+                logEntry.innerHTML = `
+                    <span class="log-time">${new Date().toLocaleTimeString()}</span>
+                    <span>${line}</span>
+                `;
+                output.appendChild(logEntry);
+                output.scrollTop = output.scrollHeight;
+            };
+            
+            eventSource.onerror = () => {
+                eventSource.close();
+            };
+        }
+
+        // 初始化加载配置
+        document.addEventListener('DOMContentLoaded', () => {
+            load115Config();
+            checkLoginStatus();
+        });
+
+
         // 原有应用逻辑
         const form = document.getElementById('configForm');
         const output = document.getElementById('output');
@@ -590,7 +657,9 @@
                 return;
             }
 
-            const password = document.getElementById('password').value;
+            const password = document.getElementById('password').value
+
+            
             
             output.innerHTML = '';
             loading.style.display = 'block';
