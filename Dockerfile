@@ -48,7 +48,7 @@ COPY . .
 RUN chmod +x /app/auth_check.sh
 
 # 创建日志文件并设置权限
-RUN touch /app/cache/config/115_auto.log && chmod 666 /app/cache/config/115_auto.log
+RUN touch /app/cache/config/115_auto.log && chmod 777 /app/cache/config/115_auto.log
 
 # 暴露端口
 EXPOSE 8123 8124
@@ -58,10 +58,12 @@ ENV FLASK_APP=app.py \
     FLASK_ENV=production \
     PYTHONUNBUFFERED=1 \
     PYTHONPATH=/app \
-    LOG_FILE=/app/cache/config/115_auto.log \
+    LOG_FILE=/app/cache/config/115_auto.log
 
 # 入口点
 ENTRYPOINT ["/app/auth_check.sh"]
+
+# 启动命令
 CMD ["sh", "-c", \
     "flask run --host=0.0.0.0 --port=8124 & \
     uvicorn main:app --host 0.0.0.0 --port=8123 --no-access-log & \
