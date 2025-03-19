@@ -46,7 +46,7 @@ EXPOSE 8123 8124
 # 初始化配置
 VOLUME /app/cache/config
 RUN touch /app/cache/config/115_config.json \
-    && chmod 666 /app/cache/config/115_config.json
+    && chmod 777 /app/cache/config/115_config.json
 
 # 启动命令
 ENTRYPOINT ["/app/auth_check.sh"]
