@@ -9,6 +9,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 import json
 from auth import get_user_info_with_password
 from werkzeug.serving import WSGIRequestHandler
+import subprocess
 
 # ------------------- 基础配置 -------------------
 # 日志存储（使用 deque 限制最大日志条数）
