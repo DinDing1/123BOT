@@ -646,7 +646,7 @@ async function load115Config() {
     }
 
     // 保存115配置
-    async function save115Config() {
+async function save115Config() {
     try {
         const mainCookie = document.getElementById('mainCookie').value;
         const subCookies = Array.from(document.querySelectorAll('.subCookie')).map(el => el.value);
