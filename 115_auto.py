@@ -9,7 +9,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 import json
 from auth import get_user_info_with_password
 from werkzeug.serving import WSGIRequestHandler
-import subprocess
+import subprocess  # 导入 subprocess 模块
 
 # ------------------- 基础配置 -------------------
 # 日志存储（使用 deque 限制最大日志条数）
@@ -192,6 +192,19 @@ def handle_log():
 def get_logs():
     """获取存储的日志"""
     return jsonify({"logs": list(log_store)})
+
+@app.route('/get_local_logs', methods=['GET'])
+def get_local_logs():
+    """读取本地日志文件并返回日志内容"""
+    log_file = os.getenv("LOG_FILE", "/app/cache/config/115_auto.log")
+    try:
+        if not os.path.exists(log_file):
+            return jsonify({"logs": ["日志文件不存在"]})  # 返回空日志或提示信息
+        with open(log_file, "r", encoding="utf-8") as f:
+            logs = f.readlines()
+        return jsonify({"logs": logs})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
 
 # ------------------- 初始化逻辑 -------------------
 @app.before_first_request
