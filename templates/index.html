@@ -106,25 +106,14 @@
 
         /* 主界面容器 */
         .container {
-            flex: 1;
-            margin: 20px;
-            background: rgba(20, 30, 45, 0.95);
-            border-radius: 12px;
-            box-shadow: var(--neon-effect);
-            padding: 1.2rem;
-            display: none;
             grid-template-areas: 
                 "header header"
-                "user-area log-panel"
-                "config-panel log-panel";
-            grid-template-columns: 1fr 1fr;
+                "user-area 115-panel"
+                "config-panel log-panel"
+                "generate log-panel";
+            grid-template-columns: 1fr 1.5fr;
             grid-template-rows: auto auto 1fr;
             gap: 1.2rem;
-            min-height: 680px;
-            overflow: hidden;
-            box-sizing: border-box;
-            border: 1px solid rgba(0, 243, 255, 0.2);
-            backdrop-filter: blur(5px);
         }
 
         .header {
@@ -160,12 +149,7 @@
         }
 
         .user-area {
-            grid-area: user-area;
-            display: flex;
-            justify-content: center;
-            align-items: center; /* 0315新增：垂直居中 */
-            padding: 1rem;
-            width: 100%;
+            height: 380px;
         }
 
         .auth-panel {
@@ -304,6 +288,47 @@
             color: var(--primary-color);
         }
 
+                /* 新增115面板样式 */
+        .panel-115 {
+            height: 380px;
+            overflow-y: auto;
+            grid-area: 115-panel;
+            background: rgba(25, 40, 60, 0.9);
+            padding: 1.2rem;
+            border-radius: 8px;
+            border: 1px solid rgba(0, 243, 255, 0.3);
+            box-shadow: var(--neon-effect);
+            backdrop-filter: blur(3px);
+        }
+
+        .panel-115 textarea {
+            width: 100%;
+            background: rgba(255, 255, 255, 0.08);
+            color: var(--text-color);
+            border: 1px solid rgba(0, 243, 255, 0.2);
+            padding: 0.8rem;
+            margin: 0.5rem 0;
+            border-radius: 6px;
+            font-family: 'Consolas', monospace;
+            font-size: 0.9rem;
+            resize: vertical;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 1rem;
+            margin-top: 1.5rem;
+        }
+
+        .button-group button {
+            flex: 1;
+            padding: 0.6rem;
+            background: linear-gradient(45deg, var(--secondary-color), var(--primary-color));
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(10px); }
             to { opacity: 1; transform: translateY(0); }
@@ -346,6 +371,37 @@
                 <div><span>💾 已用空间: <span id="spaceUsed"></span></span></div>
                 <button class="logout-btn" onclick="handleLogout()">退出</button>
             </div>
+        </div>
+
+        <!-- 新增115配置面板 -->
+        <div class="panel-115">
+            <h2>⚡ 115功能配置</h2>
+            <form id="config115Form">
+                <div class="form-group">
+                    <label>主账号配置</label>
+                    <textarea id="main_config" rows="5" placeholder="Main:\n{...}"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>小号配置（每行一个）</label>
+                    <textarea id="subs_config" rows="10" placeholder="Subs:\n- {...}"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>许愿次数</label>
+                    <input type="number" id="max_wishes" value="3" min="1">
+                </div>
+                <div class="form-group">
+                    <label>间隔时间(秒)</label>
+                    <input type="number" id="delay" value="60" min="10">
+                </div>
+                <div class="form-group">
+                    <label>定时执行</label>
+                    <input type="time" id="schedule_time">
+                </div>
+                <div class="button-group">
+                    <button type="button" onclick="save115Config()">保存配置</button>
+                    <button type="button" onclick="run115Task()">立即执行</button>
+                </div>
+            </form>
         </div>
 
         <div class="config-panel">
