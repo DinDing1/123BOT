@@ -65,7 +65,7 @@
         .login-form input {
             width: calc(100% - 2rem);
             padding: 0.8rem 1rem;
-            margin: 0.5rem auto;
+            margin: 0.5rem auto; /* 调整上下间距 居中 */
             background: rgba(255, 255, 255, 0.08);
             border: 1px solid rgba(0, 243, 255, 0.2);
             border-radius: 8px;
@@ -74,15 +74,16 @@
             transition: border-color 0.3s ease;
         }
 
+
         .login-form input:focus {
             border-color: var(--primary-color);
             outline: none;
         }
 
         .login-form button {
-            width: 50%;
+            width: 50%; /* 按钮宽度调整为50% */
             padding: 0.8rem;
-            margin: 1rem auto;
+            margin: 1rem auto; /* 居中 */
             background: linear-gradient(45deg, var(--secondary-color), var(--primary-color));
             color: white;
             border: none;
@@ -117,7 +118,7 @@
                 "user-area log-panel"
                 "config-panel log-panel";
             grid-template-columns: 1fr 1fr;
-            grid-template-rows: auto 1fr;
+            grid-template-rows: auto auto 1fr;
             gap: 1.2rem;
             min-height: 680px;
             overflow: hidden;
@@ -162,7 +163,7 @@
             grid-area: user-area;
             display: flex;
             justify-content: center;
-            align-items: center;
+            align-items: center; /* 0315新增：垂直居中 */
             padding: 1rem;
             width: 100%;
         }
@@ -176,7 +177,7 @@
             max-width: 380px;
             display: none;
             border: 1px solid rgba(0, 243, 255, 0.2);
-            text-align: center;
+            text-align: center; /* 0315新增：内容居中 */
         }
 
         .auth-panel.active {
@@ -190,41 +191,21 @@
 
         .auth-panel div {
             margin: 0.8rem 0;
-            text-align: center;
-            display: block;
-            width: 100%;
+            text-align: center; /* 0315新增：文本JZ */
+            display: block; /* 0315新增：确保每个字段单独一行 */
+            width: 100%;/*0315 确保宽度占满容器 */
         }
 
         .config-panel {
             grid-area: config-panel;
             display: grid;
-            grid-template-columns: 1.2fr 1fr;
-            gap: 1.5rem;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 1rem;
             align-content: start;
         }
 
-        .config-section {
-            background: rgba(25, 40, 60, 0.9);
-            padding: 1.5rem;
-            border-radius: 8px;
-            border: 1px solid rgba(0, 243, 255, 0.2);
-        }
-
-        .grid-form {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 1.2rem;
-            align-items: start;
-        }
-
-        .grid-form .form-group {
-            margin-bottom: 1rem;
-        }
-
-        .grid-form label {
-            text-align: center;
-            display: block;
-            margin-bottom: 0.5rem;
+        #configForm {
+            display: contents;
         }
 
         .form-group {
@@ -267,7 +248,7 @@
             font-family: 'Consolas', monospace;
             font-size: 0.8rem;
             line-height: 1.4;
-            height: calc(100% - 2.4rem); /* 调整高度，与配置区域对齐 */
+            height: 62vh;
             overflow-y: auto;
             border: 1px solid rgba(0, 243, 255, 0.2);
         }
@@ -327,94 +308,6 @@
             from { opacity: 0; transform: translateY(10px); }
             to { opacity: 1; transform: translateY(0); }
         }
-
-        /* 新增样式 */
-        .full-width {
-            width: 100%;
-            box-sizing: border-box;
-        }
-
-        .sub-account-container {
-            position: relative;
-            margin: 0.8rem 0;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-
-        .sub-account-container textarea {
-            flex: 1;
-            min-height: 80px;
-        }
-
-        .removeSub {
-            background: #dc3545;
-            border: none;
-            border-radius: 50%;
-            width: 24px;
-            height: 24px;
-            color: white;
-            cursor: pointer;
-            font-size: 1.2rem;
-            line-height: 1;
-            flex-shrink: 0;
-        }
-
-        .removeSub:hover {
-            background: #bb2d3b;
-        }
-
-        .add-btn {
-            width: 100%;
-            margin-top: 0.5rem;
-        }
-
-        .action-buttons {
-            display: flex;
-            gap: 1rem;
-            justify-content: space-between;
-            margin-top: 1rem;
-        }
-
-/* 统一输入框样式 */
-        input, textarea {
-            padding: 0.6rem;
-            background: rgba(255, 255, 255, 0.1);
-            border: 1px solid rgba(0, 243, 255, 0.2);
-            border-radius: 6px;
-            font-size: 0.9rem;
-            color: var(--text-color);
-            transition: all 0.3s ease;
-            width: 100%;
-            box-sizing: border-box;
-       }
-
-        input:focus, textarea:focus {
-            border-color: var(--primary-color);
-            outline: none;
-       }
-
-/* 主账号Cookie和小号配置输入框 */
-        #mainCookie, .subCookie {
-            height: 80px; /* 统一高度 */
-            resize: vertical; /* 允许垂直调整大小 */
-       }
-
-/* 生成配置输入框 */
-        #direct_link_url, #parent_id, #max_retries, #request_delay, #dir_delay, #timeout, #video_exts, #subtitle_exts {
-            height: 40px; /* 统一高度 */
-       }
-
-        /* 响应式布局 */
-        @media (max-width: 768px) {
-            .grid-form {
-                grid-template-columns: 1fr;
-            }
-            
-            .config-panel {
-                grid-template-columns: 1fr;
-            }
-        }
     </style>
 </head>
 <body>
@@ -437,6 +330,7 @@
     <div class="container">
         <div class="header">
             <div class="logo">123Media_STRM</div>
+            <p>感谢🈲贫大佬，祝🈲贫大佬长命百岁</p>
             <div class="divider"></div>
             <div class="version">版本号: v2.0.1 | 作者: dinding</div>
         </div>
@@ -455,75 +349,40 @@
         </div>
 
         <div class="config-panel">
-            <!-- 115配置区块 -->
-            <div class="config-section">
-                <h3 style="text-align: center;">⚙️ 115自动化配置</h3>
+            <form id="configForm" action="/generate" method="GET">
                 <div class="form-group">
-                    <label>主账号Cookie</label>
-                    <textarea id="mainCookie" rows="3" 
-                        placeholder="请输入主账号Cookie（JSON格式）" class="full-width"></textarea>
+                    <label for="direct_link_url">直连地址</label>
+                    <input type="url" id="direct_link_url" name="direct_link_url" value="http://172.17.0.1:8123" required>
                 </div>
                 <div class="form-group">
-                    <label>小号配置</label>
-                    <div id="subAccounts">
-                        <div class="sub-account-container">
-                            <textarea class="subCookie" rows="2"
-                                placeholder="小号Cookie（JSON格式）"></textarea>
-                            <button class="removeSub" onclick="removeSub(this)">×</button>
-                        </div>
-                    </div>
-                    <button class="add-btn" id="addSubBtn">+ 添加小号</button>
+                    <label for="parent_id">起始目录ID</label>
+                    <input type="number" id="parent_id" name="parent_id" value="0">
                 </div>
-                <div class="form-group inline-group">
-                    <div>
-                        <label>定时执行</label>
-                        <input type="time" id="scheduleTime" value="08:00">
-                    </div>
+                <div class="form-group">
+                    <label for="max_retries">重试次数</label>
+                    <input type="number" id="max_retries" name="max_retries" value="3" min="0">
                 </div>
-                <div class="action-buttons">
-                    <button class="save-btn" id="save115Btn">💾 保存配置</button>
-                    <button class="run-btn" id="run115Btn">🚀 立即执行</button>
+                <div class="form-group">
+                    <label for="request_delay">请求间隔（秒）</label>
+                    <input type="number" id="request_delay" name="request_delay" value="1" min="0" step="0.1">
                 </div>
-            </div>
-
-            <!-- STRM生成配置区块 -->
-            <div class="config-section">
-                <h3 style="text-align: center;">⚙️ STRM生成配置</h3>
-                <form id="configForm" action="/generate" method="GET" class="grid-form">
-                    <div class="form-group">
-                        <label for="direct_link_url">直连地址</label>
-                        <input type="url" id="direct_link_url" name="direct_link_url" value="http://172.17.0.1:8123" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="parent_id">起始目录ID</label>
-                        <input type="number" id="parent_id" name="parent_id" value="0">
-                    </div>
-                    <div class="form-group">
-                        <label for="max_retries">重试次数</label>
-                        <input type="number" id="max_retries" name="max_retries" value="3" min="0">
-                    </div>
-                    <div class="form-group">
-                        <label for="request_delay">请求间隔（秒）</label>
-                        <input type="number" id="request_delay" name="request_delay" value="1" min="0" step="0.1">
-                    </div>
-                    <div class="form-group">
-                        <label for="dir_delay">目录间隔（秒）</label>
-                        <input type="number" id="dir_delay" name="dir_delay" value="2" min="0" step="0.1">
-                    </div>
-                    <div class="form-group">
-                        <label for="timeout">下载超时（秒）</label>
-                        <input type="number" id="timeout" name="timeout" value="30" min="1">
-                    </div>
-                    <div class="form-group">
-                        <label for="video_exts">视频扩展名</label>
-                        <input type="text" id="video_exts" name="video_exts" value=".mp4,.mkv,.avi,.mov,.flv,.ts,.iso,.rmvb,.m2ts">
-                    </div>
-                    <div class="form-group">
-                        <label for="subtitle_exts">字幕扩展名</label>
-                        <input type="text" id="subtitle_exts" name="subtitle_exts" value=".srt,.ass,.ssa,.sub,.txt,.vtt,.ttml,.dfxp">
-                    </div>
-                </form>
-            </div>
+                <div class="form-group">
+                    <label for="dir_delay">目录间隔（秒）</label>
+                    <input type="number" id="dir_delay" name="dir_delay" value="2" min="0" step="0.1">
+                </div>
+                <div class="form-group">
+                    <label for="timeout">下载超时（秒）</label>
+                    <input type="number" id="timeout" name="timeout" value="30" min="1">
+                </div>
+                <div class="form-group extension-group">
+                    <label for="video_exts">视频扩展名</label>
+                    <input type="text" id="video_exts" name="video_exts" value=".mp4,.mkv,.avi,.mov,.flv,.ts,.iso,.rmvb,.m2ts">
+                </div>
+                <div class="form-group extension-group">
+                    <label for="subtitle_exts">字幕扩展名</label>
+                    <input type="text" id="subtitle_exts" name="subtitle_exts" value=".srt,.ass,.ssa,.sub,.txt,.vtt,.ttml,.dfxp">
+                </div>
+            </form>
         </div>
 
         <div class="log-panel" id="output"></div>
@@ -535,18 +394,119 @@
     </div>
 
     <script>
-    // ====================== 核心函数定义 ======================
-    // 全局定义的登录函数
-    async function handleLogin() {
-        const passport = document.getElementById('passport').value;
-        const password = document.getElementById('password').value;
+        // 背景线条优化
+        const canvas = document.getElementById('background');
+        const ctx = canvas.getContext('2d');
+        let lines = [];
 
-        try {
+        class Line {
+            constructor() {
+                this.reset();
+                this.lineWidth = Math.random() * 0.8 + 0.2;
+            }
+
+            reset() {
+                this.x = Math.random() * canvas.width;
+                this.y = Math.random() * canvas.height;
+                this.speed = Math.random() * 1.5 + 0.5;
+                this.angle = Math.random() * Math.PI * 2;
+                this.alpha = Math.random() * 0.2 + 0.1;
+            }
+
+            update() {
+                this.x += Math.cos(this.angle) * this.speed;
+                this.y += Math.sin(this.angle) * this.speed;
+                
+                if (this.x < 0 || this.x > canvas.width || 
+                    this.y < 0 || this.y > canvas.height) {
+                    this.reset();
+                }
+            }
+
+            draw() {
+                ctx.beginPath();
+                ctx.strokeStyle = `rgba(0, 243, 255, ${this.alpha})`;
+                ctx.lineWidth = this.lineWidth;
+                ctx.moveTo(this.x, this.y);
+                ctx.lineTo(
+                    this.x - Math.cos(this.angle) * 50,
+                    this.y - Math.sin(this.angle) * 50
+                );
+                ctx.stroke();
+            }
+        }
+
+        function initBackground() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            lines = Array(50).fill().map(() => new Line());
+        }
+
+        function animate() {
+            ctx.fillStyle = 'rgba(10, 20, 30, 0.08)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            lines.forEach(line => {
+                line.update();
+                line.draw();
+            });
+
+            requestAnimationFrame(animate);
+        }
+
+        window.addEventListener('resize', initBackground);
+        initBackground();
+        animate();
+
+        // 原有应用逻辑
+        const form = document.getElementById('configForm');
+        const output = document.getElementById('output');
+        const loading = document.getElementById('loading');
+        const generateBtn = document.getElementById('generateBtn');
+        const generateButtonContainer = document.getElementById('generateButtonContainer');
+
+        async function checkLoginStatus() {
+            const res = await fetch('/user_info');
+            const data = await res.json();
+            
+            if (data.logged_in) {
+                document.querySelector('.login-container').style.display = 'none';
+                document.querySelector('.container').style.display = 'grid';
+                generateButtonContainer.style.display = 'block';
+                const info = data.user_info;
+                document.getElementById('uid').textContent = info.uid;
+                document.getElementById('nickname').textContent = info.nickname;
+                document.getElementById('phone').textContent = info.passport;
+                document.getElementById('spaceUsed').textContent = formatSize(info.spaceUsed);
+                document.getElementById('spacePermanent').textContent = formatSize(info.spacePermanent);
+                document.getElementById('userInfo').classList.add('active');
+                generateBtn.disabled = false;
+            } else {
+                document.querySelector('.login-container').style.display = 'flex';
+                document.querySelector('.container').style.display = 'none';
+                generateButtonContainer.style.display = 'none';
+                generateBtn.disabled = true;
+            }
+        }
+
+        function formatSize(bytes) {
+            const units = ['字节', 'KB', 'MB', 'GB', 'TB'];
+            let unitIndex = 0;
+            while (bytes >= 1024 && unitIndex < 4) {
+                bytes /= 1024;
+                unitIndex++;
+            }
+            return `${bytes.toFixed(2)} ${units[unitIndex]}`;
+        }
+
+        async function handleLogin() {
+            const passport = document.getElementById('passport').value;
+            const password = document.getElementById('password').value;
+            
             const res = await fetch('/login', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({passport, password}),
-                credentials: 'include'
+                body: JSON.stringify({passport, password})
             });
             
             const result = await res.json();
@@ -555,176 +515,16 @@
             } else {
                 alert(`登录失败: ${result.message}`);
             }
-        } catch (error) {
-            console.error('登录请求失败:', error);
-            alert('网络请求异常，请检查控制台');
         }
-    }
 
-    // 全局定义的登录状态检查
-    async function checkLoginStatus() {
-        const res = await fetch('/user_info', {
-            credentials: 'include'
-        });
-        const data = await res.json();
-        
-        if (data.logged_in) {
-            document.querySelector('.login-container').style.display = 'none';
-            document.querySelector('.container').style.display = 'grid';
-            document.getElementById('generateButtonContainer').style.display = 'block';
-            const info = data.user_info;
-            document.getElementById('uid').textContent = info.uid;
-            document.getElementById('nickname').textContent = info.nickname;
-            document.getElementById('phone').textContent = info.passport;
-            document.getElementById('spaceUsed').textContent = formatSize(info.spaceUsed);
-            document.getElementById('spacePermanent').textContent = formatSize(info.spacePermanent);
-            document.getElementById('userInfo').classList.add('active');
-            document.getElementById('generateBtn').disabled = false;
-        } else {
-            document.querySelector('.login-container').style.display = 'flex';
-            document.querySelector('.container').style.display = 'none';
-            document.getElementById('generateButtonContainer').style.display = 'none';
-            document.getElementById('generateBtn').disabled = true;
+        async function handleLogout() {
+            await fetch('/logout');
+            location.reload();
         }
-    }
 
-    // 全局定义的存储空间格式化
-    function formatSize(bytes) {
-        const units = ['字节', 'KB', 'MB', 'GB', 'TB'];
-        let unitIndex = 0;
-        while (bytes >= 1024 && unitIndex < 4) {
-            bytes /= 1024;
-            unitIndex++;
-        }
-        return `${bytes.toFixed(2)} ${units[unitIndex]}`;
-    }
+        document.addEventListener('DOMContentLoaded', checkLoginStatus);
 
-    // 全局定义的登出函数
-    async function handleLogout() {
-        await fetch('/logout');
-        location.reload();
-    }
-
-    // ====================== 115配置管理 ======================
-    // 加载配置
-    async function load115Config() {
-        try {
-            const res = await fetch('/115_config');
-            const config = await res.json();
-            
-            document.getElementById('mainCookie').value = JSON.stringify(config.main, null, 2);
-            document.getElementById('scheduleTime').value = config.schedule_time;
-
-            const subAccounts = document.getElementById('subAccounts');
-            subAccounts.innerHTML = '';
-            config.subs.forEach(sub => {
-                addSubAccount(JSON.stringify(sub, null, 2));
-            });
-        } catch (error) {
-            console.error('加载配置失败:', error);
-        }
-    }
-
-    // 添加小号
-    function addSubAccount(value = '') {
-        const container = document.createElement('div');
-        container.className = 'sub-account-container';
-        container.innerHTML = `
-            <textarea class="subCookie" rows="2" placeholder="小号Cookie（JSON格式）">${value}</textarea>
-            <button class="removeSub">×</button>
-        `;
-        container.querySelector('.removeSub').addEventListener('click', () => removeSub(container));
-        document.getElementById('subAccounts').appendChild(container);
-    }
-
-    // 删除小号
-    function removeSub(container) {
-        container.remove();
-    }
-
-    // 保存配置
-    async function save115Config() {
-        try {
-            const config = {
-                main: JSON.parse(document.getElementById('mainCookie').value),
-                subs: Array.from(document.querySelectorAll('.subCookie'))
-                         .map(el => JSON.parse(el.value)),
-                schedule_time: document.getElementById('scheduleTime').value
-            };
-
-            const res = await fetch('/115_config', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify(config)
-            });
-
-            if (res.ok) {
-                alert('配置保存成功');
-                await load115Config(); // 重新加载
-            } else {
-                alert('保存失败');
-            }
-        } catch (error) {
-            alert('JSON格式错误，请检查输入');
-        }
-    }
-
-    // 立即执行115任务
-    async function run115Now() {
-        try {
-            const res = await fetch('/115_run_now', { method: 'POST' });
-            if (res.ok) {
-                alert('任务已触发，请查看日志');
-                loadLocalLogs(); // 立即刷新日志
-            } else {
-                alert('触发失败，请检查网络');
-            }
-        } catch (error) {
-            console.error('触发任务失败:', error);
-            alert('网络请求异常');
-        }
-    }
-
-    // ====================== 日志管理 ======================
-    // 动态加载日志
-    async function loadLocalLogs() {
-        try {
-            const res = await fetch('/get_local_logs');
-            const data = await res.json();
-            const output = document.getElementById('output');
-            output.innerHTML = '';
-
-            if (data.logs && data.logs.length > 0) {
-                data.logs.forEach(log => {
-                    const logEntry = document.createElement('div');
-                    logEntry.className = 'log-entry';
-                    logEntry.textContent = log;
-                    output.appendChild(logEntry);
-                });
-            } else {
-                output.innerHTML = '<div class="log-entry">暂无运行日志</div>';
-            }
-            output.scrollTop = output.scrollHeight;
-        } catch (error) {
-            console.error('加载日志失败:', error);
-        }
-    }
-
-    // ====================== 初始化逻辑 ======================
-    document.addEventListener('DOMContentLoaded', () => {
-        // 初始化登录状态
-        checkLoginStatus();
-        
-        // 加载115配置（确保至少一个输入框）
-        load115Config();
-
-        // 事件绑定
-        document.getElementById('addSubBtn').addEventListener('click', () => addSubAccount());
-        document.getElementById('save115Btn').addEventListener('click', save115Config);
-        document.getElementById('run115Btn').addEventListener('click', run115Now);
-
-        // 表单提交事件
-        document.getElementById('configForm').addEventListener('submit', async (e) => {
+        form.addEventListener('submit', async (e) => {
             e.preventDefault();
             
             const userInfoRes = await fetch('/user_info');
@@ -734,15 +534,14 @@
                 return;
             }
 
-            const output = document.getElementById('output');
-            const loading = document.getElementById('loading');
+            const password = document.getElementById('password').value;
             
             output.innerHTML = '';
             loading.style.display = 'block';
 
-            const formData = new FormData(e.target);
+            const formData = new FormData(form);
             formData.append('p123_user', userInfo.user_info.passport);
-            formData.append('p123_pass', document.getElementById('password').value);
+            formData.append('p123_pass', password);
 
             const eventSource = new EventSource(`/generate?${new URLSearchParams(formData)}`);
 
@@ -751,31 +550,40 @@
                 const logEntry = document.createElement('div');
                 logEntry.className = 'log-entry';
 
-                // 日志分类处理
                 if (rawLine.includes('PROCESS_EXIT_CODE:')) {
                     const code = rawLine.split(':')[1];
                     loading.style.display = 'none';
                     eventSource.close();
-                    logEntry.innerHTML = `
-                        <span class="log-time">${new Date().toLocaleTimeString()}</span>
-                        <span class="${code === '0' ? 'log-success' : 'log-error'}">
-                            任务完成，退出码: ${code}
-                        </span>
-                    `;
+                    if (code !== '0') {
+                        logEntry.innerHTML = `
+                            <span class="log-time">${new Date().toLocaleTimeString()}</span>
+                            <span class="log-error">生成过程出现错误，退出码: ${code}</span>
+                        `;
+                    } else {
+                        logEntry.innerHTML = `
+                            <span class="log-time">${new Date().toLocaleTimeString()}</span>
+                            <span class="log-success">任务完成，退出码: ${code}</span>
+                        `;
+                    }
                 } else if (rawLine.startsWith('[SUCCESS]')) {
                     logEntry.innerHTML = `
                         <span class="log-time">${new Date().toLocaleTimeString()}</span>
-                        <span class="log-success">${rawLine.slice(9)}</span>
+                        <span class="log-success">${rawLine.replace('[SUCCESS] ', '')}</span>
+                    `;
+                } else if (rawLine.startsWith('[PROCESS]')) {
+                    logEntry.innerHTML = `
+                        <span class="log-time">${new Date().toLocaleTimeString()}</span>
+                        <span class="log-process">${rawLine.replace('[PROCESS] ', '')}</span>
                     `;
                 } else if (rawLine.startsWith('[ERROR]')) {
                     logEntry.innerHTML = `
                         <span class="log-time">${new Date().toLocaleTimeString()}</span>
-                        <span class="log-error">${rawLine.slice(7)}</span>
+                        <span class="log-error">${rawLine.replace('[ERROR] ', '')}</span>
                     `;
                 } else {
                     logEntry.innerHTML = `
                         <span class="log-time">${new Date().toLocaleTimeString()}</span>
-                        <span class="log-process">${rawLine}</span>
+                        <span class="log-file">${rawLine}</span>
                     `;
                 }
 
@@ -783,18 +591,19 @@
                 output.scrollTop = output.scrollHeight;
             };
 
-            eventSource.addEventListener('error', () => {
+            eventSource.addEventListener('error', function(event) {
+                const errorMsg = event.data || '连接中断，请检查网络状态';
+                const logEntry = document.createElement('div');
+                logEntry.className = 'log-entry';
+                logEntry.innerHTML = `
+                    <span class="log-time">${new Date().toLocaleTimeString()}</span>
+                    <span class="log-error">${errorMsg}</span>
+                `;
+                output.appendChild(logEntry);
                 loading.style.display = 'none';
                 eventSource.close();
             });
         });
-
-        // 启动日志轮询
-        setInterval(loadLocalLogs, 5000);
-        loadLocalLogs();
-    });
-</script>
-    
-    
+    </script>
 </body>
 </html>
