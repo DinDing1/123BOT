@@ -9,9 +9,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# 安装依赖
+# 修改Dockerfile的requirements.txt部分
 COPY requirements.txt .
-RUN pip install --user --no-cache-dir -r requirements.txt
+RUN pip install --user --no-cache-dir -r requirements.txt \
+    && pip install --user p115client
+
 
 # 运行阶段
 FROM python:3.12-slim-bookworm
@@ -20,6 +22,10 @@ WORKDIR /app
 # 复制依赖
 COPY --from=builder /root/.local /root/.local
 ENV PATH=/root/.local/bin:$PATH
+    CONFIG115_PATH=/app/config/115_config.txt
+    FLASK_APP=app.py 
+    FLASK_ENV=production 
+
 
 # 安装运行时依赖
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -30,9 +36,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# 创建目录结构
-RUN mkdir -p /app/cache/config \
-    && chmod 777 /app/cache/config
+    # 创建目录结构
+RUN mkdir -p \
+    templates \
+    EmbyLibrary \
+    /app/cache/config \
+    /var/log/supervisor \
+    /app/config \
+    && chmod 777 /app
 
 # 复制代码
 COPY . .
@@ -45,8 +56,7 @@ EXPOSE 8123 8124
 
 # 初始化配置
 VOLUME /app/cache/config
-RUN touch /app/cache/config/115_config.json \
-    && chmod 777 /app/cache/config/115_config.json
+VOLUME /app/config
 
 # 启动命令
 ENTRYPOINT ["/app/auth_check.sh"]
@@ -54,3 +64,6 @@ CMD ["sh", "-c", \
     "python app.py & \
     uvicorn main:app --host 0.0.0.0 --port 8123 --no-access-log & \
     tail -f /dev/null"]
+
+
+
