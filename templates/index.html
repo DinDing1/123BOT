@@ -533,8 +533,8 @@
         <button type="submit" form="configForm" id="generateBtn" disabled>生成STRM</button>
         <div class="loading" id="loading">⏳ 正在生成中，请稍候...</div>
     </div>
-    
-<script>
+
+    <script>
     // ====================== 核心函数定义 ======================
     // 全局定义的登录函数
     async function handleLogin() {
@@ -588,7 +588,7 @@
         }
     }
 
-    // 存储空间格式化
+    // 全局定义的存储空间格式化
     function formatSize(bytes) {
         const units = ['字节', 'KB', 'MB', 'GB', 'TB'];
         let unitIndex = 0;
@@ -599,70 +599,56 @@
         return `${bytes.toFixed(2)} ${units[unitIndex]}`;
     }
 
-    // 登出功能
+    // 全局定义的登出函数
     async function handleLogout() {
         await fetch('/logout');
         location.reload();
     }
 
     // ====================== 115配置管理 ======================
-    // 加载配置（修复多次加载问题）
+    // 加载配置
     async function load115Config() {
         try {
             const res = await fetch('/115_config');
-            if (!res.ok) return;
-            
             const config = await res.json();
-            document.getElementById('mainCookie').value = config.main ? JSON.stringify(config.main, null, 2) : '';
-            document.getElementById('scheduleTime').value = config.schedule_time || '08:00';
+            
+            document.getElementById('mainCookie').value = JSON.stringify(config.main, null, 2);
+            document.getElementById('scheduleTime').value = config.schedule_time;
 
             const subAccounts = document.getElementById('subAccounts');
             subAccounts.innerHTML = '';
-            if (config.subs && config.subs.length > 0) {
-                config.subs.forEach(sub => addSubAccount(JSON.stringify(sub, null, 2)));
-            } else {
-                addSubAccount(); // 默认至少一个输入框
-            }
+            config.subs.forEach(sub => {
+                addSubAccount(JSON.stringify(sub, null, 2));
+            });
         } catch (error) {
             console.error('加载配置失败:', error);
         }
     }
 
-    // 添加小号（修复重复生成问题）
+    // 添加小号
     function addSubAccount(value = '') {
         const container = document.createElement('div');
         container.className = 'sub-account-container';
         container.innerHTML = `
-            <textarea class="subCookie" rows="2" 
-                placeholder="小号Cookie（JSON格式）">${value}</textarea>
+            <textarea class="subCookie" rows="2" placeholder="小号Cookie（JSON格式）">${value}</textarea>
             <button class="removeSub">×</button>
         `;
         container.querySelector('.removeSub').addEventListener('click', () => removeSub(container));
         document.getElementById('subAccounts').appendChild(container);
     }
 
-    // 删除小号（修复事件绑定问题）
+    // 删除小号
     function removeSub(container) {
         container.remove();
     }
 
-    // 保存配置（修复JSON解析问题）
+    // 保存配置
     async function save115Config() {
         try {
-            const mainCookie = document.getElementById('mainCookie').value;
-            const subCookies = Array.from(document.querySelectorAll('.subCookie'))
-                .map(el => el.value.trim())
-                .filter(Boolean);
-
-            // 输入校验
-            if (!mainCookie || subCookies.length === 0) {
-                alert('请填写完整的主账号和小号配置');
-                return;
-            }
-
             const config = {
-                main: JSON.parse(mainCookie),
-                subs: subCookies.map(cookie => JSON.parse(cookie)),
+                main: JSON.parse(document.getElementById('mainCookie').value),
+                subs: Array.from(document.querySelectorAll('.subCookie'))
+                         .map(el => JSON.parse(el.value)),
                 schedule_time: document.getElementById('scheduleTime').value
             };
 
@@ -674,17 +660,16 @@
 
             if (res.ok) {
                 alert('配置保存成功');
-                await load115Config(); // 重新加载确保同步
+                await load115Config(); // 重新加载
             } else {
-                alert('保存失败，服务器返回异常');
+                alert('保存失败');
             }
         } catch (error) {
-            console.error('保存配置失败:', error);
-            alert('配置格式错误，请检查JSON语法');
+            alert('JSON格式错误，请检查输入');
         }
     }
 
-    // 立即执行任务
+    // 立即执行115任务
     async function run115Now() {
         try {
             const res = await fetch('/115_run_now', { method: 'POST' });
@@ -701,7 +686,7 @@
     }
 
     // ====================== 日志管理 ======================
-    // 动态加载日志（修复空日志处理）
+    // 动态加载日志
     async function loadLocalLogs() {
         try {
             const res = await fetch('/get_local_logs');
@@ -733,7 +718,7 @@
         // 加载115配置（确保至少一个输入框）
         load115Config();
 
-        // 事件绑定（修复重复绑定问题）
+        // 事件绑定
         document.getElementById('addSubBtn').addEventListener('click', () => addSubAccount());
         document.getElementById('save115Btn').addEventListener('click', save115Config);
         document.getElementById('run115Btn').addEventListener('click', run115Now);
