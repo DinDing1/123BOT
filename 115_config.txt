@@ -1,5 +1,6 @@
 Main:
-{"name": "主账号", "cookies": {"UID": "7157309_I1_1738992621", "CID": "115ed3ba005c50bc7623505f04b4200c", "SEID": "5e1928d3e72bc29b0aa57d6757e0147a463364941c19810860dacd481c3534ce9ad8a349d0dae0ee11790843d26c48934abc565c8b9f64ae07976855", "KID": "28d35c069fc93d3670714ab46377fbe6"}}
+{"name": "主账号", "cookies": {"UID": "MAIN_UID", "CID": "MAIN_CID", "SEID": "MAIN_SEID", "KID": "MAIN_KID"}}
 
 Subs:
-- {"name": "小号A", "cookies": {"UID": "102187719_I1_1742187023", "CID": "c460195a0c4c6a43bf3b32b43118e04d", "SEID": "fd87d9e17094a27af6fdf6238203dbba11a728a32a980369278310d9e4362ce730757223706bc1697e11b4616d372d23cf39af9b878eaa42577009fd", "KID": "9ef5ce45199383c8e0df04db35bcc8ba"}}
+- {"name": "小号A", "cookies": {"UID": "SUB1_UID", "CID": "SUB1_CID", "SEID": "SUB1_SEID", "KID": "SUB1_KID"}}
+- {"name": "小号B", "cookies": {"UID": "SUB2_UID", "CID": "SUB2_CID", "SEID": "SUB2_SEID", "KID": "SUB2_KID"}}
