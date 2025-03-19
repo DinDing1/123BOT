@@ -1,193 +1,241 @@
+#!/usr/bin/env python3
 # encoding: utf-8
 
 """
-115综合自动化脚本（支持配置文件）
-功能：全账号签到 → 许愿树流程（小号许愿 → 主号助愿 → 小号采纳）
+115全功能自动化脚本（修正版）
+功能：全账号签到 → 智能许愿 → 批量助愿 → 批量采纳
 """
 
-__version__ = "3.1.0"
+__version__ = "5.3.0"
 
-import argparse
 import json
 import sys
 import time
-from pathlib import Path
 from typing import Dict, List
 
 from p115client import P115Client, check_response
 
+# 配置文件路径
+CONFIG_FILE = "115_config.txt"
 # 日志文件路径
-LOG_FILE = "115_auto_operation.log"
+LOG_FILE = "115_auto.log"
+# 最大许愿次数（根据115规则调整）
+MAX_WISHES = 3
+# 操作间隔时间（秒）
+DELAY = 60
 
-class Logger:
-    """日志记录器"""
+######################
+#  配置文件解析
+######################
+def load_config() -> Dict:
+    """加载TXT格式配置文件"""
+    config = {"main": None, "subs": []}
+    current_section = None
     
-    def __init__(self, log_file: str):
-        self.log_file = Path(log_file)
-        self.log_file.parent.mkdir(parents=True, exist_ok=True)
-
-    def log(self, message: str, level: str = "INFO", console: bool = True):
-        """记录带时间戳的日志"""
-        timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
-        log_entry = f"[{timestamp}] [{level}] {message}"
-        
-        with open(self.log_file, "a", encoding="utf-8") as f:
-            f.write(log_entry + "\n")
-        
-        if console:
-            print(log_entry)
-
-logger = Logger(LOG_FILE).log
-
-def load_config_from_file(config_path: str) -> Dict:
-    """从指定路径加载配置文件"""
     try:
-        with open(config_path, "r", encoding="utf-8") as f:
-            return json.load(f)
+        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                
+                if line.lower().startswith("main:"):
+                    current_section = "main"
+                    continue
+                elif line.lower().startswith("subs:"):
+                    current_section = "subs"
+                    continue
+                
+                if current_section == "main":
+                    config["main"] = parse_account(line)
+                elif current_section == "subs" and line.startswith("-"):
+                    config["subs"].append(parse_account(line[1:].strip()))
+        
+        if not config["main"]:
+            raise ValueError("未配置主账号")
+        if not config["subs"]:
+            raise ValueError("未配置小号")
+        return config
     except Exception as e:
-        logger(f"配置文件加载失败: {str(e)}", "ERROR")
+        log(f"配置文件解析失败: {str(e)}", "ERROR")
         sys.exit(1)
 
-def checkin_single(cookies: Dict) -> bool:
-    """执行单个账号签到"""
+def parse_account(line: str) -> Dict:
+    """解析账号配置"""
     try:
-        client = P115Client(cookies, check_for_relogin=True)
-        result = client.user_points_sign_post()
-        if result.get("state"):
-            days = result.get("data", {}).get("continuous_day", 0)
-            logger(f"签到成功，已连续签到{days}天")
-            return True
-        logger(f"签到失败: {result.get('message')}", "WARNING")
-        return False
-    except Exception as e:
-        logger(f"签到异常: {str(e)}", "ERROR")
-        return False
+        return json.loads(line)
+    except json.JSONDecodeError:
+        raise ValueError(f"无效的账号配置: {line}")
 
+######################
+#  签到模块
+######################
 def checkin_all(config: Dict):
-    """执行全部账号签到"""
-    accounts = [config["wish_main"]] + config["wish_subs"]
+    """执行全账号签到"""
+    accounts = [config["main"]] + config["subs"]
     total = len(accounts)
     success = 0
     
-    logger(f"开始签到任务，共 {total} 个账号")
-    for idx, account in enumerate(accounts, 1):
-        name = account.get("name", f"账号{idx}")
-        logger(f"正在签到 ({idx}/{total}): {name}")
-        if checkin_single(account["cookies"]):
-            success += 1
-        time.sleep(10)  # 账号间间隔
-    
-    logger(f"签到完成，成功 {success}/{total} 个账号")
-    return success == total
-
-class WishManager:
-    """许愿树操作管理器"""
-    
-    def __init__(self, main_cookies: Dict, sub_cookies: List[Dict]):
-        self.main_client = P115Client(main_cookies, check_for_relogin=True)
-        self.sub_clients = [P115Client(sub["cookies"], check_for_relogin=True) for sub in sub_cookies]
-    
-    def wish_workflow(self, test_mode: bool = False):
-        """完整的许愿工作流程"""
-        total_subs = len(self.sub_clients)
-        success_count = 0
-        
-        for idx, sub_client in enumerate(self.sub_clients, 1):
-            try:
-                # 小号许愿
-                wish_id = self.create_wish(sub_client)
-                logger(f"({idx}/{total_subs}) 小号许愿成功，ID: {wish_id}")
-                
-                # 增加 120 秒延迟
-                logger(f"等待 120 秒后进行助愿...")
-                time.sleep(120)
-                
-                # 主号助愿
-                aid_id = self.create_aid(wish_id)
-                logger(f"主号助愿成功，ID: {aid_id}")
-                
-                # 增加 120 秒延迟
-                logger(f"等待 120 秒后进行采纳...")
-                time.sleep(120)
-                
-                # 小号采纳
-                if self.adopt_aid(sub_client, wish_id, aid_id, test_mode):
-                    success_count += 1
-                
-                # 增加 120 秒延迟（为下一个账号做准备）
-                logger(f"等待 120 秒后处理下一个账号...")
-                time.sleep(120)
-                
-            except Exception as e:
-                logger(f"流程异常: {str(e)}", "ERROR")
-        
-        logger(f"许愿任务完成，成功 {success_count}/{total_subs} 个账号")
-        return success_count
-    
-    @staticmethod
-    def create_wish(client: P115Client) -> str:
-        """创建许愿"""
-        return check_response(client.act_xys_wish(
-            {"rewardSpace": 5, "content": "求一本钢铁是怎样炼成得书"}
-        ))["data"]["xys_id"]
-    
-    def create_aid(self, wish_id: str) -> str:
-        """主号创建助愿"""
-        check_response(self.main_client.act_xys_get_desire_info(wish_id))
-        return check_response(
-            self.main_client.act_xys_aid_desire({
-                "id": wish_id, 
-                "content": "希望这本书可以帮到你", 
-                "file_ids": ""
-            })
-        )["data"]["aid_id"]
-    
-    @staticmethod
-    def adopt_aid(client: P115Client, wish_id: str, aid_id: str, test_mode: bool) -> bool:
-        """采纳助愿"""
-        if test_mode:
-            logger("[测试模式] 跳过采纳操作", "DEBUG")
-            return True
-        
-        result = check_response(client.act_xys_adopt({
-            "did": wish_id, 
-            "aid": aid_id, 
-            "to_cid": 0
-        }))
-        return result.get("state", False)
-
-def main():
-    parser = argparse.ArgumentParser(description="115综合自动化工具")
-    parser.add_argument("--config", type=str, help="配置文件路径")
-    parser.add_argument("--skip-checkin", action="store_true", help="跳过签到步骤")
-    parser.add_argument("--skip-wish", action="store_true", help="跳过许愿步骤")
-    parser.add_argument("-t", "--test", action="store_true", help="测试模式（不执行实际采纳）")
-    args = parser.parse_args()
-
-    config = load_config_from_file(args.config) if args.config else load_config()
-    
-    # 执行签到流程
-    if not args.skip_checkin:
-        logger("开始执行签到流程".center(50, "="))
-        checkin_all(config)
-    
-    # 执行许愿流程
-    if not args.skip_wish:
-        logger("开始执行许愿流程".center(50, "="))
+    log(f"开始签到流程，共 {total} 个账号")
+    for account in accounts:
+        name = account.get("name", "未命名账号")
         try:
-            manager = WishManager(
-                main_cookies=config["wish_main"]["cookies"],
-                sub_cookies=config["wish_subs"]
-            )
-            manager.wish_workflow(args.test)
+            client = P115Client(account["cookies"], check_for_relogin=True)
+            result = client.user_points_sign_post()
+            
+            if result.get("state"):
+                days = result.get("data", {}).get("continuous_day", 0)
+                log(f"{name} 签到成功，连续签到{days}天")
+                success += 1
+            time.sleep(3)
         except Exception as e:
-            logger(f"许愿流程初始化失败: {str(e)}", "ERROR")
+            log(f"{name} 签到失败: {str(e)}", "ERROR")
     
-    logger("全部任务执行完成".center(50, "="))
+    log(f"签到完成，成功 {success}/{total} 个账号")
 
+######################
+#  许愿树模块
+######################
+class SmartWishSystem:
+    """智能许愿管理系统"""
+    
+    def __init__(self, main_account: Dict, sub_accounts: List[Dict]):
+        self.main_client = P115Client(main_account["cookies"], check_for_relogin=True)
+        self.sub_accounts = sub_accounts
+        self.main_name = main_account.get("name", "主账号")
+        self.wish_map = {}  # 存储许愿信息
+    
+    def full_process(self):
+        """完整智能流程"""
+        log("开始智能许愿流程".center(40, "="))
+        
+        # 阶段1：创建许愿
+        self.create_wishes()
+        time.sleep(DELAY)  # 许愿后延迟
+        
+        # 阶段2：批量助愿
+        aid_map = self.process_aiding()
+        time.sleep(DELAY)  # 助愿后延迟
+        
+        # 阶段3：批量采纳
+        self.process_adoption(aid_map)
+        
+        log("智能许愿流程完成".center(40, "="))
+    
+    def create_wishes(self):
+        """创建许愿（自动补足未完成许愿）"""
+        for sub in self.sub_accounts:
+            client = P115Client(sub["cookies"], check_for_relogin=True)
+            name = sub.get("name", "小号")
+            self.wish_map[name] = {"client": client, "all_wishes": []}
+            
+            try:
+                # 获取现有许愿
+                active_wishes = self.get_active_wishes(client)
+                self.wish_map[name]["all_wishes"] = active_wishes
+                log(f"{name} 现有许愿: {len(active_wishes)} 个")
+                
+                # 补足新许愿
+                if len(active_wishes) < MAX_WISHES:
+                    for _ in range(MAX_WISHES - len(active_wishes)):
+                        wish_id = check_response(client.act_xys_wish(
+                            {"rewardSpace": 5, "content": "求一本钢铁是怎样炼成的书"}
+                        ))["data"]["xys_id"]
+                        self.wish_map[name]["all_wishes"].append(wish_id)
+                        log(f"{name} 创建新许愿 ID: {wish_id}")
+                        time.sleep(5)  # 单个许愿间延迟
+            except Exception as e:
+                log(f"{name} 创建许愿失败: {str(e)}", "ERROR")
+                continue  # 单个账号失败不影响其他账号
+    
+    def get_active_wishes(self, client: P115Client) -> List[str]:
+        """获取未完成许愿列表"""
+        try:
+            wishes = check_response(client.act_xys_my_desire({"type": 1}))["data"]["list"]
+            return [w["id"] for w in wishes if w["status"] == 1]  # 状态1为进行中
+        except:
+            return []
+    
+    def process_aiding(self) -> Dict:
+        """处理助愿流程"""
+        aid_map = {}
+        
+        for sub_name, data in self.wish_map.items():
+            aid_map[sub_name] = []
+            for wish_id in data["all_wishes"]:
+                try:
+                    # 检查许愿状态
+                    wish_info = check_response(self.main_client.act_xys_get_desire_info(wish_id))
+                    if wish_info.get("data", {}).get("status") != 1:
+                        continue
+                    
+                    # 创建助愿
+                    aid_id = check_response(
+                        self.main_client.act_xys_aid_desire({
+                            "id": wish_id,
+                            "content": "希望这本书可以帮到您",
+                            "file_ids": ""
+                        })
+                    )["data"]["aid_id"]
+                    
+                    aid_map[sub_name].append((wish_id, aid_id))
+                    log(f"{self.main_name} 为 {sub_name} 的许愿 {wish_id} 助愿成功")
+                    time.sleep(5)  # 单个助愿间延迟
+                except Exception as e:
+                    log(f"助愿失败 {wish_id}: {str(e)}", "ERROR")
+        
+        return aid_map
+    
+    def process_adoption(self, aid_map: Dict):
+        """处理采纳流程"""
+        for sub_name, data in self.wish_map.items():
+            client = data["client"]
+            for wish_id in data["all_wishes"]:
+                try:
+                    # 获取有效助愿
+                    aids = check_response(client.act_xys_desire_aid_list({"id": wish_id}))["data"]["list"]
+                    valid_aids = [a["id"] for a in aids if a["status"] == 1]  # 状态1为有效助愿
+                    
+                    # 批量采纳
+                    for aid_id in valid_aids:
+                        result = check_response(client.act_xys_adopt({
+                            "did": wish_id,
+                            "aid": aid_id,
+                            "to_cid": 0
+                        }))
+                        if result.get("state"):
+                            log(f"{sub_name} 成功采纳许愿 {wish_id} 的助愿 {aid_id}")
+                            time.sleep(3)  # 单个采纳间延迟
+                except Exception as e:
+                    log(f"{sub_name} 处理许愿 {wish_id} 失败: {str(e)}", "ERROR")
+
+######################
+#  日志系统
+######################
+# 修改日志函数与Web输出集成
+def log(msg: str, level: str = "INFO"):
+    timestamp = time.strftime("%H:%M:%S")
+    # 输出到标准输出供Flask捕获
+    print(f"[115] [{timestamp}] [{level}] {msg}")
+    sys.stdout.flush()
+
+######################
+#  主程序
+######################
 if __name__ == "__main__":
     try:
-        main()
-    except KeyboardInterrupt:
-        logger("用户中断操作", "WARNING")
+        config = load_config()
+        
+        log("启动智能流程".center(40, "="))
+        checkin_all(config)
+        
+        wish_system = SmartWishSystem(config["main"], config["subs"])
+        wish_system.full_process()
+        
+        log("所有流程执行完毕".center(40, "="))
+    except Exception as e:
+        log(f"主程序异常: {str(e)}", "ERROR")
         sys.exit(1)
+    except KeyboardInterrupt:
+        log("用户中断操作", "WARNING")
+        sys.exit(0)
