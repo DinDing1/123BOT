@@ -13,325 +13,89 @@
             --text-color: #e0e0e0;
         }
 
-        canvas {
-            position: fixed;
-            top: 0;
-            left: 0;
-            z-index: -1;
-        }
-
-        body {
-            font-family: 'Segoe UI', system-ui, sans-serif;
-            background: var(--background-color);
-            color: var(--text-color);
-            margin: 0;
-            height: 100vh;
-            overflow: auto;
-            display: flex;
-            flex-direction: column;
-            min-height: 720px;
-        }
-
-        /* 登录容器 */
-        .login-container {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            width: 100%;
-            padding: 2rem;
-            box-sizing: border-box;
-        }
-
-        .login-form {
-            background: rgba(25, 40, 60, 0.9);
-            padding: 2rem;
-            border-radius: 12px;
-            box-shadow: var(--neon-effect);
-            width: 100%;
-            max-width: 400px;
-            text-align: center;
-            box-sizing: border-box;
-            border: 1px solid rgba(0, 243, 255, 0.3);
-            backdrop-filter: blur(3px);
-        }
-
-        .login-form h3 {
-            margin: 0 0 1.5rem 0;
-            font-size: 1.6rem;
-            color: var(--primary-color);
-        }
-
-        .login-form input {
-            width: calc(100% - 2rem);
-            padding: 0.8rem 1rem;
-            margin: 0.5rem auto; /* 调整上下间距 居中 */
-            background: rgba(255, 255, 255, 0.08);
-            border: 1px solid rgba(0, 243, 255, 0.2);
-            border-radius: 8px;
-            font-size: 1rem;
-            color: var(--text-color);
-            transition: border-color 0.3s ease;
-        }
-
-
-        .login-form input:focus {
-            border-color: var(--primary-color);
-            outline: none;
-        }
-
-        .login-form button {
-            width: 50%; /* 按钮宽度调整为50% */
-            padding: 0.8rem;
-            margin: 1rem auto; /* 居中 */
-            background: linear-gradient(45deg, var(--secondary-color), var(--primary-color));
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-size: 1rem;
-            cursor: pointer;
-            transition: transform 0.2s ease;
-            display: block;
-        }
-
-        .login-form button:hover {
-            transform: scale(1.02);
-        }
-
-        .version-info {
-            margin: 1.5rem 1rem 0 1rem;
-            font-size: 0.9rem;
-            color: #666;
-        }
-
-        /* 主界面容器 */
+        /* 容器布局 */
         .container {
+            display: grid;
+            grid-template-columns: 1fr 1fr 2fr;
+            grid-template-rows: auto auto auto auto;
             grid-template-areas: 
-                "header header"
-                "user-area 115-panel"
-                "config-panel log-panel"
-                "generate log-panel";
-            grid-template-columns: 1fr 1.5fr;
-            grid-template-rows: auto auto 1fr;
+                "header header header"
+                "user-info config-115 log-panel"
+                "config-panel config-panel log-panel"
+                "generate generate generate";
             gap: 1.2rem;
+            margin: 20px;
+            min-height: 90vh;
         }
 
+        /* 头部样式 */
         .header {
             grid-area: header;
             text-align: center;
-            margin-bottom: 0.8rem;
-        }
-
-        .logo {
-            color: var(--primary-color);
-            font-size: 1.7rem;
-            font-weight: bold;
-            margin-bottom: 0.2rem;
-        }
-
-        .header p {
-            color: var(--text-color);
-            font-size: 0.88rem;
-            margin-bottom: 0.6rem;
-        }
-
-        .header .divider {
-            width: 88%;
-            height: 1px;
-            background: rgba(255, 255, 255, 0.1);
-            margin: 0.6rem auto;
-        }
-
-        .header .version {
-            color: #6c757d;
-            font-size: 0.82rem;
-            margin-top: 0.8rem;
-        }
-
-        .user-area {
-            height: 380px;
-        }
-
-        .auth-panel {
-            background: rgba(0, 0, 0, 0.6);
-            padding: 1.5rem 2rem;
-            border-radius: 8px;
-            box-shadow: 0 0 8px rgba(0, 243, 255, 0.2);
-            width: 100%;
-            max-width: 380px;
-            display: none;
-            border: 1px solid rgba(0, 243, 255, 0.2);
-            text-align: center; /* 0315新增：内容居中 */
-        }
-
-        .auth-panel.active {
-            display: block !important;
-            animation: fadeIn 0.3s ease;
-        }
-
-        .auth-panel h3 {
-            margin-bottom: 1.5rem;
-        }
-
-        .auth-panel div {
-            margin: 0.8rem 0;
-            text-align: center; /* 0315新增：文本JZ */
-            display: block; /* 0315新增：确保每个字段单独一行 */
-            width: 100%;/*0315 确保宽度占满容器 */
-        }
-
-        .config-panel {
-            grid-area: config-panel;
-            display: grid;
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-            gap: 1rem;
-            align-content: start;
-        }
-
-        #configForm {
-            display: contents;
-        }
-
-        .form-group {
-            margin-bottom: 0.8rem;
-            min-width: 0;
-        }
-
-        .form-group.extension-group {
-            grid-column: span 1;
-        }
-
-        label {
-            display: block;
-            margin-bottom: 0.4rem;
-            font-weight: 500;
-            color: var(--text-color);
-            font-size: 0.9rem;
-        }
-
-        input {
-            padding: 0.6rem;
-            background: rgba(255, 255, 255, 0.1);
-            border: 1px solid rgba(0, 243, 255, 0.2);
-            border-radius: 6px;
-            font-size: 0.9rem;
-            color: var(--text-color);
-            transition: all 0.3s ease;
-        }
-
-        input:focus {
-            border-color: var(--primary-color);
-            outline: none;
-        }
-
-        .log-panel {
-            grid-area: log-panel;
-            background: rgba(0, 0, 0, 0.7);
-            border-radius: 8px;
-            padding: 1rem;
-            font-family: 'Consolas', monospace;
-            font-size: 0.8rem;
-            line-height: 1.4;
-            height: 62vh;
-            overflow-y: auto;
-            border: 1px solid rgba(0, 243, 255, 0.2);
-        }
-
-        .log-entry {
-            margin: 0.25rem 0;
-            word-break: break-all;
-            color: var(--primary-color);
-        }
-
-        .log-time {
-            color: #6c757d;
-            margin-right: 0.8rem;
-        }
-
-        button {
-            background: linear-gradient(45deg, var(--secondary-color), var(--primary-color));
-            color: white;
-            padding: 0.75rem 1.5rem;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 1rem;
-            margin: 1rem auto;
-            display: block;
-            transition: transform 0.2s ease;
-        }
-
-        button:hover:not(:disabled) {
-            transform: scale(1.02);
-        }
-
-        .logout-btn {
-            background: linear-gradient(45deg, #ff006a, #dc3545) !important;
-            width: 150px;
-            margin-top: 1.5rem;
-        }
-
-        .logout-btn:hover {
-            background: linear-gradient(45deg, #dc3545, #bb2d3b) !important;
-        }
-
-        button:disabled {
-            background: #6c757d;
-            cursor: not-allowed;
-            opacity: 0.7;
-        }
-
-        .loading {
-            display: none;
-            text-align: center;
-            padding: 1rem;
-            color: var(--primary-color);
-        }
-
-                /* 新增115面板样式 */
-        .panel-115 {
-            height: 380px;
-            overflow-y: auto;
-            grid-area: 115-panel;
             background: rgba(25, 40, 60, 0.9);
-            padding: 1.2rem;
+            padding: 1rem;
             border-radius: 8px;
             border: 1px solid rgba(0, 243, 255, 0.3);
-            box-shadow: var(--neon-effect);
-            backdrop-filter: blur(3px);
+        }
+
+        /* 用户信息容器 */
+        .user-info-container {
+            grid-area: user-info;
+            background: rgba(25, 40, 60, 0.9);
+            border-radius: 8px;
+            padding: 1.2rem;
+            height: 380px;
+            overflow: hidden;
+        }
+
+        /* 115配置容器 */
+        .config-115-container {
+            grid-area: config-115;
+            background: rgba(25, 40, 60, 0.9);
+            border-radius: 8px;
+            padding: 1.2rem;
+            height: 380px;
+            overflow: hidden;
+        }
+
+        .panel-115 {
+            height: 100%;
+            display: flex;
+            flex-direction: column;
         }
 
         .panel-115 textarea {
-            width: 100%;
-            background: rgba(255, 255, 255, 0.08);
-            color: var(--text-color);
-            border: 1px solid rgba(0, 243, 255, 0.2);
-            padding: 0.8rem;
-            margin: 0.5rem 0;
-            border-radius: 6px;
-            font-family: 'Consolas', monospace;
-            font-size: 0.9rem;
-            resize: vertical;
-        }
-
-        .button-group {
-            display: flex;
-            gap: 1rem;
-            margin-top: 1.5rem;
-        }
-
-        .button-group button {
             flex: 1;
-            padding: 0.6rem;
-            background: linear-gradient(45deg, var(--secondary-color), var(--primary-color));
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
+            min-height: 120px;
+            overflow-y: auto !important;
         }
 
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
+        /* 日志容器 */
+        .log-panel {
+            grid-area: log-panel;
+            height: calc(100vh - 220px);
+            background: rgba(0, 0, 0, 0.7);
+            padding: 1rem;
+        }
+
+        /* 原始配置容器 */
+        .config-panel {
+            grid-area: config-panel;
+            background: rgba(20, 30, 45, 0.95);
+            padding: 1.2rem;
+        }
+
+        /* 生成按钮容器 */
+        #generateButtonContainer {
+            grid-area: generate;
+            text-align: center;
+        }
+
+        /* 按钮样式 */
+        .button-group button {
+            background: linear-gradient(45deg, var(--secondary-color), var(--primary-color));
+            padding: 0.8rem;
+            margin: 0.5rem;
         }
     </style>
 </head>
@@ -345,14 +109,13 @@
             <input type="text" id="passport" placeholder="123云盘账号">
             <input type="password" id="password" placeholder="123云盘密码">
             <button onclick="handleLogin()">登录</button>
-            <div class="version-info">
-                版本号: v2.0.1 | 作者: dinding
-            </div>
+            <div class="version-info">版本号: v2.0.1 | 作者: dinding</div>
         </div>
     </div>
 
     <!-- 主界面 -->
     <div class="container">
+        <!-- 头部 -->
         <div class="header">
             <div class="logo">123Media_STRM</div>
             <p>感谢🈲贫大佬，祝🈲贫大佬长命百岁</p>
@@ -360,8 +123,8 @@
             <div class="version">版本号: v2.0.1 | 作者: dinding</div>
         </div>
 
-        <div class="user-area">
-            <div class="auth-panel login-form" id="loginForm"></div>
+        <!-- 用户信息 -->
+        <div class="user-info-container">
             <div class="auth-panel user-info" id="userInfo">
                 <h2>👤 用户信息</h2>
                 <div><span>📛 昵称: <span id="nickname"></span></span></div>
@@ -373,37 +136,43 @@
             </div>
         </div>
 
-        <!-- 新增115配置面板 -->
-        <div class="panel-115">
-            <h2>⚡ 115功能配置</h2>
-            <form id="config115Form">
-                <div class="form-group">
-                    <label>主账号配置</label>
-                    <textarea id="main_config" rows="5" placeholder="Main:\n{...}"></textarea>
-                </div>
-                <div class="form-group">
-                    <label>小号配置（每行一个）</label>
-                    <textarea id="subs_config" rows="10" placeholder="Subs:\n- {...}"></textarea>
-                </div>
-                <div class="form-group">
-                    <label>许愿次数</label>
-                    <input type="number" id="max_wishes" value="3" min="1">
-                </div>
-                <div class="form-group">
-                    <label>间隔时间(秒)</label>
-                    <input type="number" id="delay" value="60" min="10">
-                </div>
-                <div class="form-group">
-                    <label>定时执行</label>
-                    <input type="time" id="schedule_time">
-                </div>
-                <div class="button-group">
-                    <button type="button" onclick="save115Config()">保存配置</button>
-                    <button type="button" onclick="run115Task()">立即执行</button>
-                </div>
-            </form>
+        <!-- 115配置 -->
+        <div class="config-115-container">
+            <div class="panel-115">
+                <h2>⚡ 115功能配置</h2>
+                <form id="config115Form">
+                    <div class="form-group">
+                        <label>主账号配置</label>
+                        <textarea id="main_config" rows="3" placeholder="Main:\n{...}"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>小号配置（每行一个）</label>
+                        <textarea id="subs_config" rows="6" placeholder="Subs:\n- {...}"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>许愿次数</label>
+                        <input type="number" id="max_wishes" value="3" min="1">
+                    </div>
+                    <div class="form-group">
+                        <label>间隔时间(秒)</label>
+                        <input type="number" id="delay" value="60" min="10">
+                    </div>
+                    <div class="form-group">
+                        <label>定时执行</label>
+                        <input type="time" id="schedule_time">
+                    </div>
+                    <div class="button-group">
+                        <button type="button" onclick="save115Config()">保存配置</button>
+                        <button type="button" onclick="run115Task()">立即执行</button>
+                    </div>
+                </form>
+            </div>
         </div>
 
+        <!-- 日志区域 -->
+        <div class="log-panel" id="output"></div>
+
+       <!-- 原始配置 -->
         <div class="config-panel">
             <form id="configForm" action="/generate" method="GET">
                 <div class="form-group">
@@ -441,12 +210,11 @@
             </form>
         </div>
 
-        <div class="log-panel" id="output"></div>
-    </div>
-
-    <div id="generateButtonContainer" style="display: none;">
-        <button type="submit" form="configForm" id="generateBtn" disabled>生成STRM</button>
-        <div class="loading" id="loading">⏳ 正在生成中，请稍候...</div>
+        <!-- 生成按钮 -->
+        <div id="generateButtonContainer" style="display: none;">
+            <button type="submit" form="configForm" id="generateBtn" disabled>生成STRM</button>
+            <div class="loading" id="loading">⏳ 正在生成中，请稍候...</div>
+        </div>
     </div>
 
     <script>
@@ -513,13 +281,35 @@
         window.addEventListener('resize', initBackground);
         initBackground();
         animate();
+        
+                // 新增：加载历史日志
+        async function loadLogHistory() {
+            try {
+                const res = await fetch('/get_logs');
+                const logs = await res.json();
+                const output = document.getElementById('output');
+                logs.forEach(log => {
+                    const logEntry = document.createElement('div');
+                    logEntry.className = 'log-entry';
+                    logEntry.innerHTML = `
+                        <span class="log-time">${log.time}</span>
+                        <span>${log.message}</span>
+                    `;
+                    output.appendChild(logEntry);
+                });
+                output.scrollTop = output.scrollHeight;
+            } catch (e) {
+                console.error('加载日志失败:', e);
+            }
+        }
 
          // 115配置相关逻辑
+        // 修改后的保存配置函数
         async function save115Config() {
             try {
                 const config = {
                     main_config: document.getElementById('main_config').value,
-                    subs_config: document.getElementById('subs_config').value.split('\n').filter(l => l.trim()),
+                    subs_config: document.getElementById('subs_config').value.split('\n'),
                     max_wishes: parseInt(document.getElementById('max_wishes').value),
                     delay: parseInt(document.getElementById('delay').value),
                     schedule: document.getElementById('schedule_time').value
@@ -577,6 +367,7 @@
         // 初始化加载配置
         document.addEventListener('DOMContentLoaded', () => {
             load115Config();
+            loadLogHistory();  // 新增：加载历史日志
             checkLoginStatus();
         });
 
