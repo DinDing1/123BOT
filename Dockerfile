@@ -58,7 +58,7 @@ ENV FLASK_APP=app.py \
     FLASK_ENV=production \
     PYTHONUNBUFFERED=1 \
     PYTHONPATH=/app \
-    LOG_FILE=/app/cache/config/115_auto.log  # 设置日志文件路径
+    LOG_FILE=/app/cache/config/115_auto.log
 
 # 入口点
 ENTRYPOINT ["/app/auth_check.sh"]
