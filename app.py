@@ -1,68 +1,62 @@
-from flask import Flask, request, jsonify, session, render_template, redirect
+from flask import Flask, render_template, request, jsonify, Response, stream_with_context, session
+import subprocess
 import os
-import json
 import logging
-import sqlite3
-from datetime import datetime, timedelta
-import hashlib
-from auth import get_user_info_with_password
+import sys
+import io
+from dotenv import load_dotenv
+from auth import get_user_info_with_password  # 导入 get_user_info_with_password 函数
+from werkzeug.serving import WSGIRequestHandler  # 修复导入路径
 
+# 加载环境变量
+load_dotenv()
+
+# 初始化 Flask 应用
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
-# ================= 通用配置 =================
-CONFIG_DIR = "/app/cache/config"
-DEVICE_ID_FILE = os.path.join(CONFIG_DIR, "device_id")
-CONFIG_FILE = os.path.join(CONFIG_DIR, "115_config.json")
+# 强制标准输出和错误输出使用 UTF-8 编码
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
-# 下载缓存配置
-CACHE_DB = "/app/cache/download_cache.db"
-CACHE_TTL = 20 * 60 * 60  # 20小时
+# 配置日志（简化格式）
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(message)s',
+    handlers=[
+        logging.FileHandler("web_strm.log", encoding='utf-8'),
+        logging.StreamHandler(sys.stdout)
+    ]
+)
 
-# ================= 初始化配置 =================
-def init_system_files():
-    """初始化系统必要文件"""
-    os.makedirs(CONFIG_DIR, exist_ok=True)
-    
-    # 初始化设备ID
-    if not os.path.exists(DEVICE_ID_FILE):
-        with open(DEVICE_ID_FILE, "w") as f:
-            f.write(os.urandom(16).hex())
-        os.chmod(DEVICE_ID_FILE, 0o666)
-    
-    # 初始化115配置文件
-    if not os.path.exists(CONFIG_FILE):
-        with open(CONFIG_FILE, "w") as f:
-            json.dump({
-                "main": {},
-                "subs": [],
-                "schedule_time": "08:00"
-            }, f, indent=2)
-        os.chmod(CONFIG_FILE, 0o666)
+# 自定义 SilentWSGIRequestHandler 以禁用 Werkzeug 日志
+class SilentWSGIRequestHandler(WSGIRequestHandler):
+    def log(self, type: str, message: str, *args) -> None:
+        pass  # 完全禁用 Werkzeug 的日志输出
 
-    # 初始化下载缓存数据库
-    with sqlite3.connect(CACHE_DB) as conn:
-        conn.execute('''
-            CREATE TABLE IF NOT EXISTS download_cache (
-                key TEXT PRIMARY KEY,
-                url TEXT NOT NULL,
-                expire_time TIMESTAMP NOT NULL
-            )
-        ''')
-        conn.execute('CREATE INDEX IF NOT EXISTS idx_expire ON download_cache (expire_time)')
-        conn.commit()
+# 禁用 Flask 和 Werkzeug 的默认日志
+logging.getLogger('werkzeug').disabled = True  # 禁用 Werkzeug 日志
+logging.getLogger('flask.app').setLevel(logging.ERROR)  # 设置 Flask 日志级别为 ERROR
 
-# ================= 路由定义 =================
+# 禁用 httpx 和 p123 的日志输出
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+logging.getLogger("p123").setLevel(logging.WARNING)       
+
+
+# DeepSeek 风格配色
+DEEPSEEK_COLORS = {
+    "primary": "#2d6ae3",
+    "secondary": "#5b8def",
+    "background": "#f8f9fa",
+    "text": "#2d3846"
+}
+
 @app.route('/')
 def index():
-    return render_template('index.html')
+    """首页路由"""
+    return render_template('index.html', colors=DEEPSEEK_COLORS)
 
-@app.route('/init_config')
-def init_config():
-    init_system_files()
-    return jsonify({"success": True})
-
-# --------------- 用户认证 ---------------
 @app.route('/login', methods=['POST'])
 def login():
     try:
@@ -70,101 +64,136 @@ def login():
         passport = data.get('passport')
         password = data.get('password')
         
+        # 调用验证接口
         user_info = get_user_info_with_password(passport, password)
         if user_info.get("code") != 0:
             return jsonify({"success": False, "message": user_info.get("message", "登录失败")})
 
+        # 存储用户信息到session
         session['logged_in'] = True
-        session['user_info'] = user_info['data']
+        session['user_info'] = {
+            'uid': user_info['data']['uid'],
+            'nickname': user_info['data']['nickname'],
+            'passport': user_info['data']['passport'],
+            'spaceUsed': user_info['data']['spaceUsed'],
+            'spacePermanent': user_info['data']['spacePermanent']
+        }
         return jsonify({"success": True})
     except Exception as e:
+        logging.error(f"登录失败: {str(e)}")
         return jsonify({"success": False, "message": "服务器错误"})
-
-@app.route('/user_info')
-def get_user_info():
-    return jsonify({
-        "logged_in": session.get('logged_in', False),
-        "user_info": session.get('user_info', {})
-    })
 
 @app.route('/logout')
 def logout():
     session.clear()
     return jsonify({"success": True})
 
-# --------------- 115配置管理 ---------------
-@app.route('/115_config', methods=['GET', 'POST'])
-def handle_115_config():
+@app.route('/user_info')
+def get_user_info():
+    if not session.get('logged_in'):
+        return jsonify({"logged_in": False})
+    return jsonify({
+        "logged_in": True,
+        "user_info": session['user_info']
+    })
+
+@app.route('/generate', methods=['GET'])
+def generate_strm():
+    """生成 STRM 文件的路由"""
     try:
-        if request.method == 'POST':
-            # 写入配置
-            with open(CONFIG_FILE, 'w') as f:
-                json.dump(request.json, f, indent=2)
-            return jsonify({"success": True})
-        else:
-            # 读取配置
-            with open(CONFIG_FILE, 'r') as f:
-                return jsonify(json.load(f))
+        # 检查用户是否登录
+        if not session.get('logged_in'):
+            def generate_error():
+                yield "event: error\ndata: 请先登录\n\n"
+                yield "event: close\ndata: \n\n"
+            return Response(stream_with_context(generate_error()), content_type='text/event-stream')
+
+        # 从 session 中获取用户凭证
+        user_info = session.get('user_info', {})
+        p123_user = user_info.get('passport', '')
+        p123_pass = request.args.get('p123_pass', '')  # 实际应从加密参数解析
+
+        # 验证凭证有效性
+        if not p123_user or not p123_pass:
+            def generate_error():
+                yield "event: error\ndata: 凭证无效\n\n"
+                yield "event: close\ndata: \n\n"
+            return Response(stream_with_context(generate_error()), content_type='text/event-stream')
+
+        # 获取 URL 参数
+        config_params = {
+            'parent_id': request.args.get('parent_id', '0'),
+            'local_path': request.args.get('local_path', './EmbyLibrary'),
+            'video_exts': request.args.get('video_exts', '.mp4,.mkv,.avi'),
+            'subtitle_exts': request.args.get('subtitle_exts', '.srt,.ass'),
+            'request_delay': request.args.get('request_delay', '1'),
+            'dir_delay': request.args.get('dir_delay', '2'),
+            'timeout': request.args.get('timeout', '30'),
+            'max_retries': request.args.get('max_retries', '3'),
+            'direct_link_url': request.args.get('direct_link_url', 'http://172.17.0.1:8123')
+        }
+
+        # 构造环境变量
+        env = os.environ.copy()
+        env.update({
+            'P123_USER': p123_user,
+            'P123_PASS': p123_pass,
+            'PARENT_ID': config_params['parent_id'],
+            'LIBRARY_PATH': config_params['local_path'],
+            'VIDEO_EXTS': config_params['video_exts'],
+            'SUBTITLE_EXTS': config_params['subtitle_exts'],
+            'REQUEST_DELAY': config_params['request_delay'],
+            'DIR_DELAY': config_params['dir_delay'],
+            'TIMEOUT': config_params['timeout'],
+            'MAX_RETRIES': config_params['max_retries'],
+            'DIRECT_LINK_URL': config_params['direct_link_url']
+        })
+
+        # 生成器函数，用于流式输出日志
+        def generate():
+            try:
+                process = subprocess.Popen(
+                    ['python', 'generate_strm.py'],
+                    env=env,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,  # 将 stderr 合并到 stdout
+                    text=True,
+                    encoding='utf-8'
+                )
+
+                for line in iter(process.stdout.readline, ''):
+                    yield f"data: {line}\n\n"
+                process.stdout.close()
+                return_code = process.wait()
+                yield f"data: PROCESS_EXIT_CODE:{return_code}\n\n"  # 发送退出码
+                yield "event: close\ndata: \n\n"  # 发送关闭事件
+            except Exception as e:
+                yield f"event: error\ndata: 子进程启动失败: {str(e)}\n\n"
+                yield "event: close\ndata: \n\n"
+
+        # 返回 SSE 响应
+        return Response(stream_with_context(generate()), content_type='text/event-stream')
+
     except Exception as e:
-        return jsonify({"success": False, "message": str(e)})
+        logging.error(f"[ERROR] 生成失败: {str(e)}")
+        def generate_error():
+            yield f"event: error\ndata: 生成失败: {str(e)}\n\n"
+            yield "event: close\ndata: \n\n"
+        return Response(stream_with_context(generate_error()), content_type='text/event-stream')
 
-# --------------- 下载缓存管理 ---------------
-def generate_cache_key(file_name: str, size: int, etag: str) -> str:
-    raw_key = f"{file_name}|{size}|{etag}"
-    return hashlib.sha256(raw_key.encode()).hexdigest()
+# 启动日志优化
+logger = logging.getLogger('strm_generator')
+logger.info("=== WEBUI已启动 ===")
+logger.info("WEBUI地址: http://0.0.0.0:8124")
 
-@app.route('/<path:uri>', methods=['GET', 'HEAD'])
-def handle_request(uri: str):
-    try:
-        if uri.count("|") < 2:
-            raise ValueError("URI格式错误")
-        
-        file_name, size, etag_part = uri.rsplit("|", 2)
-        etag = etag_part.split("?")[0]
-        size = int(size)
-        cache_key = generate_cache_key(file_name, size, etag)
-
-        with sqlite3.connect(CACHE_DB) as conn:
-            cursor = conn.execute(
-                '''
-                SELECT url 
-                FROM download_cache 
-                WHERE 
-                    key = ? 
-                    AND expire_time > datetime('now')
-                ''',
-                (cache_key,)
-            )
-            if row := cursor.fetchone():
-                return redirect(row[0], code=302)
-
-        # 模拟下载逻辑（实际应调用客户端API）
-        download_url = f"http://example.com/download/{file_name}"
-        expire_time = (datetime.now() + timedelta(seconds=CACHE_TTL)).strftime("%Y-%m-%d %H:%M:%S")
-        with sqlite3.connect(CACHE_DB) as conn:
-            conn.execute(
-                '''
-                INSERT OR REPLACE INTO download_cache 
-                (key, url, expire_time) 
-                VALUES (?, ?, ?)
-                ''',
-                (cache_key, download_url, expire_time)
-            )
-            conn.commit()
-        
-        return redirect(download_url, code=302)
-    except Exception as e:
-        return jsonify({"success": False, "message": str(e)}), 500
-
-# --------------- 任务执行 ---------------
-@app.route('/115_run_now', methods=['POST'])
-def run_115_now():
-    try:
-        # 这里调用实际的任务执行逻辑
-        return jsonify({"success": True})
-    except Exception as e:
-        return jsonify({"success": False, "message": str(e)})
-
-if __name__ == "__main__":
-    init_system_files()
-    app.run(host="0.0.0.0", port=8124)
+if __name__ == '__main__':
+    # 使用自定义的 SilentWSGIRequestHandler 并禁用调试模式
+    from werkzeug.serving import run_simple
+    run_simple(
+        hostname='0.0.0.0',
+        port=8124,
+        application=app,
+        request_handler=SilentWSGIRequestHandler,
+        use_debugger=False,
+        use_reloader=False
+    )
