@@ -1,4 +1,3 @@
-115_auto.py内容应该是这样#!/usr/bin/env python3
 # encoding: utf-8
 
 """
