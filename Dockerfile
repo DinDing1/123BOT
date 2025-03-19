@@ -1,30 +1,27 @@
 # 使用多阶段构建
-# 第一阶段：构建环境
 FROM python:3.12-slim-bookworm as builder
 
 WORKDIR /app
 
-# 安装构建依赖（后续会清理）
+# 安装构建依赖
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     python3-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# 修改Dockerfile的requirements.txt部分
+# 安装依赖
 COPY requirements.txt .
-RUN pip install --user --no-cache-dir -r requirements.txt \
-    && pip install --user p115client
+RUN pip install --user --no-cache-dir -r requirements.txt
 
-# 第二阶段：运行环境
+# 运行阶段
 FROM python:3.12-slim-bookworm
-
 WORKDIR /app
 
-# 只复制必要的运行时依赖
+# 复制依赖
 COPY --from=builder /root/.local /root/.local
 ENV PATH=/root/.local/bin:$PATH
 
-# 安装运行时系统依赖
+# 安装运行时依赖
 RUN apt-get update && apt-get install -y --no-install-recommends \
     openssl \
     curl \
@@ -34,37 +31,26 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # 创建目录结构
-RUN mkdir -p \
-    templates \
-    EmbyLibrary \
-    /app/cache/config \
-    /var/log/supervisor \
-    && chmod 777 /app
+RUN mkdir -p /app/cache/config \
+    && chmod 777 /app/cache/config
 
-# 复制项目文件（使用 .dockerignore 过滤无关文件）
+# 复制代码
 COPY . .
 
 # 设置权限
 RUN chmod +x /app/auth_check.sh
 
-# 创建日志文件并设置权限
-RUN touch /app/cache/config/115_auto.log && chmod 777 /app/cache/config/115_auto.log
-
 # 暴露端口
 EXPOSE 8123 8124
 
-# 环境变量
-ENV FLASK_APP=app.py \
-    FLASK_ENV=production \
-    PYTHONUNBUFFERED=1 \
-    PYTHONPATH=/app \
-    LOG_FILE=/app/cache/config/115_auto.log
-
-# 入口点
-ENTRYPOINT ["/app/auth_check.sh"]
+# 初始化配置
+VOLUME /app/cache/config
+RUN touch /app/cache/config/115_config.json \
+    && chmod 666 /app/cache/config/115_config.json
 
 # 启动命令
+ENTRYPOINT ["/app/auth_check.sh"]
 CMD ["sh", "-c", \
-    "flask run --host=0.0.0.0 --port=8124 & \
-    uvicorn main:app --host 0.0.0.0 --port=8123 --no-access-log & \
+    "python app.py & \
+    uvicorn main:app --host 0.0.0.0 --port 8123 --no-access-log & \
     tail -f /dev/null"]
