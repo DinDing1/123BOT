@@ -472,7 +472,7 @@
                             <button class="removeSub" onclick="removeSub(this)">×</button>
                         </div>
                     </div>
-                    <button class="add-btn" onclick="addSubAccount()">+ 添加小号</button>
+                    <button class="add-btn" id="addSubBtn">+ 添加小号</button>
                 </div>
                 <div class="form-group inline-group">
                     <div>
@@ -481,8 +481,8 @@
                     </div>
                 </div>
                 <div class="action-buttons">
-                    <button class="save-btn" onclick="save115Config()">💾 保存配置</button>
-                    <button class="run-btn" onclick="run115Now()">🚀 立即执行</button>
+                    <button class="save-btn" id="save115Btn">💾 保存配置</button>
+                    <button class="run-btn" id="run115Btn">🚀 立即执行</button>
                 </div>
             </div>
 
@@ -533,10 +533,10 @@
         <button type="submit" form="configForm" id="generateBtn" disabled>生成STRM</button>
         <div class="loading" id="loading">⏳ 正在生成中，请稍候...</div>
     </div>
-
-    <script>
+    
+<script>
     // ====================== 核心函数定义 ======================
-    // 全局定义的登录函数（修复语法错误）
+    // 全局定义的登录函数
     async function handleLogin() {
         const passport = document.getElementById('passport').value;
         const password = document.getElementById('password').value;
@@ -546,7 +546,7 @@
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({passport, password}),
-                credentials: 'include'  // 修复：添加缺失的逗号
+                credentials: 'include'
             });
             
             const result = await res.json();
@@ -588,7 +588,7 @@
         }
     }
 
-    // 全局定义的存储空间格式化
+    // 存储空间格式化
     function formatSize(bytes) {
         const units = ['字节', 'KB', 'MB', 'GB', 'TB'];
         let unitIndex = 0;
@@ -599,138 +599,144 @@
         return `${bytes.toFixed(2)} ${units[unitIndex]}`;
     }
 
-    // 全局定义的登出函数
+    // 登出功能
     async function handleLogout() {
         await fetch('/logout');
         location.reload();
     }
 
     // ====================== 115配置管理 ======================
-    // 加载115配置
-async function load115Config() {
-    try {
-        const res = await fetch('/115_config');
-        if (!res.ok) {
-            console.error('加载配置失败:', res.statusText);
-            return;
-        }
+    // 加载配置（修复多次加载问题）
+    async function load115Config() {
+        try {
+            const res = await fetch('/115_config');
+            if (!res.ok) return;
+            
+            const config = await res.json();
+            document.getElementById('mainCookie').value = config.main ? JSON.stringify(config.main, null, 2) : '';
+            document.getElementById('scheduleTime').value = config.schedule_time || '08:00';
 
-        const config = await res.json();
-        document.getElementById('mainCookie').value = config.main ? JSON.stringify(config.main, null, 2) : '';
-        document.getElementById('scheduleTime').value = config.schedule_time || '08:00';
-
-        const subAccounts = document.getElementById('subAccounts');
-        subAccounts.innerHTML = ''; // 清空现有小号
-        if (config.subs) {
-            config.subs.forEach(sub => addSubAccount(JSON.stringify(sub, null, 2)));
+            const subAccounts = document.getElementById('subAccounts');
+            subAccounts.innerHTML = '';
+            if (config.subs && config.subs.length > 0) {
+                config.subs.forEach(sub => addSubAccount(JSON.stringify(sub, null, 2)));
+            } else {
+                addSubAccount(); // 默认至少一个输入框
+            }
+        } catch (error) {
+            console.error('加载配置失败:', error);
         }
-    } catch (error) {
-        console.error('加载配置失败:', error);
     }
-}
 
-    // 添加小号
+    // 添加小号（修复重复生成问题）
     function addSubAccount(value = '') {
         const container = document.createElement('div');
         container.className = 'sub-account-container';
         container.innerHTML = `
-            <textarea class="subCookie" rows="2" placeholder="小号Cookie（JSON格式）">${value}</textarea>
-            <button class="removeSub" onclick="removeSub(this)">×</button>
+            <textarea class="subCookie" rows="2" 
+                placeholder="小号Cookie（JSON格式）">${value}</textarea>
+            <button class="removeSub">×</button>
         `;
+        container.querySelector('.removeSub').addEventListener('click', () => removeSub(container));
         document.getElementById('subAccounts').appendChild(container);
     }
 
-    // 删除小号
-    function removeSub(btn) {
-        btn.parentElement.remove();
+    // 删除小号（修复事件绑定问题）
+    function removeSub(container) {
+        container.remove();
     }
 
-    // 保存115配置
-async function save115Config() {
-    try {
-        const mainCookie = document.getElementById('mainCookie').value;
-        const subCookies = Array.from(document.querySelectorAll('.subCookie')).map(el => el.value);
-        const scheduleTime = document.getElementById('scheduleTime').value;
+    // 保存配置（修复JSON解析问题）
+    async function save115Config() {
+        try {
+            const mainCookie = document.getElementById('mainCookie').value;
+            const subCookies = Array.from(document.querySelectorAll('.subCookie'))
+                .map(el => el.value.trim())
+                .filter(Boolean);
 
-        // 验证输入
-        if (!mainCookie || !subCookies.every(cookie => cookie.trim())) {
-            alert('请填写完整的主账号和小号配置');
-            return;
+            // 输入校验
+            if (!mainCookie || subCookies.length === 0) {
+                alert('请填写完整的主账号和小号配置');
+                return;
+            }
+
+            const config = {
+                main: JSON.parse(mainCookie),
+                subs: subCookies.map(cookie => JSON.parse(cookie)),
+                schedule_time: document.getElementById('scheduleTime').value
+            };
+
+            const res = await fetch('/115_config', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(config)
+            });
+
+            if (res.ok) {
+                alert('配置保存成功');
+                await load115Config(); // 重新加载确保同步
+            } else {
+                alert('保存失败，服务器返回异常');
+            }
+        } catch (error) {
+            console.error('保存配置失败:', error);
+            alert('配置格式错误，请检查JSON语法');
         }
-
-        const config = {
-            main: JSON.parse(mainCookie),
-            subs: subCookies.map(cookie => JSON.parse(cookie)),
-            schedule_time: scheduleTime
-        };
-
-        const res = await fetch('/115_config', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify(config)
-        });
-
-        if (res.ok) {
-            alert('配置保存成功');
-            await load115Config(); // 重新加载配置
-        } else {
-            alert('保存失败，请检查控制台');
-        }
-    } catch (error) {
-        console.error('保存配置失败:', error);
-        alert('保存配置失败，请检查输入格式');
     }
-}
 
-    // 立即执行115任务
+    // 立即执行任务
     async function run115Now() {
-        const res = await fetch('/115_run_now', { method: 'POST' });
-        if (res.ok) {
-            alert('任务已触发，请查看日志');
-        } else {
-            alert('触发失败');
+        try {
+            const res = await fetch('/115_run_now', { method: 'POST' });
+            if (res.ok) {
+                alert('任务已触发，请查看日志');
+                loadLocalLogs(); // 立即刷新日志
+            } else {
+                alert('触发失败，请检查网络');
+            }
+        } catch (error) {
+            console.error('触发任务失败:', error);
+            alert('网络请求异常');
         }
     }
 
-    // ====================== 日志动态加载 ======================
-async function loadLocalLogs() {
-    const res = await fetch('/get_local_logs');
-    const data = await res.json();
-    const output = document.getElementById('output');
-    output.innerHTML = '';  // 清空现有日志
+    // ====================== 日志管理 ======================
+    // 动态加载日志（修复空日志处理）
+    async function loadLocalLogs() {
+        try {
+            const res = await fetch('/get_local_logs');
+            const data = await res.json();
+            const output = document.getElementById('output');
+            output.innerHTML = '';
 
-    data.logs.forEach(log => {
-        const logEntry = document.createElement('div');
-        logEntry.className = 'log-entry';
-        logEntry.textContent = log;
-        output.appendChild(logEntry);
-    });
-
-    // 自动滚动到底部
-    output.scrollTop = output.scrollHeight;
-}
-
-// 定时刷新日志（每 5 秒刷新一次）
-setInterval(loadLocalLogs, 5000);
-
-// 页面加载时立即加载日志
-document.addEventListener('DOMContentLoaded', loadLocalLogs);
+            if (data.logs && data.logs.length > 0) {
+                data.logs.forEach(log => {
+                    const logEntry = document.createElement('div');
+                    logEntry.className = 'log-entry';
+                    logEntry.textContent = log;
+                    output.appendChild(logEntry);
+                });
+            } else {
+                output.innerHTML = '<div class="log-entry">暂无运行日志</div>';
+            }
+            output.scrollTop = output.scrollHeight;
+        } catch (error) {
+            console.error('加载日志失败:', error);
+        }
+    }
 
     // ====================== 初始化逻辑 ======================
-        
-        // 加载115配置
     document.addEventListener('DOMContentLoaded', () => {
-        checkLoginStatus();// 初始化登录状态
-        load115Config(); // 加载115配置
-    });
+        // 初始化登录状态
+        checkLoginStatus();
+        
+        // 加载115配置（确保至少一个输入框）
+        load115Config();
 
-        // 事件绑定
-        document.querySelector('.logout-btn').addEventListener('click', handleLogout);
-        document.addEventListener('DOMContentLoaded', () => {
-            document.querySelector('.add-btn').addEventListener('click', () => {
-                addSubAccount(); // 确保每次点击只调用一次
-            });
-        });
+        // 事件绑定（修复重复绑定问题）
+        document.getElementById('addSubBtn').addEventListener('click', () => addSubAccount());
+        document.getElementById('save115Btn').addEventListener('click', save115Config);
+        document.getElementById('run115Btn').addEventListener('click', run115Now);
 
         // 表单提交事件
         document.getElementById('configForm').addEventListener('submit', async (e) => {
@@ -743,7 +749,6 @@ document.addEventListener('DOMContentLoaded', loadLocalLogs);
                 return;
             }
 
-            const password = document.getElementById('password').value;
             const output = document.getElementById('output');
             const loading = document.getElementById('loading');
             
@@ -752,7 +757,7 @@ document.addEventListener('DOMContentLoaded', loadLocalLogs);
 
             const formData = new FormData(e.target);
             formData.append('p123_user', userInfo.user_info.passport);
-            formData.append('p123_pass', password);
+            formData.append('p123_pass', document.getElementById('password').value);
 
             const eventSource = new EventSource(`/generate?${new URLSearchParams(formData)}`);
 
@@ -761,40 +766,31 @@ document.addEventListener('DOMContentLoaded', loadLocalLogs);
                 const logEntry = document.createElement('div');
                 logEntry.className = 'log-entry';
 
+                // 日志分类处理
                 if (rawLine.includes('PROCESS_EXIT_CODE:')) {
                     const code = rawLine.split(':')[1];
                     loading.style.display = 'none';
                     eventSource.close();
-                    if (code !== '0') {
-                        logEntry.innerHTML = `
-                            <span class="log-time">${new Date().toLocaleTimeString()}</span>
-                            <span class="log-error">生成过程出现错误，退出码: ${code}</span>
-                        `;
-                    } else {
-                        logEntry.innerHTML = `
-                            <span class="log-time">${new Date().toLocaleTimeString()}</span>
-                            <span class="log-success">任务完成，退出码: ${code}</span>
-                        `;
-                    }
+                    logEntry.innerHTML = `
+                        <span class="log-time">${new Date().toLocaleTimeString()}</span>
+                        <span class="${code === '0' ? 'log-success' : 'log-error'}">
+                            任务完成，退出码: ${code}
+                        </span>
+                    `;
                 } else if (rawLine.startsWith('[SUCCESS]')) {
                     logEntry.innerHTML = `
                         <span class="log-time">${new Date().toLocaleTimeString()}</span>
-                        <span class="log-success">${rawLine.replace('[SUCCESS] ', '')}</span>
-                    `;
-                } else if (rawLine.startsWith('[PROCESS]')) {
-                    logEntry.innerHTML = `
-                        <span class="log-time">${new Date().toLocaleTimeString()}</span>
-                        <span class="log-process">${rawLine.replace('[PROCESS] ', '')}</span>
+                        <span class="log-success">${rawLine.slice(9)}</span>
                     `;
                 } else if (rawLine.startsWith('[ERROR]')) {
                     logEntry.innerHTML = `
                         <span class="log-time">${new Date().toLocaleTimeString()}</span>
-                        <span class="log-error">${rawLine.replace('[ERROR] ', '')}</span>
+                        <span class="log-error">${rawLine.slice(7)}</span>
                     `;
                 } else {
                     logEntry.innerHTML = `
                         <span class="log-time">${new Date().toLocaleTimeString()}</span>
-                        <span class="log-file">${rawLine}</span>
+                        <span class="log-process">${rawLine}</span>
                     `;
                 }
 
@@ -802,23 +798,18 @@ document.addEventListener('DOMContentLoaded', loadLocalLogs);
                 output.scrollTop = output.scrollHeight;
             };
 
-            eventSource.addEventListener('error', function(event) {
-                const errorMsg = event.data || '连接中断，请检查网络状态';
-                const logEntry = document.createElement('div');
-                logEntry.className = 'log-entry';
-                logEntry.innerHTML = `
-                    <span class="log-time">${new Date().toLocaleTimeString()}</span>
-                    <span class="log-error">${errorMsg}</span>
-                `;
-                output.appendChild(logEntry);
+            eventSource.addEventListener('error', () => {
                 loading.style.display = 'none';
                 eventSource.close();
             });
         });
 
-        // 页面加载时立即加载日志
-        loadLogs();
+        // 启动日志轮询
+        setInterval(loadLocalLogs, 5000);
+        loadLocalLogs();
     });
 </script>
+    
+    
 </body>
 </html>
