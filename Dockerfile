@@ -42,9 +42,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN mkdir -p \
     templates \
     EmbyLibrary \
-    /app/cache/config \
+    /app/cache \
     /var/log/supervisor \
     /app/config \
+    /app/logs \
     && chmod 777 /app
 
 # 复制代码
@@ -57,7 +58,7 @@ RUN chmod +x /app/auth_check.sh
 EXPOSE 8123 8124
 
 # 初始化配置
-VOLUME /app/cache/config
+VOLUME /app/cache
 VOLUME /app/config
 VOLUME /app/logs
 
