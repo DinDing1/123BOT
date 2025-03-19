@@ -212,11 +212,11 @@ class SmartWishSystem:
 ######################
 #  日志系统
 ######################
-# 修改日志函数与Web输出集成
 def log(msg: str, level: str = "INFO"):
-    timestamp = time.strftime("%H:%M:%S")
-    # 输出到标准输出供Flask捕获
-    print(f"[115] [{timestamp}] [{level}] {msg}")
+    """修改后的日志函数"""
+    timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+    full_msg = f"[{timestamp}] [{level}] {msg}"
+    print(full_msg)  # 输出到stdout供Flask捕获
     sys.stdout.flush()
 
 ######################
