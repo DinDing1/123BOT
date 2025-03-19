@@ -717,12 +717,12 @@ setInterval(loadLocalLogs, 5000);
 document.addEventListener('DOMContentLoaded', loadLocalLogs);
 
     // ====================== 初始化逻辑 ======================
-    document.addEventListener('DOMContentLoaded', () => {
-        // 初始化登录状态
-        checkLoginStatus();
         
         // 加载115配置
-        load115Config();
+    document.addEventListener('DOMContentLoaded', () => {
+        checkLoginStatus();// 初始化登录状态
+        load115Config(); // 加载115配置
+    });
 
         // 事件绑定
         document.querySelector('.logout-btn').addEventListener('click', handleLogout);
@@ -731,8 +731,6 @@ document.addEventListener('DOMContentLoaded', loadLocalLogs);
                 addSubAccount(); // 确保每次点击只调用一次
             });
         });
-
-
 
         // 表单提交事件
         document.getElementById('configForm').addEventListener('submit', async (e) => {
