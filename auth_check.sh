@@ -3,7 +3,7 @@
 # 远程验证服务地址
 AUTH_API_URL="http://158.178.236.135:5000/verify"
 MAX_RETRIES=3
-DEVICE_ID_FILE="/app/cache/config/device_id"  # 修改为子目录路径
+DEVICE_ID_FILE="/app/config/device_id"  # 修改为子目录路径
 
 # 生成或读取设备ID（增强兼容性和错误处理）
 generate_device_id() {
