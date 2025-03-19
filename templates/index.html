@@ -633,8 +633,6 @@
         document.getElementById('subAccounts').appendChild(container);
     }
 
-
-
     // 删除小号
     function removeSub(btn) {
         btn.parentElement.remove();
@@ -642,11 +640,21 @@
 
     // 保存115配置
     async function save115Config() {
+    try {
+        const mainCookie = document.getElementById('mainCookie').value;
+        const subCookies = Array.from(document.querySelectorAll('.subCookie')).map(el => el.value);
+        const scheduleTime = document.getElementById('scheduleTime').value;
+
+        // 验证输入
+        if (!mainCookie || !subCookies.every(cookie => cookie.trim())) {
+            alert('请填写完整的主账号和小号配置');
+            return;
+        }
+
         const config = {
-            main: JSON.parse(document.getElementById('mainCookie').value),
-            subs: Array.from(document.querySelectorAll('.subCookie'))
-                .map(el => JSON.parse(el.value)),
-            schedule: document.getElementById('scheduleTime').value
+            main: JSON.parse(mainCookie),
+            subs: subCookies.map(cookie => JSON.parse(cookie)),
+            schedule_time: scheduleTime
         };
 
         const res = await fetch('/115_config', {
@@ -656,12 +664,16 @@
         });
 
         if (res.ok) {
-            await load115Config();  // 保存后立即重新加载
             alert('配置保存成功');
+            await load115Config(); // 重新加载配置
         } else {
-            alert('保存失败');
+            alert('保存失败，请检查控制台');
         }
+    } catch (error) {
+        console.error('保存配置失败:', error);
+        alert('保存配置失败，请检查输入格式');
     }
+}
 
     // 立即执行115任务
     async function run115Now() {
