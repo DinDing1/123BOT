@@ -117,7 +117,6 @@ def logout():
 # ------------------- 115配置管理路由 -------------------
 @app.route('/115_config', methods=['GET', 'POST'])
 def handle_115_config():
-    """115配置管理"""
     if not session.get('logged_in'):
         return jsonify({"success": False})
     
@@ -135,7 +134,7 @@ def handle_115_config():
                     user_id,
                     json.dumps(data.get('main')),
                     json.dumps(data.get('subs')),
-                    data.get('schedule', '08:00')
+                    data.get('schedule_time', '08:00')
                 ))
             return jsonify({"success": True})
         except Exception as e:
