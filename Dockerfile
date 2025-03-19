@@ -22,9 +22,13 @@ WORKDIR /app
 # 复制依赖
 COPY --from=builder /root/.local /root/.local
 ENV PATH=/root/.local/bin:$PATH
-    CONFIG115_PATH=/app/config/115_config.txt
-    FLASK_APP=app.py 
-    FLASK_ENV=production 
+
+
+ENV CONFIG115_PATH=/app/config/115_config.txt \
+    FLASK_APP=app.py \
+    FLASK_ENV=production
+
+     
 
 
 # 安装运行时依赖
