@@ -10,6 +10,7 @@ from werkzeug.serving import WSGIRequestHandler
 from apscheduler.schedulers.background import BackgroundScheduler
 import json
 import time
+from datetime import datetime
 
 # 加载环境变量
 load_dotenv()
@@ -305,6 +306,35 @@ def run_115_task():
         yield "event: close\ndata: \n\n"
     
     return Response(stream_with_context(generate()), content_type='text/event-stream')
+    
+
+
+# 新增：获取历史日志
+@app.route('/get_logs')
+def get_logs():
+    try:
+        logs = []
+        # 读取WEB日志
+        with open("web_strm.log", "r", encoding="utf-8") as f:
+            for line in f:
+                time_str, message = line.strip().split(" - ", 1)
+                logs.append({
+                    "time": datetime.strptime(time_str, "%Y-%m-%d %H:%M:%S").strftime("%H:%M:%S"),
+                    "message": message
+                })
+        # 读取115日志
+        with open("115_auto.log", "r", encoding="utf-8") as f:
+            for line in f:
+                if "[115]" in line:
+                    time_str = line.split("[115] ")[1].split("]")[0]
+                    message = line.split("] ")[2].strip()
+                    logs.append({
+                        "time": time_str,
+                        "message": f"[115] {message}"
+                    })
+        return jsonify(logs[-100:])  # 返回最近100条日志
+    except Exception as e:
+        return jsonify([])
         
 # 启动日志优化
 logger = logging.getLogger('strm_generator')
