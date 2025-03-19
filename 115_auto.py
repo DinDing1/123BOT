@@ -173,9 +173,10 @@ def run_115_now():
             'python', '/app/115_auto.py',
             '--config', f"/app/cache/config/115_{user_id}.json"
         ])
+        logger.info(f"已触发115任务，用户ID: {user_id}")  # 记录日志
         return jsonify({"success": True})
     except Exception as e:
-        logging.error(f"立即执行失败: {str(e)}")
+        logger.error(f"立即执行失败: {str(e)}")  # 记录错误日志
         return jsonify({"success": False})
 
 # ------------------- 日志管理路由 -------------------
