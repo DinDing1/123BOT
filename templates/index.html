@@ -707,7 +707,13 @@ document.addEventListener('DOMContentLoaded', loadLocalLogs);
 
         // 事件绑定
         document.querySelector('.logout-btn').addEventListener('click', handleLogout);
-        document.querySelector('.add-btn').addEventListener('click', addSubAccount);
+        document.addEventListener('DOMContentLoaded', () => {
+            document.querySelector('.add-btn').addEventListener('click', () => {
+                addSubAccount(); // 确保每次点击只调用一次
+            });
+        });
+
+
 
         // 表单提交事件
         document.getElementById('configForm').addEventListener('submit', async (e) => {
