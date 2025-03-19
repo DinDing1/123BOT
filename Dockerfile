@@ -27,7 +27,9 @@ ENV PATH=/root/.local/bin:$PATH
 ENV CONFIG115_PATH=/app/config/115_config.txt \
     FLASK_APP=app.py \
     FLASK_ENV=production \
-    LOG_PATH=/app/logs
+    LOG_PATH=/app/logs \
+    PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app
 
 # 安装运行时依赖
 RUN apt-get update && apt-get install -y --no-install-recommends \
