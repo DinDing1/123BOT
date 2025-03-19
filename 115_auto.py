@@ -212,6 +212,3 @@ def startup_event():
     """初始化任务"""
     init_db()
 
-# 将 app.run() 放在 if __name__ == "__main__": 块中
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8124)
