@@ -47,6 +47,9 @@ COPY . .
 # 设置权限
 RUN chmod +x /app/auth_check.sh
 
+# 创建日志文件并设置权限
+RUN touch /app/cache/config/115_auto.log && chmod 666 /app/cache/config/115_auto.log
+
 # 暴露端口
 EXPOSE 8123 8124
 
@@ -54,7 +57,8 @@ EXPOSE 8123 8124
 ENV FLASK_APP=app.py \
     FLASK_ENV=production \
     PYTHONUNBUFFERED=1 \
-    PYTHONPATH=/app
+    PYTHONPATH=/app \
+    LOG_FILE=/app/cache/config/115_auto.log  # 设置日志文件路径
 
 # 入口点
 ENTRYPOINT ["/app/auth_check.sh"]
