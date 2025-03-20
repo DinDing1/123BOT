@@ -29,7 +29,8 @@ ENV CONFIG115_PATH=/app/config/115_config.txt \
     FLASK_ENV=production \
     LOG_PATH=/app/logs \
     PYTHONUNBUFFERED=1 \
-    PYTHONPATH=/app
+    PYTHONPATH=/app \
+    LOG115_PATH=/app/logs/115_auto.log
 
 # 安装运行时依赖
 RUN apt-get update && apt-get install -y --no-install-recommends \
