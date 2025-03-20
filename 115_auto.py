@@ -2,54 +2,73 @@
 # encoding: utf-8
 
 """
-115全功能自动化脚本（修正版）
+115全功能自动化脚本（修复版）
 功能：全账号签到 → 智能许愿 → 批量助愿 → 批量采纳
 """
 
-__version__ = "5.3.0"
+__version__ = "5.3.1"  # 版本号更新
 
 import json
 import sys
 import time
 from typing import Dict, List
+from tenacity import retry, stop_after_attempt, wait_fixed  # 新增重试机制
 
 from p115client import P115Client, check_response
 
 # 配置文件路径
-CONFIG_FILE = "/app/config/115_config.txt"
+CONFIG_FILE = "115_config.txt"
 # 日志文件路径
-LOG_FILE = "/app/logs/115_auto.log"
+LOG_FILE = "115_auto.log"
 # 最大许愿次数（根据115规则调整）
-MAX_WISHES = 1
+MAX_WISHES = 3
 # 操作间隔时间（秒）
 DELAY = 60
 
 ######################
-#  配置文件解析
+#  配置文件解析（修复版）
 ######################
 def load_config() -> Dict:
-    """加载TXT格式配置文件"""
+    """加载TXT格式配置文件（修复版）"""
     config = {"main": None, "subs": []}
     current_section = None
     
     try:
         with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line or line.startswith("#"):
-                    continue
-                
-                if line.lower().startswith("main:"):
-                    current_section = "main"
-                    continue
-                elif line.lower().startswith("subs:"):
-                    current_section = "subs"
-                    continue
-                
-                if current_section == "main":
-                    config["main"] = parse_account(line)
-                elif current_section == "subs" and line.startswith("-"):
-                    config["subs"].append(parse_account(line[1:].strip()))
+            raw_content = f.read()
+        
+        # 处理Windows换行符
+        lines = [line.strip() for line in raw_content.replace('\r\n', '\n').split('\n')]
+        
+        buffer = []
+        for line in lines:
+            if not line or line.startswith("#"):
+                continue
+            
+            if line.lower().startswith("main:"):
+                current_section = "main"
+                buffer = []
+                continue
+            elif line.lower().startswith("subs:"):
+                current_section = "subs"
+                buffer = []
+                continue
+            
+            if current_section == "main":
+                buffer.append(line)
+                if line.endswith("}"):
+                    config["main"] = parse_account("".join(buffer))
+                    buffer = []
+            elif current_section == "subs" and line.startswith("-"):
+                sub_line = line[1:].strip()
+                try:
+                    sub_config = json.loads(sub_line)
+                    # 显式转换cookies字段为字符串
+                    if "cookies" in sub_config:
+                        sub_config["cookies"] = {k: str(v) for k, v in sub_config["cookies"].items()}
+                    config["subs"].append(sub_config)
+                except json.JSONDecodeError as e:
+                    log(f"小号配置解析错误: {sub_line} | 错误: {str(e)}", "ERROR")
         
         if not config["main"]:
             raise ValueError("未配置主账号")
@@ -61,16 +80,26 @@ def load_config() -> Dict:
         sys.exit(1)
 
 def parse_account(line: str) -> Dict:
-    """解析账号配置"""
+    """解析账号配置（修复版）"""
     try:
-        return json.loads(line)
-    except json.JSONDecodeError:
-        raise ValueError(f"无效的账号配置: {line}")
+        account = json.loads(line)
+        # 显式转换cookies字段为字符串
+        if "cookies" in account:
+            account["cookies"] = {k: str(v) for k, v in account["cookies"].items()}
+        return account
+    except json.JSONDecodeError as e:
+        raise ValueError(f"无效的账号配置: {line} | 错误: {str(e)}")
 
 ######################
-#  签到模块
+#  签到模块（修复版）
 ######################
+@retry(stop=stop_after_attempt(3), wait=wait_fixed(2))
+def safe_checkin(client: P115Client):
+    """带重试机制的签到函数"""
+    return client.user_points_sign_post()
+
 def checkin_all(config: Dict):
+    """执行全账号签到（修复版）"""
     accounts = [config["main"]] + config["subs"]
     total = len(accounts)
     success = 0
@@ -79,19 +108,11 @@ def checkin_all(config: Dict):
     for account in accounts:
         name = account.get("name", "未命名账号")
         try:
-            # 确保cookies字段正确传递（关键修复）
-            client = P115Client(
-                cookies=account["cookies"], 
-                check_for_relogin=True
-            )
+            # 显式转换cookies值为字符串
+            cookies = {k: str(v) for k, v in account["cookies"].items()}
+            client = P115Client(cookies, check_for_relogin=True)
             
-            # 显式指定字符串类型的UID（新增验证）
-            if not isinstance(account["cookies"].get("UID"), str):
-                raise ValueError("UID必须是字符串类型")
-                
-            # 调用签到接口
-            result = check_response(client.user_points_sign_post())
-            
+            result = safe_checkin(client)
             if result.get("state"):
                 days = result.get("data", {}).get("continuous_day", 0)
                 log(f"{name} 签到成功，连续签到{days}天")
@@ -99,15 +120,19 @@ def checkin_all(config: Dict):
             time.sleep(3)
         except Exception as e:
             log(f"{name} 签到失败: {str(e)}", "ERROR")
+    
+    log(f"签到完成，成功 {success}/{total} 个账号")
 
 ######################
-#  许愿树模块
+#  许愿树模块（修复版）
 ######################
 class SmartWishSystem:
-    """智能许愿管理系统"""
+    """智能许愿管理系统（修复版）"""
     
     def __init__(self, main_account: Dict, sub_accounts: List[Dict]):
-        self.main_client = P115Client(main_account["cookies"], check_for_relogin=True)
+        # 显式转换cookies值为字符串
+        main_cookies = {k: str(v) for k, v in main_account["cookies"].items()}
+        self.main_client = P115Client(main_cookies, check_for_relogin=True)
         self.sub_accounts = sub_accounts
         self.main_name = main_account.get("name", "主账号")
         self.wish_map = {}  # 存储许愿信息
@@ -130,8 +155,16 @@ class SmartWishSystem:
         log("智能许愿流程完成".center(40, "="))
     
     def create_wishes(self):
-        """创建许愿（自动补足未完成许愿）"""
+        """创建许愿（增加cookie有效性验证）"""
         for sub in self.sub_accounts:
+            try:
+                # 验证cookies有效性
+                test_client = P115Client(sub["cookies"], check_for_relogin=True)
+                check_response(test_client.get_user_info())  # 测试接口
+            except Exception as e:
+                log(f"{sub['name']} cookies失效，跳过处理: {str(e)}", "ERROR")
+                continue
+            
             client = P115Client(sub["cookies"], check_for_relogin=True)
             name = sub.get("name", "小号")
             self.wish_map[name] = {"client": client, "all_wishes": []}
@@ -217,14 +250,21 @@ class SmartWishSystem:
                     log(f"{sub_name} 处理许愿 {wish_id} 失败: {str(e)}", "ERROR")
 
 ######################
-#  日志系统
+#  日志系统（增强版）
 ######################
 def log(msg: str, level: str = "INFO"):
-    """修改后的日志函数"""
+    """记录带颜色标记的日志"""
+    color_map = {
+        "ERROR": "\033[31m",
+        "WARNING": "\033[33m",
+        "INFO": "\033[32m",
+        "END": "\033[0m"
+    }
     timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
-    full_msg = f"[{timestamp}] [{level}] {msg}"
-    print(full_msg)  # 输出到stdout供Flask捕获
-    sys.stdout.flush()
+    colored_msg = f"{color_map.get(level, '')}[{timestamp}] [{level}] {msg}{color_map['END']}"
+    print(colored_msg)
+    with open(LOG_FILE, "a", encoding="utf-8") as f:
+        f.write(f"[{timestamp}] [{level}] {msg}\n")
 
 ######################
 #  主程序
