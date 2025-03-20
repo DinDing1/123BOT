@@ -13,89 +13,304 @@
             --text-color: #e0e0e0;
         }
 
-        /* 容器布局 */
-        .container {
-            display: grid;
-            grid-template-columns: 1fr 1fr 2fr;
-            grid-template-rows: auto auto auto auto;
-            grid-template-areas: 
-                "header header header"
-                "user-info config-115 log-panel"
-                "config-panel config-panel log-panel"
-                "generate generate generate";
-            gap: 1.2rem;
-            margin: 20px;
-            min-height: 90vh;
+        canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            z-index: -1;
         }
 
-        /* 头部样式 */
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: var(--background-color);
+            color: var(--text-color);
+            margin: 0;
+            height: 100vh;
+            overflow: auto;
+            display: flex;
+            flex-direction: column;
+            min-height: 720px;
+        }
+
+        /* 登录容器 */
+        .login-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            width: 100%;
+            padding: 2rem;
+            box-sizing: border-box;
+        }
+
+        .login-form {
+            background: rgba(25, 40, 60, 0.9);
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: var(--neon-effect);
+            width: 100%;
+            max-width: 400px;
+            text-align: center;
+            box-sizing: border-box;
+            border: 1px solid rgba(0, 243, 255, 0.3);
+            backdrop-filter: blur(3px);
+        }
+
+        .login-form h3 {
+            margin: 0 0 1.5rem 0;
+            font-size: 1.6rem;
+            color: var(--primary-color);
+        }
+
+        .login-form input {
+            width: calc(100% - 2rem);
+            padding: 0.8rem 1rem;
+            margin: 0.5rem auto;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(0, 243, 255, 0.2);
+            border-radius: 8px;
+            font-size: 1rem;
+            color: var(--text-color);
+            transition: border-color 0.3s ease;
+        }
+
+        .login-form input:focus {
+            border-color: var(--primary-color);
+            outline: none;
+        }
+
+        .login-form button {
+            width: 50%;
+            padding: 0.8rem;
+            margin: 1rem auto;
+            background: linear-gradient(45deg, var(--secondary-color), var(--primary-color));
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: transform 0.2s ease;
+            display: block;
+        }
+
+        .login-form button:hover {
+            transform: scale(1.02);
+        }
+
+        .version-info {
+            margin: 1.5rem 1rem 0 1rem;
+            font-size: 0.9rem;
+            color: #666;
+        }
+
+        /* 主界面容器 */
+        .container {
+            flex: 1;
+            margin: 20px;
+            background: rgba(20, 30, 45, 0.95);
+            border-radius: 12px;
+            box-shadow: var(--neon-effect);
+            padding: 1.2rem;
+            display: none;
+            grid-template-areas: 
+                "header header"
+                "user-area log-panel"
+                "config-panel log-panel";
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: auto 1fr;
+            gap: 1.2rem;
+            min-height: 680px;
+            overflow: hidden;
+            box-sizing: border-box;
+            border: 1px solid rgba(0, 243, 255, 0.2);
+            backdrop-filter: blur(5px);
+        }
+
         .header {
             grid-area: header;
             text-align: center;
-            background: rgba(25, 40, 60, 0.9);
-            padding: 1rem;
-            border-radius: 8px;
-            border: 1px solid rgba(0, 243, 255, 0.3);
+            margin-bottom: 0.8rem;
         }
 
-        /* 用户信息容器 */
-        .user-info-container {
-            grid-area: user-info;
-            background: rgba(25, 40, 60, 0.9);
-            border-radius: 8px;
-            padding: 1.2rem;
-            height: 380px;
-            overflow: hidden;
+        .logo {
+            color: var(--primary-color);
+            font-size: 1.7rem;
+            font-weight: bold;
+            margin-bottom: 0.2rem;
         }
 
-        /* 115配置容器 */
-        .config-115-container {
-            grid-area: config-115;
-            background: rgba(25, 40, 60, 0.9);
-            border-radius: 8px;
-            padding: 1.2rem;
-            height: 380px;
-            overflow: hidden;
+        .header p {
+            color: var(--text-color);
+            font-size: 0.88rem;
+            margin-bottom: 0.6rem;
         }
 
-        .panel-115 {
-            height: 100%;
+        .header .divider {
+            width: 88%;
+            height: 1px;
+            background: rgba(255, 255, 255, 0.1);
+            margin: 0.6rem auto;
+        }
+
+        .header .version {
+            color: #6c757d;
+            font-size: 0.82rem;
+            margin-top: 0.8rem;
+        }
+
+        .user-area {
+            grid-area: user-area;
             display: flex;
-            flex-direction: column;
-        }
-
-        .panel-115 textarea {
-            flex: 1;
-            min-height: 120px;
-            overflow-y: auto !important;
-        }
-
-        /* 日志容器 */
-        .log-panel {
-            grid-area: log-panel;
-            height: calc(100vh - 220px);
-            background: rgba(0, 0, 0, 0.7);
+            justify-content: center;
+            align-items: center;
             padding: 1rem;
+            width: 100%;
         }
 
-        /* 原始配置容器 */
-        .config-panel {
-            grid-area: config-panel;
-            background: rgba(20, 30, 45, 0.95);
-            padding: 1.2rem;
-        }
-
-        /* 生成按钮容器 */
-        #generateButtonContainer {
-            grid-area: generate;
+        .auth-panel {
+            background: rgba(0, 0, 0, 0.6);
+            padding: 1.5rem 2rem;
+            border-radius: 8px;
+            box-shadow: 0 0 8px rgba(0, 243, 255, 0.2);
+            width: 100%;
+            max-width: 380px;
+            display: none;
+            border: 1px solid rgba(0, 243, 255, 0.2);
             text-align: center;
         }
 
-        /* 按钮样式 */
-        .button-group button {
+        .auth-panel.active {
+            display: block !important;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .auth-panel h3 {
+            margin-bottom: 1.5rem;
+        }
+
+        .auth-panel div {
+            margin: 0.8rem 0;
+            text-align: center;
+            display: block;
+            width: 100%;
+        }
+
+        .config-panel {
+            grid-area: config-panel;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+            align-content: start;
+        }
+
+        .config-section {
+            background: rgba(25, 40, 60, 0.9);
+            padding: 1.5rem;
+            border-radius: 8px;
+            border: 1px solid rgba(0, 243, 255, 0.2);
+        }
+
+        .config-section h3 {
+            color: var(--primary-color);
+            margin-top: 0;
+            text-align: center;
+        }
+
+        .config-section textarea {
+            width: 100%;
+            height: 120px;
+            resize: vertical;
+            margin-bottom: 1rem;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(0, 243, 255, 0.2);
+            border-radius: 6px;
+            color: var(--text-color);
+            padding: 0.6rem;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 1rem;
+            justify-content: space-between;
+            margin-top: 1rem;
+        }
+
+        .action-buttons button {
+            flex: 1;
+            padding: 0.6rem;
             background: linear-gradient(45deg, var(--secondary-color), var(--primary-color));
-            padding: 0.8rem;
-            margin: 0.5rem;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+
+        .log-panel {
+            grid-area: log-panel;
+            background: rgba(0, 0, 0, 0.7);
+            border-radius: 8px;
+            padding: 1rem;
+            font-family: 'Consolas', monospace;
+            font-size: 0.8rem;
+            line-height: 1.4;
+            height: calc(100% - 2.4rem);
+            overflow-y: auto;
+            border: 1px solid rgba(0, 243, 255, 0.2);
+        }
+
+        .log-entry {
+            margin: 0.25rem 0;
+            word-break: break-all;
+            color: var(--primary-color);
+        }
+
+        .log-time {
+            color: #6c757d;
+            margin-right: 0.8rem;
+        }
+
+        button {
+            background: linear-gradient(45deg, var(--secondary-color), var(--primary-color));
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1rem;
+            margin: 1rem auto;
+            display: block;
+            transition: transform 0.2s ease;
+        }
+
+        button:hover:not(:disabled) {
+            transform: scale(1.02);
+        }
+
+        .logout-btn {
+            background: linear-gradient(45deg, #ff006a, #dc3545) !important;
+            width: 150px;
+            margin-top: 1.5rem;
+        }
+
+        .logout-btn:hover {
+            background: linear-gradient(45deg, #dc3545, #bb2d3b) !important;
+        }
+
+        button:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 1rem;
+            color: var(--primary-color);
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
         }
     </style>
 </head>
@@ -109,13 +324,14 @@
             <input type="text" id="passport" placeholder="123云盘账号">
             <input type="password" id="password" placeholder="123云盘密码">
             <button onclick="handleLogin()">登录</button>
-            <div class="version-info">版本号: v2.0.1 | 作者: dinding</div>
+            <div class="version-info">
+                版本号: v2.0.1 | 作者: dinding
+            </div>
         </div>
     </div>
 
     <!-- 主界面 -->
     <div class="container">
-        <!-- 头部 -->
         <div class="header">
             <div class="logo">123Media_STRM</div>
             <p>感谢🈲贫大佬，祝🈲贫大佬长命百岁</p>
@@ -123,8 +339,9 @@
             <div class="version">版本号: v2.0.1 | 作者: dinding</div>
         </div>
 
-        <!-- 用户信息 -->
-        <div class="user-info-container">
+        <!-- 用户信息区域 -->
+        <div class="user-area">
+            <div class="auth-panel login-form" id="loginForm"></div>
             <div class="auth-panel user-info" id="userInfo">
                 <h2>👤 用户信息</h2>
                 <div><span>📛 昵称: <span id="nickname"></span></span></div>
@@ -136,34 +353,61 @@
             </div>
         </div>
 
-        <!-- 115配置 -->
-        <div class="config-115-container">
-            <div class="panel-115">
-                <h2>⚡ 115功能配置</h2>
-                <form id="config115Form">
+        <!-- 配置区域 -->
+        <div class="config-panel">
+            <!-- 115配置区块 -->
+            <div class="config-section">
+                <h3>⚡ 115功能配置</h3>
+                <div class="form-group">
+                    <label>主账号配置</label>
+                    <textarea id="main_config" placeholder="Main:\n{...}"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>小号配置（每行一个JSON）</label>
+                    <textarea id="subs_config" placeholder="Subs:\n- {...}"></textarea>
+                </div>
+                <div class="action-buttons">
+                    <input type="time" id="schedule_time" value="08:00">
+                    <button onclick="save115Config()">💾 保存配置</button>
+                    <button onclick="run115Task()">🚀 立即执行</button>
+                </div>
+            </div>
+
+            <!-- STRM生成配置区块 -->
+            <div class="config-section">
+                <h3>🎬 STRM生成配置</h3>
+                <form id="configForm" action="/generate" method="GET">
                     <div class="form-group">
-                        <label>主账号配置</label>
-                        <textarea id="main_config" rows="3" placeholder="Main:\n{...}"></textarea>
+                        <label for="direct_link_url">直连地址</label>
+                        <input type="url" id="direct_link_url" name="direct_link_url" value="http://172.17.0.1:8123" required>
                     </div>
                     <div class="form-group">
-                        <label>小号配置（每行一个）</label>
-                        <textarea id="subs_config" rows="6" placeholder="Subs:\n- {...}"></textarea>
+                        <label for="parent_id">起始目录ID</label>
+                        <input type="number" id="parent_id" name="parent_id" value="0">
                     </div>
                     <div class="form-group">
-                        <label>许愿次数</label>
-                        <input type="number" id="max_wishes" value="3" min="1">
+                        <label for="max_retries">重试次数</label>
+                        <input type="number" id="max_retries" name="max_retries" value="3" min="0">
                     </div>
                     <div class="form-group">
-                        <label>间隔时间(秒)</label>
-                        <input type="number" id="delay" value="60" min="10">
+                        <label for="request_delay">请求间隔（秒）</label>
+                        <input type="number" id="request_delay" name="request_delay" value="1" min="0" step="0.1">
                     </div>
                     <div class="form-group">
-                        <label>定时执行</label>
-                        <input type="time" id="schedule_time">
+                        <label for="dir_delay">目录间隔（秒）</label>
+                        <input type="number" id="dir_delay" name="dir_delay" value="2" min="0" step="0.1">
                     </div>
-                    <div class="button-group">
-                        <button type="button" onclick="save115Config()">保存配置</button>
-                        <button type="button" onclick="run115Task()">立即执行</button>
+                    <div class="form-group">
+                        <label for="timeout">下载超时（秒）</label>
+                        <input type="number" id="timeout" name="timeout" value="30" min="1">
+                    </div>
+                    <div class="form-group">
+                        <label for="video_exts">视频扩展名</label>
+                        <input type="text" id="video_exts" name="video_exts" value=".mp4,.mkv,.avi,.mov,.flv,.ts,.iso,.rmvb,.m2ts">
+                    </div>
+                    <div class="form-group">
+                        <label for="subtitle_exts">字幕扩展名</label>
+                        <input type="text" id="subtitle_exts" name="subtitle_exts" value=".srt,.ass,.ssa,.sub,.txt,.vtt,.ttml,.dfxp">
                     </div>
                 </form>
             </div>
@@ -171,50 +415,12 @@
 
         <!-- 日志区域 -->
         <div class="log-panel" id="output"></div>
+    </div>
 
-       <!-- 原始配置 -->
-        <div class="config-panel">
-            <form id="configForm" action="/generate" method="GET">
-                <div class="form-group">
-                    <label for="direct_link_url">直连地址</label>
-                    <input type="url" id="direct_link_url" name="direct_link_url" value="http://172.17.0.1:8123" required>
-                </div>
-                <div class="form-group">
-                    <label for="parent_id">起始目录ID</label>
-                    <input type="number" id="parent_id" name="parent_id" value="0">
-                </div>
-                <div class="form-group">
-                    <label for="max_retries">重试次数</label>
-                    <input type="number" id="max_retries" name="max_retries" value="3" min="0">
-                </div>
-                <div class="form-group">
-                    <label for="request_delay">请求间隔（秒）</label>
-                    <input type="number" id="request_delay" name="request_delay" value="1" min="0" step="0.1">
-                </div>
-                <div class="form-group">
-                    <label for="dir_delay">目录间隔（秒）</label>
-                    <input type="number" id="dir_delay" name="dir_delay" value="2" min="0" step="0.1">
-                </div>
-                <div class="form-group">
-                    <label for="timeout">下载超时（秒）</label>
-                    <input type="number" id="timeout" name="timeout" value="30" min="1">
-                </div>
-                <div class="form-group extension-group">
-                    <label for="video_exts">视频扩展名</label>
-                    <input type="text" id="video_exts" name="video_exts" value=".mp4,.mkv,.avi,.mov,.flv,.ts,.iso,.rmvb,.m2ts">
-                </div>
-                <div class="form-group extension-group">
-                    <label for="subtitle_exts">字幕扩展名</label>
-                    <input type="text" id="subtitle_exts" name="subtitle_exts" value=".srt,.ass,.ssa,.sub,.txt,.vtt,.ttml,.dfxp">
-                </div>
-            </form>
-        </div>
-
-        <!-- 生成按钮 -->
-        <div id="generateButtonContainer" style="display: none;">
-            <button type="submit" form="configForm" id="generateBtn" disabled>生成STRM</button>
-            <div class="loading" id="loading">⏳ 正在生成中，请稍候...</div>
-        </div>
+    <!-- 生成按钮容器 -->
+    <div id="generateButtonContainer" style="display: none;">
+        <button type="submit" form="configForm" id="generateBtn" disabled>生成STRM</button>
+        <div class="loading" id="loading">⏳ 正在生成中，请稍候...</div>
     </div>
 
     <script>
@@ -305,13 +511,12 @@
 
          // 115配置相关逻辑
         // 修改后的保存配置函数
+        // 配置保存逻辑
         async function save115Config() {
             try {
                 const config = {
                     main_config: document.getElementById('main_config').value,
                     subs_config: document.getElementById('subs_config').value.split('\n'),
-                    max_wishes: parseInt(document.getElementById('max_wishes').value),
-                    delay: parseInt(document.getElementById('delay').value),
                     schedule: document.getElementById('schedule_time').value
                 };
 
@@ -320,11 +525,16 @@
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify(config)
                 });
+
+                if (!res.ok) throw new Error(res.statusText);
+                showToast('✅ 配置保存成功');
                 
-                if (!res.ok) throw new Error('保存失败');
-                alert('配置保存成功');
+                // 更新定时任务
+                updateSchedule(config.schedule);
+
             } catch (e) {
-                alert(`保存失败: ${e.message}`);
+                console.error('保存失败:', e);
+                showToast(`❌ 保存失败: ${e.message}`);
             }
         }
 
@@ -333,13 +543,22 @@
                 const res = await fetch('/115_config');
                 const config = await res.json();
                 
+                // 主账号配置
                 document.getElementById('main_config').value = config.main_config || '';
-                document.getElementById('subs_config').value = (config.subs_config || []).join('\n');
-                document.getElementById('max_wishes').value = config.max_wishes || 3;
-                document.getElementById('delay').value = config.delay || 60;
-                document.getElementById('schedule_time').value = config.schedule || '';
+                
+                // 小号配置（数组转文本）
+                document.getElementById('subs_config').value = 
+                    (config.subs_config || []).join('\n');
+                
+                // 定时设置
+                document.getElementById('schedule_time').value = config.schedule || '08:00';
+                
+                // 加载日志历史
+                loadLogHistory();
+
             } catch (e) {
-                console.error('加载配置失败:', e);
+                console.error('配置加载失败:', e);
+                alert('配置加载失败，请检查服务器状态');
             }
         }
 
@@ -370,6 +589,18 @@
             loadLogHistory();  // 新增：加载历史日志
             checkLoginStatus();
         });
+
+                // 工具函数
+        function showToast(message, duration=3000) {
+            const toast = document.createElement('div');
+            toast.className = 'toast-message';
+            toast.textContent = message;
+            document.body.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.remove();
+            }, duration);
+        }
 
 
         // 原有应用逻辑
