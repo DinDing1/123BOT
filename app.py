@@ -77,7 +77,10 @@ def login():
         data = request.json
         passport = data.get('passport')
         password = data.get('password')
-        
+
+        if not passport or not password:
+            return jsonify({"success": False, "message": "账号或密码不能为空"})
+
         # 调用验证接口
         user_info = get_user_info_with_password(passport, password)
         if user_info.get("code") != 0:
