@@ -20,7 +20,7 @@ CONFIG_FILE = "/app/config/115_config.txt"
 # 日志文件路径
 LOG_FILE = "/app/logs/115_auto.log"
 # 最大许愿次数（根据115规则调整）
-MAX_WISHES = 3
+MAX_WISHES = 1
 # 操作间隔时间（秒）
 DELAY = 60
 
