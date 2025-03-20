@@ -197,47 +197,50 @@ def generate_strm():
         
 ############115配置路由
 def parse_115_config(content: str) -> dict:
-    """解析115配置文件内容（增强版）"""
-    config = {"main": None, "subs": [], "params": {}}
+    """增强版配置解析，支持紧凑格式"""
+    config = {"main": None, "subs": []}
     current_section = None
-    
-    for line in content.split('\n'):
+    buffer = []
+
+    lines = content.split('\n')
+    for i, line in enumerate(lines):
         line = line.strip()
         if not line:
             continue
-        
-        # 处理主账号和小号配置头
+
+        # 检测配置段
         if line.lower().startswith('main:'):
             current_section = 'main'
-            config['main'] = {"cookies": {}}
+            buffer = []
             continue
         elif line.lower().startswith('subs:'):
             current_section = 'subs'
+            buffer = []
             continue
-        
-        try:
-            if current_section == 'main':
-                # 解析主账号配置并强制字段为字符串
-                data = json.loads(line)
-                config['main'] = {
-                    "name": data.get("name", "主账号"),
-                    "cookies": {
-                        k: str(v) for k, v in data.get("cookies", {}).items()
-                    }
-                }
-            elif current_section == 'subs' and line.startswith('-'):
-                # 解析小号配置并强制字段为字符串
-                sub_data = json.loads(line[1:].strip())
-                config['subs'].append({
-                    "name": sub_data.get("name", "小号"),
-                    "cookies": {
-                        k: str(v) for k, v in sub_data.get("cookies", {}).items()
-                    }
-                })
-        except json.JSONDecodeError as e:
-            logging.error(f"配置解析错误行: {line} | 错误: {str(e)}")
-        except Exception as e:
-            logging.error(f"配置处理异常: {str(e)}")
+
+        # 主账号配置解析
+        if current_section == 'main':
+            if line.startswith('{'):
+                buffer = [line]
+            elif buffer:
+                buffer.append(line)
+            
+            try:
+                if line.endswith('}'):
+                    config['main'] = json.loads('\n'.join(buffer))
+                    config['main']['cookies'] = {k: str(v) for k, v in config['main']['cookies'].items()}
+            except json.JSONDecodeError as e:
+                logging.error(f"主账号配置解析错误（行 {i+1}）: {str(e)}")
+
+        # 小号配置解析
+        elif current_section == 'subs' and line.startswith('-'):
+            sub_line = line[1:].strip()
+            try:
+                sub_config = json.loads(sub_line)
+                sub_config['cookies'] = {k: str(v) for k, v in sub_config['cookies'].items()}
+                config['subs'].append(sub_config)
+            except json.JSONDecodeError as e:
+                logging.error(f"小号配置解析错误（行 {i+1}）: {str(e)}")
     
     return config
 
