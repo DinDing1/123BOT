@@ -197,7 +197,7 @@ def generate_strm():
         
 ############115配置路由
 def parse_115_config(content: str) -> dict:
-    """解析 115 配置文件"""
+    """解析115配置文件内容（增强版）"""
     config = {"main": None, "subs": [], "params": {}}
     current_section = None
     
@@ -205,8 +205,11 @@ def parse_115_config(content: str) -> dict:
         line = line.strip()
         if not line:
             continue
+        
+        # 处理主账号和小号配置头
         if line.lower().startswith('main:'):
             current_section = 'main'
+            config['main'] = {"cookies": {}}
             continue
         elif line.lower().startswith('subs:'):
             current_section = 'subs'
@@ -214,41 +217,104 @@ def parse_115_config(content: str) -> dict:
         
         try:
             if current_section == 'main':
-                config['main'] = json.loads(line)
+                # 解析主账号配置并强制字段为字符串
+                data = json.loads(line)
+                config['main'] = {
+                    "name": data.get("name", "主账号"),
+                    "cookies": {
+                        k: str(v) for k, v in data.get("cookies", {}).items()
+                    }
+                }
             elif current_section == 'subs' and line.startswith('-'):
-                config['subs'].append(json.loads(line[1:].strip()))
+                # 解析小号配置并强制字段为字符串
+                sub_data = json.loads(line[1:].strip())
+                config['subs'].append({
+                    "name": sub_data.get("name", "小号"),
+                    "cookies": {
+                        k: str(v) for k, v in sub_data.get("cookies", {}).items()
+                    }
+                })
         except json.JSONDecodeError as e:
-            logging.error(f"配置文件解析错误: {str(e)}")
-
+            logging.error(f"配置解析错误行: {line} | 错误: {str(e)}")
+        except Exception as e:
+            logging.error(f"配置处理异常: {str(e)}")
+    
     return config
 
 def generate_115_config(config: dict) -> str:
-    """生成 115 配置文件内容"""
+    """生成115配置文件内容（增强版）"""
     content = []
     if config.get('main'):
+        # 格式化主账号配置
+        main_config = {
+            "name": config['main'].get("name", "主账号"),
+            "cookies": {
+                k: str(v) for k, v in config['main'].get("cookies", {}).items()
+            }
+        }
         content.append("Main:")
-        content.append(json.dumps(config['main'], ensure_ascii=False))
+        content.append(json.dumps(main_config, ensure_ascii=False, indent=2))
+    
     if config.get('subs'):
+        # 格式化小号配置
         content.append("\nSubs:")
         for sub in config['subs']:
-            content.append(f"- {json.dumps(sub, ensure_ascii=False)}")
+            sub_config = {
+                "name": sub.get("name", "小号"),
+                "cookies": {
+                    k: str(v) for k, v in sub.get("cookies", {}).items()
+                }
+            }
+            content.append(f"- {json.dumps(sub_config, ensure_ascii=False, indent=2)}")
+    
     return '\n'.join(content)
+
+def validate_115_config(config: dict):
+    """验证115配置有效性"""
+    required_cookie_fields = ["UID", "CID", "SEID", "KID"]
+    
+    # 验证主账号
+    if not config.get('main'):
+        raise ValueError("必须配置主账号")
+        
+    main_cookies = config['main'].get("cookies", {})
+    for field in required_cookie_fields:
+        if field not in main_cookies:
+            raise ValueError(f"主账号缺少必要Cookie字段: {field}")
+        if not isinstance(main_cookies[field], str):
+            raise ValueError(f"主账号{field}必须是字符串类型")
+    
+    # 验证小号
+    for i, sub in enumerate(config.get('subs', [])):
+        sub_cookies = sub.get("cookies", {})
+        for field in required_cookie_fields:
+            if field not in sub_cookies:
+                raise ValueError(f"小号{i+1}缺少必要Cookie字段: {field}")
+            if not isinstance(sub_cookies[field], str):
+                raise ValueError(f"小号{i+1}{field}必须是字符串类型")
 
 @app.route('/115_config', methods=['GET', 'POST'])
 def handle_115_config():
-    """115 配置管理接口"""
+    """115 配置管理接口（增强版）"""
     if request.method == 'POST':
         try:
-            # 解析配置数据
+            # 解析前端数据
             data = request.json
-            main_config = data.get('main_config', '')
-            subs_config = data.get('subs_config', [])
+            main_config = json.loads(data.get('main_config', '{}'))
+            subs_config = [json.loads(line) for line in data.get('subs_config', [])]
             schedule_time = data.get('schedule', '08:00')
 
+            # 构建完整配置对象
+            full_config = {
+                "main": main_config,
+                "subs": subs_config
+            }
+
+            # 执行配置验证
+            validate_115_config(full_config)
+
             # 生成配置文件内容
-            config_content = f"Main:\n{main_config}\n\nSubs:\n" + '\n'.join(
-                [f"- {line}" for line in subs_config if line.strip()]
-            )
+            config_content = generate_115_config(full_config)
 
             # 保存配置文件
             with open(CONFIG115_PATH, 'w', encoding='utf-8') as f:
@@ -266,43 +332,65 @@ def handle_115_config():
             )
 
             return jsonify(success=True)
+        except json.JSONDecodeError as e:
+            return jsonify(success=False, error=f"JSON解析错误: {str(e)}")
+        except ValueError as e:
+            return jsonify(success=False, error=str(e))
         except Exception as e:
             logging.error(f"配置保存失败: {str(e)}")
-            return jsonify(success=False, error=str(e))
+            return jsonify(success=False, error="服务器内部错误")
     else:
         try:
-            # 读取配置文件
+            # 读取并返回当前配置
+            if not os.path.exists(CONFIG115_PATH):
+                return jsonify({"status": "未找到配置文件"})
+            
             with open(CONFIG115_PATH, 'r', encoding='utf-8') as f:
                 content = f.read()
+            
             config = parse_115_config(content)
+            next_run = scheduler.get_job('115_daily_task').next_run_time.strftime("%H:%M") \
+                if scheduler.get_job('115_daily_task') else "08:00"
             
             return jsonify({
-                "main_config": json.dumps(config['main'], indent=2) if config['main'] else '',
-                "subs_config": [json.dumps(sub, indent=2) for sub in config['subs']],
-                "schedule": scheduler.get_job('115_daily_task').next_run_time.strftime("%H:%M") 
-                    if scheduler.get_job('115_daily_task') else "08:00"
+                "main_config": json.dumps(config['main'], indent=2, ensure_ascii=False) if config['main'] else '',
+                "subs_config": [json.dumps(sub, indent=2, ensure_ascii=False) for sub in config['subs']],
+                "schedule": next_run
             })
         except Exception as e:
             logging.error(f"配置加载失败: {str(e)}")
-            return jsonify({})
+            return jsonify({"error": "配置加载失败"})
 
 def trigger_115_task():
-    """触发 115 定时任务"""
+    """触发115定时任务（增强版）"""
     with app.app_context():
-        subprocess.Popen(
-            ['python', '115_auto.py'],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            encoding='utf-8'
-        )
+        try:
+            # 读取最新配置
+            with open(CONFIG115_PATH, 'r', encoding='utf-8') as f:
+                config_content = f.read()
+            
+            # 启动任务进程
+            process = subprocess.Popen(
+                ['python', '115_auto.py'],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                encoding='utf-8',
+                env={
+                    **os.environ,
+                    "CONFIG_CONTENT": config_content
+                }
+            )
+            logging.info("115定时任务已启动")
+        except Exception as e:
+            logging.error(f"任务启动失败: {str(e)}")
 
 @app.route('/run_115_task')
 def run_115_task():
-    """执行 115 任务并实时返回日志"""
+    """执行115任务并实时推送日志"""
     def generate():
         try:
-            # 读取配置文件
+            # 读取最新配置
             with open(CONFIG115_PATH, 'r', encoding='utf-8') as f:
                 config_content = f.read()
             
@@ -324,6 +412,8 @@ def run_115_task():
                 yield f"data: [115] {line}\n\n"
             
             process.stdout.close()
+            return_code = process.wait()
+            yield f"data: [115] 任务结束，退出码: {return_code}\n\n"
             yield "event: close\ndata: \n\n"
         except Exception as e:
             yield f"data: [ERROR] 任务启动失败: {str(e)}\n\n"
@@ -333,33 +423,42 @@ def run_115_task():
 
 @app.route('/get_logs')
 def get_logs():
-    """获取合并后的日志记录"""
+    """获取合并日志（增强版）"""
     try:
         logs = []
-        # 读取 115 日志
+        
+        # 读取115日志
         if os.path.exists(LOG115_PATH):
             with open(LOG115_PATH, 'r', encoding='utf-8') as f:
                 for line in f:
                     if '[115]' in line:
-                        time_str = line[1:20]
+                        time_part = line[1:20]
                         message = line[22:].strip()
-                        logs.append({"time": time_str, "message": message})
+                        logs.append({
+                            "time": time_part,
+                            "message": f"[115] {message}",
+                            "type": "115"
+                        })
         
-        # 读取 Web 日志
+        # 读取Web日志
         if os.path.exists("web_strm.log"):
             with open("web_strm.log", 'r', encoding='utf-8') as f:
                 for line in f:
-                    time_str, message = line.split(' - ', 1)
-                    logs.append({
-                        "time": datetime.strptime(time_str, "%Y-%m-%d %H:%M:%S").strftime("%H:%M:%S"),
-                        "message": message.strip()
-                    })
+                    if ' - ' in line:
+                        time_str, message = line.split(' - ', 1)
+                        logs.append({
+                            "time": datetime.strptime(time_str, "%Y-%m-%d %H:%M:%S").strftime("%H:%M:%S"),
+                            "message": message.strip(),
+                            "type": "web"
+                        })
         
-        return jsonify(logs[-200:])  # 返回最近200条日志
+        # 按时间排序并返回最近200条
+        logs.sort(key=lambda x: x['time'], reverse=True)
+        return jsonify(logs[:200])
     except Exception as e:
         logging.error(f"日志获取失败: {str(e)}")
         return jsonify([])
-        
+
 # 启动日志优化
 logger = logging.getLogger('strm_generator')
 logger.info("=== WEBUI已启动 ===")
@@ -371,6 +470,7 @@ if __name__ == '__main__':
         if os.path.exists(CONFIG115_PATH):
             with open(CONFIG115_PATH, 'r') as f:
                 config = parse_115_config(f.read())
+            # 设置默认定时为8:00
             scheduler.add_job(
                 trigger_115_task,
                 'cron',
