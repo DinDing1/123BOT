@@ -71,7 +71,6 @@ def parse_account(line: str) -> Dict:
 #  签到模块
 ######################
 def checkin_all(config: Dict):
-    """执行全账号签到"""
     accounts = [config["main"]] + config["subs"]
     total = len(accounts)
     success = 0
@@ -80,8 +79,18 @@ def checkin_all(config: Dict):
     for account in accounts:
         name = account.get("name", "未命名账号")
         try:
-            client = P115Client(account["cookies"], check_for_relogin=True)
-            result = client.user_points_sign_post()
+            # 确保cookies字段正确传递（关键修复）
+            client = P115Client(
+                cookies=account["cookies"], 
+                check_for_relogin=True
+            )
+            
+            # 显式指定字符串类型的UID（新增验证）
+            if not isinstance(account["cookies"].get("UID"), str):
+                raise ValueError("UID必须是字符串类型")
+                
+            # 调用签到接口
+            result = check_response(client.user_points_sign_post())
             
             if result.get("state"):
                 days = result.get("data", {}).get("continuous_day", 0)
@@ -90,8 +99,6 @@ def checkin_all(config: Dict):
             time.sleep(3)
         except Exception as e:
             log(f"{name} 签到失败: {str(e)}", "ERROR")
-    
-    log(f"签到完成，成功 {success}/{total} 个账号")
 
 ######################
 #  许愿树模块
