@@ -198,7 +198,7 @@
         .config-panel {
             grid-area: config-panel;
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: 1.2fr 1fr;
             gap: 1.5rem;
             align-content: start;
         }
@@ -210,38 +210,53 @@
             border: 1px solid rgba(0, 243, 255, 0.2);
         }
 
-        .config-section h3 {
-            color: var(--primary-color);
-            margin-top: 0;
-            text-align: center;
+        .grid-form {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1.2rem;
+            align-items: start;
         }
 
-        .config-section textarea {
-            width: 100%;
-            height: 120px;
-            resize: vertical;
+        .grid-form .form-group {
             margin-bottom: 1rem;
-            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .grid-form label {
+            text-align: center;
+            display: block;
+            margin-bottom: 0.5rem;
+        }
+
+        .form-group {
+            margin-bottom: 0.8rem;
+            min-width: 0;
+        }
+
+        .form-group.extension-group {
+            grid-column: span 1;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 0.4rem;
+            font-weight: 500;
+            color: var(--text-color);
+            font-size: 0.9rem;
+        }
+
+        input {
+            padding: 0.6rem;
+            background: rgba(255, 255, 255, 0.1);
             border: 1px solid rgba(0, 243, 255, 0.2);
             border-radius: 6px;
+            font-size: 0.9rem;
             color: var(--text-color);
-            padding: 0.6rem;
+            transition: all 0.3s ease;
         }
 
-        .action-buttons {
-            display: flex;
-            gap: 1rem;
-            justify-content: space-between;
-            margin-top: 1rem;
-        }
-
-        .action-buttons button {
-            flex: 1;
-            padding: 0.6rem;
-            background: linear-gradient(45deg, var(--secondary-color), var(--primary-color));
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
+        input:focus {
+            border-color: var(--primary-color);
+            outline: none;
         }
 
         .log-panel {
@@ -252,7 +267,7 @@
             font-family: 'Consolas', monospace;
             font-size: 0.8rem;
             line-height: 1.4;
-            height: calc(100% - 2.4rem);
+            height: calc(100% - 2.4rem); /* 调整高度，与配置区域对齐 */
             overflow-y: auto;
             border: 1px solid rgba(0, 243, 255, 0.2);
         }
@@ -312,6 +327,94 @@
             from { opacity: 0; transform: translateY(10px); }
             to { opacity: 1; transform: translateY(0); }
         }
+
+        /* 新增样式 */
+        .full-width {
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        .sub-account-container {
+            position: relative;
+            margin: 0.8rem 0;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .sub-account-container textarea {
+            flex: 1;
+            min-height: 80px;
+        }
+
+        .removeSub {
+            background: #dc3545;
+            border: none;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            color: white;
+            cursor: pointer;
+            font-size: 1.2rem;
+            line-height: 1;
+            flex-shrink: 0;
+        }
+
+        .removeSub:hover {
+            background: #bb2d3b;
+        }
+
+        .add-btn {
+            width: 100%;
+            margin-top: 0.5rem;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 1rem;
+            justify-content: space-between;
+            margin-top: 1rem;
+        }
+
+/* 统一输入框样式 */
+        input, textarea {
+            padding: 0.6rem;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(0, 243, 255, 0.2);
+            border-radius: 6px;
+            font-size: 0.9rem;
+            color: var(--text-color);
+            transition: all 0.3s ease;
+            width: 100%;
+            box-sizing: border-box;
+       }
+
+        input:focus, textarea:focus {
+            border-color: var(--primary-color);
+            outline: none;
+       }
+
+/* 主账号Cookie和小号配置输入框 */
+        #mainCookie, .subCookie {
+            height: 80px; /* 统一高度 */
+            resize: vertical; /* 允许垂直调整大小 */
+       }
+
+/* 生成配置输入框 */
+        #direct_link_url, #parent_id, #max_retries, #request_delay, #dir_delay, #timeout, #video_exts, #subtitle_exts {
+            height: 40px; /* 统一高度 */
+       }
+
+        /* 响应式布局 */
+        @media (max-width: 768px) {
+            .grid-form {
+                grid-template-columns: 1fr;
+            }
+            
+            .config-panel {
+                grid-template-columns: 1fr;
+            }
+        }
     </style>
 </head>
 <body>
@@ -366,17 +469,20 @@
                     <label>小号配置（每行一个JSON）</label>
                     <textarea id="subs_config" placeholder="Subs:\n- {...}"></textarea>
                 </div>
+                    <div>
+                        <label>定时执行</label>
+                        <input type="time" id="scheduleTime" value="08:00">
+                    </div>
                 <div class="action-buttons">
-                    <input type="time" id="schedule_time" value="08:00">
-                    <button onclick="save115Config()">💾 保存配置</button>
-                    <button onclick="run115Task()">🚀 立即执行</button>
+                    <button class="save-btn" onclick="save115Config()">💾 保存配置</button>
+                    <button class="run-btn" onclick="run115Task()">🚀 立即执行</button>
                 </div>
             </div>
 
             <!-- STRM生成配置区块 -->
             <div class="config-section">
-                <h3>🎬 STRM生成配置</h3>
-                <form id="configForm" action="/generate" method="GET">
+                <h3 style="text-align: center;">⚙️ STRM生成配置</h3>
+                <form id="configForm" action="/generate" method="GET" class="grid-form">
                     <div class="form-group">
                         <label for="direct_link_url">直连地址</label>
                         <input type="url" id="direct_link_url" name="direct_link_url" value="http://172.17.0.1:8123" required>
@@ -419,7 +525,7 @@
 
     <!-- 生成按钮容器 -->
     <div id="generateButtonContainer" style="display: none;">
-        <button type="submit" form="configForm" id="generateBtn" disabled>生成STRM</button>
+        <button type="submit" id="generateBtn" disabled>生成STRM</button>
         <div class="loading" id="loading">⏳ 正在生成中，请稍候...</div>
     </div>
 
