@@ -750,28 +750,38 @@
             return `${bytes.toFixed(2)} ${units[unitIndex]}`;
         }
 
-        async function handleLogin() {
-            const passport = document.getElementById('passport').value;
-            const password = document.getElementById('password').value;
-            
-            const res = await fetch('/login', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({passport, password})
-            });
-            
-            const result = await res.json();
-            if (result.success) {
-                await checkLoginStatus();
-            } else {
-                alert(`登录失败: ${result.message}`);
-            }
+async function handleLogin() {
+    const passport = document.getElementById('passport').value;
+    const password = document.getElementById('password').value;
+
+    try {
+        const response = await fetch('/login', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ passport, password }),
+        });
+
+        if (!response.ok) {
+            throw new Error(`请求失败: ${response.statusText}`);
         }
 
-        async function handleLogout() {
-            await fetch('/logout');
-            location.reload();
+        const result = await response.json();
+        if (result.success) {
+            await checkLoginStatus();
+        } else {
+            alert(`登录失败: ${result.message}`);
         }
+    } catch (error) {
+        console.error('登录请求失败:', error);
+        alert(`登录请求失败: ${error.message}`);
+    }
+}
+
+
+
+
 
         document.addEventListener('DOMContentLoaded', checkLoginStatus);
 
