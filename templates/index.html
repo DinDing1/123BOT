@@ -615,7 +615,79 @@
             }
         }
 
-         // 115配置相关逻辑
+
+        // 原有应用逻辑
+        const form = document.getElementById('configForm');
+        const output = document.getElementById('output');
+        const loading = document.getElementById('loading');
+        const generateBtn = document.getElementById('generateBtn');
+        const generateButtonContainer = document.getElementById('generateButtonContainer');
+
+        async function checkLoginStatus() {
+            const res = await fetch('/user_info');
+            const data = await res.json();
+            
+            if (data.logged_in) {
+                document.querySelector('.login-container').style.display = 'none';
+                document.querySelector('.container').style.display = 'grid';
+                generateButtonContainer.style.display = 'block';
+                const info = data.user_info;
+                document.getElementById('uid').textContent = info.uid;
+                document.getElementById('nickname').textContent = info.nickname;
+                document.getElementById('phone').textContent = info.passport;
+                document.getElementById('spaceUsed').textContent = formatSize(info.spaceUsed);
+                document.getElementById('spacePermanent').textContent = formatSize(info.spacePermanent);
+                document.getElementById('userInfo').classList.add('active');
+                generateBtn.disabled = false;
+            } else {
+                document.querySelector('.login-container').style.display = 'flex';
+                document.querySelector('.container').style.display = 'none';
+                generateButtonContainer.style.display = 'none';
+                generateBtn.disabled = true;
+            }
+        }
+
+        function formatSize(bytes) {
+            const units = ['字节', 'KB', 'MB', 'GB', 'TB'];
+            let unitIndex = 0;
+            while (bytes >= 1024 && unitIndex < 4) {
+                bytes /= 1024;
+                unitIndex++;
+            }
+            return `${bytes.toFixed(2)} ${units[unitIndex]}`;
+        }
+
+async function handleLogin() {
+    const passport = document.getElementById('passport').value;
+    const password = document.getElementById('password').value;
+
+    try {
+        const response = await fetch('/login', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ passport, password }),
+        });
+
+        if (!response.ok) {
+            throw new Error(`请求失败: ${response.statusText}`);
+        }
+
+        const result = await response.json();
+        if (result.success) {
+            await checkLoginStatus();
+        } else {
+            alert(`登录失败: ${result.message}`);
+        }
+    } catch (error) {
+        console.error('登录请求失败:', error);
+        alert(`登录请求失败: ${error.message}`);
+    }
+}
+
+
+                 // 115配置相关逻辑
         // 修改后的保存配置函数
         // 配置保存逻辑
         async function save115Config() {
@@ -708,76 +780,6 @@
             }, duration);
         }
 
-
-        // 原有应用逻辑
-        const form = document.getElementById('configForm');
-        const output = document.getElementById('output');
-        const loading = document.getElementById('loading');
-        const generateBtn = document.getElementById('generateBtn');
-        const generateButtonContainer = document.getElementById('generateButtonContainer');
-
-        async function checkLoginStatus() {
-            const res = await fetch('/user_info');
-            const data = await res.json();
-            
-            if (data.logged_in) {
-                document.querySelector('.login-container').style.display = 'none';
-                document.querySelector('.container').style.display = 'grid';
-                generateButtonContainer.style.display = 'block';
-                const info = data.user_info;
-                document.getElementById('uid').textContent = info.uid;
-                document.getElementById('nickname').textContent = info.nickname;
-                document.getElementById('phone').textContent = info.passport;
-                document.getElementById('spaceUsed').textContent = formatSize(info.spaceUsed);
-                document.getElementById('spacePermanent').textContent = formatSize(info.spacePermanent);
-                document.getElementById('userInfo').classList.add('active');
-                generateBtn.disabled = false;
-            } else {
-                document.querySelector('.login-container').style.display = 'flex';
-                document.querySelector('.container').style.display = 'none';
-                generateButtonContainer.style.display = 'none';
-                generateBtn.disabled = true;
-            }
-        }
-
-        function formatSize(bytes) {
-            const units = ['字节', 'KB', 'MB', 'GB', 'TB'];
-            let unitIndex = 0;
-            while (bytes >= 1024 && unitIndex < 4) {
-                bytes /= 1024;
-                unitIndex++;
-            }
-            return `${bytes.toFixed(2)} ${units[unitIndex]}`;
-        }
-
-async function handleLogin() {
-    const passport = document.getElementById('passport').value;
-    const password = document.getElementById('password').value;
-
-    try {
-        const response = await fetch('/login', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ passport, password }),
-        });
-
-        if (!response.ok) {
-            throw new Error(`请求失败: ${response.statusText}`);
-        }
-
-        const result = await response.json();
-        if (result.success) {
-            await checkLoginStatus();
-        } else {
-            alert(`登录失败: ${result.message}`);
-        }
-    } catch (error) {
-        console.error('登录请求失败:', error);
-        alert(`登录请求失败: ${error.message}`);
-    }
-}
 
 
 
