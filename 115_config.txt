@@ -1,6 +1,1 @@
-Main:
-{"name": "主账号", "cookies": {"UID": "MAIN_UID", "CID": "MAIN_CID", "SEID": "MAIN_SEID", "KID": "MAIN_KID"}}
 
-Subs:
-- {"name": "小号A", "cookies": {"UID": "SUB1_UID", "CID": "SUB1_CID", "SEID": "SUB1_SEID", "KID": "SUB1_KID"}}
-- {"name": "小号B", "cookies": {"UID": "SUB2_UID", "CID": "SUB2_CID", "SEID": "SUB2_SEID", "KID": "SUB2_KID"}}
