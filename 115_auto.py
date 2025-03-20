@@ -18,7 +18,7 @@ from p115client import P115Client, check_response
 # 配置文件路径
 CONFIG_FILE = "/app/config/115_config.txt"
 # 日志文件路径
-LOG_FILE = "115_auto.log"
+LOG_FILE = "/app/logs/115_auto.log"
 # 最大许愿次数（根据115规则调整）
 MAX_WISHES = 3
 # 操作间隔时间（秒）
