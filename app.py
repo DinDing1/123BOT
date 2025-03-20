@@ -346,7 +346,12 @@ def handle_115_config():
         try:
             # 读取并返回当前配置
             if not os.path.exists(CONFIG115_PATH):
-                return jsonify({"status": "未找到配置文件"})
+                # 如果配置文件不存在，返回默认配置
+                return jsonify({
+                    "main_config": "",
+                    "subs_config": [],
+                    "schedule": "08:00"
+                })
             
             with open(CONFIG115_PATH, 'r', encoding='utf-8') as f:
                 content = f.read()
@@ -435,25 +440,33 @@ def get_logs():
             with open(LOG115_PATH, 'r', encoding='utf-8') as f:
                 for line in f:
                     if '[115]' in line:
-                        time_part = line[1:20]
-                        message = line[22:].strip()
-                        logs.append({
-                            "time": time_part,
-                            "message": f"[115] {message}",
-                            "type": "115"
-                        })
+                        try:
+                            time_part = line[1:20]
+                            message = line[22:].strip()
+                            logs.append({
+                                "time": time_part,
+                                "message": f"[115] {message}",
+                                "type": "115"
+                            })
+                        except Exception as e:
+                            logging.error(f"日志解析失败: {line} | 错误: {str(e)}")
+                            continue
         
         # 读取Web日志
         if os.path.exists("web_strm.log"):
             with open("web_strm.log", 'r', encoding='utf-8') as f:
                 for line in f:
                     if ' - ' in line:
-                        time_str, message = line.split(' - ', 1)
-                        logs.append({
-                            "time": datetime.strptime(time_str, "%Y-%m-%d %H:%M:%S").strftime("%H:%M:%S"),
-                            "message": message.strip(),
-                            "type": "web"
-                        })
+                        try:
+                            time_str, message = line.split(' - ', 1)
+                            logs.append({
+                                "time": datetime.strptime(time_str, "%Y-%m-%d %H:%M:%S").strftime("%H:%M:%S"),
+                                "message": message.strip(),
+                                "type": "web"
+                            })
+                        except Exception as e:
+                            logging.error(f"日志解析失败: {line} | 错误: {str(e)}")
+                            continue
         
         # 按时间排序并返回最近200条
         logs.sort(key=lambda x: x['time'], reverse=True)
