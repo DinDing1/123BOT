@@ -11,6 +11,8 @@ from apscheduler.schedulers.background import BackgroundScheduler
 import json
 import time
 from datetime import datetime
+import sqlite3
+from urllib.parse import unquote
 
 # 加载环境变量
 load_dotenv()
@@ -47,8 +49,13 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
 logging.getLogger("p123").setLevel(logging.WARNING)  
 
-# 115配置文件路径
+# 115 配置文件路径
 CONFIG115_PATH = os.getenv('CONFIG115_PATH', '/app/config/115_config.txt')
+LOG115_PATH = os.getenv('LOG115_PATH', '/app/logs/115_auto.log')
+
+# 初始化调度器
+scheduler = BackgroundScheduler()
+scheduler.start()
 
 
 # DeepSeek 风格配色
@@ -189,15 +196,11 @@ def generate_strm():
         return Response(stream_with_context(generate_error()), content_type='text/event-stream')
         
 ############115配置路由
-
-# 初始化调度器
-scheduler = BackgroundScheduler()
-scheduler.start()
-
 def parse_115_config(content: str) -> dict:
-    """解析115配置文件内容"""
+    """解析 115 配置文件"""
     config = {"main": None, "subs": [], "params": {}}
     current_section = None
+    
     for line in content.split('\n'):
         line = line.strip()
         if not line:
@@ -208,22 +211,24 @@ def parse_115_config(content: str) -> dict:
         elif line.lower().startswith('subs:'):
             current_section = 'subs'
             continue
-        elif line.startswith('#'):
-            continue
         
-        if current_section == 'main':
-            config['main'] = json.loads(line)
-        elif current_section == 'subs' and line.startswith('-'):
-            config['subs'].append(json.loads(line[1:].strip()))
+        try:
+            if current_section == 'main':
+                config['main'] = json.loads(line)
+            elif current_section == 'subs' and line.startswith('-'):
+                config['subs'].append(json.loads(line[1:].strip()))
+        except json.JSONDecodeError as e:
+            logging.error(f"配置文件解析错误: {str(e)}")
+
     return config
 
 def generate_115_config(config: dict) -> str:
-    """生成115配置文件内容"""
+    """生成 115 配置文件内容"""
     content = []
-    if config['main']:
+    if config.get('main'):
         content.append("Main:")
         content.append(json.dumps(config['main'], ensure_ascii=False))
-    if config['subs']:
+    if config.get('subs'):
         content.append("\nSubs:")
         for sub in config['subs']:
             content.append(f"- {json.dumps(sub, ensure_ascii=False)}")
@@ -231,37 +236,39 @@ def generate_115_config(config: dict) -> str:
 
 @app.route('/115_config', methods=['GET', 'POST'])
 def handle_115_config():
+    """115 配置管理接口"""
     if request.method == 'POST':
         try:
-            # 构造配置文件内容
-            config_content = f"Main:\n{request.json['main_config']}\n\nSubs:\n"
-            config_content += '\n'.join([f"- {sub}" for sub in request.json['subs_config']])
-            
+            # 解析配置数据
+            data = request.json
+            main_config = data.get('main_config', '')
+            subs_config = data.get('subs_config', [])
+            schedule_time = data.get('schedule', '08:00')
+
+            # 生成配置文件内容
+            config_content = f"Main:\n{main_config}\n\nSubs:\n" + '\n'.join(
+                [f"- {line}" for line in subs_config if line.strip()]
+            )
+
             # 保存配置文件
             with open(CONFIG115_PATH, 'w', encoding='utf-8') as f:
                 f.write(config_content)
-            
-            # 保存运行参数
-            with open(CONFIG115_PATH+'.params', 'w') as f:
-                json.dump({
-                    "max_wishes": request.json['max_wishes'],
-                    "delay": request.json['delay'],
-                    "schedule": request.json['schedule']
-                }, f)
-            
+
             # 更新定时任务
-            if request.json['schedule']:
-                scheduler.add_job(
-                    run_115_task,
-                    'cron',
-                    hour=int(request.json['schedule'].split(':')[0]),
-                    minute=int(request.json['schedule'].split(':')[1]),
-                    id='115_daily_task'
-                )
-            
+            scheduler.remove_job('115_daily_task')
+            hour, minute = map(int, schedule_time.split(':'))
+            scheduler.add_job(
+                trigger_115_task,
+                'cron',
+                hour=hour,
+                minute=minute,
+                id='115_daily_task'
+            )
+
             return jsonify(success=True)
         except Exception as e:
-            return jsonify(success=False, message=str(e))
+            logging.error(f"配置保存失败: {str(e)}")
+            return jsonify(success=False, error=str(e))
     else:
         try:
             # 读取配置文件
@@ -269,71 +276,88 @@ def handle_115_config():
                 content = f.read()
             config = parse_115_config(content)
             
-            # 读取参数
-            with open(CONFIG115_PATH+'.params', 'r') as f:
-                params = json.load(f)
-            
             return jsonify({
-                "main_config": json.dumps(config['main'], indent=2),
+                "main_config": json.dumps(config['main'], indent=2) if config['main'] else '',
                 "subs_config": [json.dumps(sub, indent=2) for sub in config['subs']],
-                **params
+                "schedule": scheduler.get_job('115_daily_task').next_run_time.strftime("%H:%M") 
+                    if scheduler.get_job('115_daily_task') else "08:00"
             })
-        except:
+        except Exception as e:
+            logging.error(f"配置加载失败: {str(e)}")
             return jsonify({})
 
-@app.route('/run_115_task')
-def run_115_task():
-    def generate():
-        # 添加环境变量
-        env = os.environ.copy()
-        env.update({
-            'MAX_WISHES': str(request.args.get('max_wishes', 3)),
-            'DELAY': str(request.args.get('delay', 60))
-        })
-        
-        process = subprocess.Popen(
+def trigger_115_task():
+    """触发 115 定时任务"""
+    with app.app_context():
+        subprocess.Popen(
             ['python', '115_auto.py'],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
-            encoding='utf-8',
-            env=env
+            encoding='utf-8'
         )
-        
-        for line in iter(process.stdout.readline, ''):
-            yield f"data: [115] {line}\n\n"
-        process.stdout.close()
-        yield "event: close\ndata: \n\n"
-    
+
+@app.route('/run_115_task')
+def run_115_task():
+    """执行 115 任务并实时返回日志"""
+    def generate():
+        try:
+            # 读取配置文件
+            with open(CONFIG115_PATH, 'r', encoding='utf-8') as f:
+                config_content = f.read()
+            
+            # 启动任务进程
+            process = subprocess.Popen(
+                ['python', '115_auto.py'],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                encoding='utf-8',
+                env={
+                    **os.environ,
+                    "CONFIG_CONTENT": config_content
+                }
+            )
+
+            # 实时推送日志
+            for line in iter(process.stdout.readline, ''):
+                yield f"data: [115] {line}\n\n"
+            
+            process.stdout.close()
+            yield "event: close\ndata: \n\n"
+        except Exception as e:
+            yield f"data: [ERROR] 任务启动失败: {str(e)}\n\n"
+            yield "event: close\ndata: \n\n"
+
     return Response(stream_with_context(generate()), content_type='text/event-stream')
-    
 
-
-# 新增：获取历史日志
 @app.route('/get_logs')
 def get_logs():
+    """获取合并后的日志记录"""
     try:
         logs = []
-        # 读取WEB日志
-        with open("web_strm.log", "r", encoding="utf-8") as f:
-            for line in f:
-                time_str, message = line.strip().split(" - ", 1)
-                logs.append({
-                    "time": datetime.strptime(time_str, "%Y-%m-%d %H:%M:%S").strftime("%H:%M:%S"),
-                    "message": message
-                })
-        # 读取115日志
-        with open("115_auto.log", "r", encoding="utf-8") as f:
-            for line in f:
-                if "[115]" in line:
-                    time_str = line.split("[115] ")[1].split("]")[0]
-                    message = line.split("] ")[2].strip()
+        # 读取 115 日志
+        if os.path.exists(LOG115_PATH):
+            with open(LOG115_PATH, 'r', encoding='utf-8') as f:
+                for line in f:
+                    if '[115]' in line:
+                        time_str = line[1:20]
+                        message = line[22:].strip()
+                        logs.append({"time": time_str, "message": message})
+        
+        # 读取 Web 日志
+        if os.path.exists("web_strm.log"):
+            with open("web_strm.log", 'r', encoding='utf-8') as f:
+                for line in f:
+                    time_str, message = line.split(' - ', 1)
                     logs.append({
-                        "time": time_str,
-                        "message": f"[115] {message}"
+                        "time": datetime.strptime(time_str, "%Y-%m-%d %H:%M:%S").strftime("%H:%M:%S"),
+                        "message": message.strip()
                     })
-        return jsonify(logs[-100:])  # 返回最近100条日志
+        
+        return jsonify(logs[-200:])  # 返回最近200条日志
     except Exception as e:
+        logging.error(f"日志获取失败: {str(e)}")
         return jsonify([])
         
 # 启动日志优化
@@ -342,13 +366,28 @@ logger.info("=== WEBUI已启动 ===")
 logger.info("WEBUI地址: http://0.0.0.0:8124")
 
 if __name__ == '__main__':
-    # 使用自定义的 SilentWSGIRequestHandler 并禁用调试模式
+    # 初始化定时任务
+    try:
+        if os.path.exists(CONFIG115_PATH):
+            with open(CONFIG115_PATH, 'r') as f:
+                config = parse_115_config(f.read())
+            scheduler.add_job(
+                trigger_115_task,
+                'cron',
+                hour=8,
+                minute=0,
+                id='115_daily_task'
+            )
+    except Exception as e:
+        logging.error(f"定时任务初始化失败: {str(e)}")
+
+    # 启动应用
     from werkzeug.serving import run_simple
     run_simple(
         hostname='0.0.0.0',
         port=8124,
         application=app,
-        request_handler=SilentWSGIRequestHandler,
+        request_handler=WSGIRequestHandler,
         use_debugger=False,
         use_reloader=False
     )
