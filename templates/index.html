@@ -420,18 +420,18 @@
 <body>
     <canvas id="background"></canvas>
 
-    <!-- 登录界面 -->
-    <div class="login-container">
-        <div class="login-form">
-            <h3>用户登录</h3>
-            <input type="text" id="passport" placeholder="123云盘账号">
-            <input type="password" id="password" placeholder="123云盘密码">
-            <button onclick="handleLogin()">登录</button>
-            <div class="version-info">
-                版本号: v2.0.1 | 作者: dinding
-            </div>
+<!-- 登录界面 -->
+<div class="login-container">
+    <form class="login-form" onsubmit="handleLogin(); return false;">
+        <h3>用户登录</h3>
+        <input type="text" id="passport" placeholder="123云盘账号" required>
+        <input type="password" id="password" placeholder="123云盘密码" required>
+        <button type="submit">登录</button>
+        <div class="version-info">
+            版本号: v2.0.1 | 作者: dinding
         </div>
-    </div>
+    </form>
+</div>
 
     <!-- 主界面 -->
     <div class="container">
