@@ -432,41 +432,44 @@ def run_115_task():
 @app.route('/get_logs')
 def get_logs():
     """获取合并日志（增强版）"""
+    logs = []
+    
     try:
-        logs = []
-        
         # 读取115日志
         if os.path.exists(LOG115_PATH):
             with open(LOG115_PATH, 'r', encoding='utf-8') as f:
                 for line in f:
-                    if '[115]' in line:
-                        try:
-                            time_part = line[1:20]
+                    try:
+                        if '[115]' in line:
+                            # 提取时间部分
+                            time_part = line[1:20]  # 假设时间格式为 [YYYY-MM-DD HH:MM:SS]
                             message = line[22:].strip()
                             logs.append({
                                 "time": time_part,
                                 "message": f"[115] {message}",
                                 "type": "115"
                             })
-                        except Exception as e:
-                            logging.error(f"日志解析失败: {line} | 错误: {str(e)}")
-                            continue
+                    except Exception as e:
+                        logging.error(f"日志解析失败: {line} | 错误: {str(e)}")
+                        continue
         
         # 读取Web日志
         if os.path.exists("web_strm.log"):
             with open("web_strm.log", 'r', encoding='utf-8') as f:
                 for line in f:
-                    if ' - ' in line:
-                        try:
+                    try:
+                        if ' - ' in line:
                             time_str, message = line.split(' - ', 1)
+                            # 确保时间格式正确
+                            datetime.strptime(time_str, "%Y-%m-%d %H:%M:%S")  # 验证时间格式
                             logs.append({
-                                "time": datetime.strptime(time_str, "%Y-%m-%d %H:%M:%S").strftime("%H:%M:%S"),
+                                "time": time_str,
                                 "message": message.strip(),
                                 "type": "web"
                             })
-                        except Exception as e:
-                            logging.error(f"日志解析失败: {line} | 错误: {str(e)}")
-                            continue
+                    except Exception as e:
+                        logging.error(f"日志解析失败: {line} | 错误: {str(e)}")
+                        continue
         
         # 按时间排序并返回最近200条
         logs.sort(key=lambda x: x['time'], reverse=True)
