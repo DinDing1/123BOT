@@ -643,8 +643,8 @@ class TelegramBotHandler:
         def wrapper(self, update: Update, context: CallbackContext, *args, **kwargs):
             user_id = update.message.from_user.id
             if user_id not in self.allowed_user_ids:
-                logger.warning(f"用户 {user_id} 尝试访问但无权限")
-                update.message.reply_text("🚫 您没有权限使用此机器人")
+                #logger.warning(f"用户 {user_id} 尝试访问但无权限")
+                #update.message.reply_text("🚫 您没有权限使用此机器人")
                 return
             return func(self, update, context, *args, **kwargs)
         return wrapper
@@ -950,10 +950,10 @@ class TelegramBotHandler:
 
 def main():
     # 从环境变量读取配置
-    BOT_TOKEN = os.getenv("TG_BOT_TOKEN","5509161323:AAGHMXmRX1uVEQVUd8mFzU3w7wennXwYClQ")
-    CLIENT_ID = os.getenv("PAN_CLIENT_ID","ebb0f8aaf08f47739a39299f51930e9d")
-    CLIENT_SECRET = os.getenv("PAN_CLIENT_SECRET","c6c9c92bae9a4928b90ed992308b7b1f")
-    ADMIN_USER_IDS = [int(id.strip()) for id in os.getenv("TG_ADMIN_USER_IDS", "1817565003").split(",") if id.strip()]
+    BOT_TOKEN = os.getenv("TG_BOT_TOKEN","")
+    CLIENT_ID = os.getenv("PAN_CLIENT_ID","")
+    CLIENT_SECRET = os.getenv("PAN_CLIENT_SECRET","")
+    ADMIN_USER_IDS = [int(id.strip()) for id in os.getenv("TG_ADMIN_USER_IDS", "").split(",") if id.strip()]
     
     # 检查配置是否完整
     if not BOT_TOKEN:
