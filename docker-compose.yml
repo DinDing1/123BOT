@@ -1,0 +1,25 @@
+version: '3.9' 
+services:
+  123STRM:
+    privileged: true
+    container_name: STRM
+    image: dinding1/123STRM:latest
+    network_mode: host
+    restart: always
+    environment:
+      - TZ=Asia/Shanghai
+      - CLIENT_ID=123开发者CLIENT_ID
+      - CLIENT_SECRET=123开发者CLIENT_SECRET
+      - TELEGRAM_BOT_TOKEN=TGBOT_TOKEN
+      - ADMIN_USER_IDS=USERID
+      - STRM_SERVICE_URL=http://172.17.0.1:8123
+      #可选（具备外网环境就不要）
+      - HTTP_PROXY=http://10.10.10.12:8900 #访问http协议走代理
+      - HTTPS_PROXY=http://10.10.10.12:8900
+      - NO_PROXY= 172.17.0.1,127.0.0.1,localhost,10.10.10.11 #排除本地访问不走代理
+    volumes:
+      - /vol2/1000/docker/123STRM/data:/data
+      - /vol1/1000/media/123STRM0212:/media
+
+
+    
