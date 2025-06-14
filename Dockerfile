@@ -1,77 +1,30 @@
-# 使用多阶段构建
-FROM python:3.12-slim-bookworm as builder
+# 使用轻量级Python基础镜像
+FROM python:3.10-slim
 
+# 设置工作目录
 WORKDIR /app
 
-# 安装构建依赖
+# 安装必要的系统工具
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
-    python3-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# 修改Dockerfile的requirements.txt部分
-COPY requirements.txt .
-RUN pip install --user --no-cache-dir -r requirements.txt \
-    && pip install --user p115client
+# 复制应用文件和依赖清单
+COPY 123pan_bot.py /app/
+COPY requirements.txt /app/
 
+# 安装Python依赖
+RUN pip install --no-cache-dir -r requirements.txt
 
-# 运行阶段
-FROM python:3.12-slim-bookworm
-WORKDIR /app
+# 清理临时文件
+RUN apt-get purge -y --auto-remove gcc && \
+    rm -rf /var/lib/apt/lists/*
 
-# 复制依赖
-COPY --from=builder /root/.local /root/.local
-ENV PATH=/root/.local/bin:$PATH
+# 设置环境变量默认值
+ENV TG_BOT_TOKEN=""
+ENV PAN_CLIENT_ID=""
+ENV PAN_CLIENT_SECRET=""
+ENV TG_ADMIN_USER_IDS=""
 
-
-ENV CONFIG115_PATH=/app/config/115_config.txt \
-    FLASK_APP=app.py \
-    FLASK_ENV=production \
-    LOG_PATH=/app/logs \
-    PYTHONUNBUFFERED=1 \
-    PYTHONPATH=/app \
-    LOG115_PATH=/app/logs/115_auto.log
-
-# 安装运行时依赖
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    openssl \
-    curl \
-    sqlite3 \
-    uuid-runtime \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
-
-    # 创建目录结构
-RUN mkdir -p \
-    templates \
-    EmbyLibrary \
-    /app/cache \
-    /var/log/supervisor \
-    /app/config \
-    /app/logs \
-    && chmod 777 /app
-
-# 复制代码
-COPY . .
-
-# 设置权限
-RUN chmod +x /app/auth_check.sh
-
-# 暴露端口
-EXPOSE 8123 8124
-
-# 初始化配置
-VOLUME /app/cache
-VOLUME /app/config
-VOLUME /app/logs
-
-
-# 启动命令
-ENTRYPOINT ["/app/auth_check.sh"]
-CMD ["sh", "-c", \
-    "python app.py & \
-    uvicorn main:app --host 0.0.0.0 --port 8123 --no-access-log & \
-    tail -f /dev/null"]
-
-
-
+# 启动应用
+CMD ["python", "123pan_bot.py"]
