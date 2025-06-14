@@ -3,15 +3,15 @@ services:
   123bot:
     privileged: true
     container_name: 123bot
-    image: dinding1/123bot:latest
+    image: dinding1/123bot:v0.0.2#今天先拉这个，后面可以改成latest
     restart: always
     environment:
       - TZ=Asia/Shanghai
         #TGBOT
-      - BOT_TOKEN=TGBOT_TOKEN 必选
-      - ADMIN_USER_IDS=管理员ID USERID 建议填
-      - CLIENT_ID=123API 必选
-      - CLIENT_SECRET=123API 必选
-      - HTTP_PROXY=http://10.10.10.12:8900 #访问http协议走代理   选填
+      - TG_BOT_TOKEN=TGBOT_TOKEN 必选
+      - TG_ADMIN_USER_IDS=管理员ID USERID 建议填
+      - PAN_CLIENT_ID=123API 必选
+      - PAN_CLIENT_SECRET=123API 必选
+      - HTTP_PROXY= #访问http协议走代理   选填
       - NO_PROXY= 172.17.0.1,127.0.0.1,localhost,10.10.10.11 #排除本地访问不走代理 选填
-      - HTTPS_PROXY=http://10.10.10.12:8900 选填
+      - HTTPS_PROXY= 选填
