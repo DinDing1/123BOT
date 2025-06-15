@@ -69,9 +69,9 @@ COMMON_PATH_DELIMITER = "%"
 BASE62_CHARS = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 # 环境变量配置
-DEFAULT_SAVE_DIR = os.getenv("DEFAULT_SAVE_DIR", "待整理").strip()  # 默认保存目录
-EXPORT_BASE_DIRS = [d.strip() for d in os.getenv("EXPORT_BASE_DIR", "媒体库;媒体库2").split(';') if d.strip()]  # 多个导出基目录
-SEARCH_MAX_DEPTH = int(os.getenv("SEARCH_MAX_DEPTH", "2"))         # 搜索文件夹的最大深度
+DEFAULT_SAVE_DIR = os.getenv("DEFAULT_SAVE_DIR", "").strip()  # 默认保存目录
+EXPORT_BASE_DIRS = [d.strip() for d in os.getenv("EXPORT_BASE_DIR", "").split(';') if d.strip()]  # 多个导出基目录
+SEARCH_MAX_DEPTH = int(os.getenv("SEARCH_MAX_DEPTH", ""))         # 搜索文件夹的最大深度
 # =====================================================
 
 def init_db():
