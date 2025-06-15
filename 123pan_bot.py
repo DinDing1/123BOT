@@ -23,6 +23,7 @@ from functools import wraps
 import urllib3
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+import binascii
 
 # 禁用SSL警告
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -68,9 +69,9 @@ COMMON_PATH_DELIMITER = "%"
 BASE62_CHARS = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 # 环境变量配置
-DEFAULT_SAVE_DIR = os.getenv("DEFAULT_SAVE_DIR", "").strip()  # 默认保存目录
-EXPORT_BASE_DIRS = [d.strip() for d in os.getenv("EXPORT_BASE_DIR", "").split(';') if d.strip()]  # 多个导出基目录
-SEARCH_MAX_DEPTH = int(os.getenv("SEARCH_MAX_DEPTH", ""))         # 搜索文件夹的最大深度
+DEFAULT_SAVE_DIR = os.getenv("DEFAULT_SAVE_DIR", "待整理").strip()  # 默认保存目录
+EXPORT_BASE_DIRS = [d.strip() for d in os.getenv("EXPORT_BASE_DIR", "媒体库;媒体库2").split(';') if d.strip()]  # 多个导出基目录
+SEARCH_MAX_DEPTH = int(os.getenv("SEARCH_MAX_DEPTH", "2"))         # 搜索文件夹的最大深度
 # =====================================================
 
 def init_db():
@@ -545,6 +546,17 @@ class Pan123Client:
         """秒传文件（带重试机制）"""
         logger.info(f"尝试秒传文件: '{file_name}' (大小: {size} bytes, 父ID: {parent_id})")
         
+        # 保存原始Etag
+        original_etag = etag
+        
+        # 如果Etag长度是32位且是十六进制，直接使用
+        if len(etag) == 32 and all(c in '0123456789abcdef' for c in etag.lower()):
+            logger.info(f"Etag是有效的MD5格式: {etag}")
+        else:
+            # 尝试转换为MD5格式
+            etag = FastLinkProcessor.optimized_etag_to_hex(etag, True)
+            logger.info(f"转换后Etag: {etag}")
+        
         for attempt in range(retry_count):
             try:
                 url = f"{PAN_HOST}{API_PATHS['UPLOAD_REQUEST']}"
@@ -581,6 +593,13 @@ class Pan123Client:
                 else:
                     error_msg = data.get("message", "未知错误")
                     logger.error(f"❌ 文件秒传失败: {error_msg}")
+                    
+                    # 如果是Etag格式问题，尝试使用原始Etag
+                    if "etag" in error_msg.lower() and etag != original_etag:
+                        logger.info(f"⚠️ 尝试使用原始Etag: {original_etag}")
+                        etag = original_etag  # 下次重试使用原始Etag
+                        continue
+                    
                     if attempt < retry_count - 1:
                         time.sleep(1)
                         continue
@@ -718,21 +737,42 @@ class Pan123Client:
     def sync_directory_by_path(self, path):
         """
         同步指定路径的目录
-        :param path: 相对于导出基目录的路径（如"电视剧/国产剧"）
+        :param path: 目录路径（支持完整路径或相对路径）
         :return: 更新的目录数量
         """
         logger.info(f"开始同步目录路径: '{path}'")
         
-        # 分解路径
-        parts = [p for p in path.split('/') if p]
+        # 处理路径格式
+        path = path.strip().strip('/')
+        
+        # 如果只有一个基目录，使用相对路径模式
+        if len(self.export_base_dir_ids) == 1:
+            base_dir_id = self.export_base_dir_ids[0]
+            base_dir_path = self.export_base_dir_map[base_dir_id]
+            logger.info(f"单基目录模式: 基目录 '{base_dir_path}' (ID: {base_dir_id})")
+            return self._sync_relative_path(path, base_dir_id, base_dir_path)
+        # 多个基目录，使用完整路径模式
+        else:
+            logger.info(f"多基目录模式: 需要完整路径")
+            return self._sync_full_path(path)
+    
+    def _sync_relative_path(self, relative_path, base_dir_id, base_dir_path):
+        """
+        同步相对路径（单个基目录模式）
+        :param relative_path: 相对于基目录的路径
+        :param base_dir_id: 基目录ID
+        :param base_dir_path: 基目录路径
+        :return: 更新的目录数量
+        """
+        logger.info(f"同步相对路径: '{relative_path}' (基目录: '{base_dir_path}')")
+        
+        parts = [p for p in relative_path.split('/') if p]
         if not parts:
             logger.warning("路径为空，将同步整个基目录")
-            return self.full_sync_directory_cache()
+            return self.sync_directory(base_dir_id, base_dir_path, base_dir_id)
         
-        # 从基目录开始查找
-        parent_id = self.export_base_dir_ids[0] if self.export_base_dir_ids else 0
-        current_path = self.export_base_dir_map.get(parent_id, "根目录")
-        base_dir_id = parent_id
+        parent_id = base_dir_id
+        current_path = base_dir_path
         found = True
         
         try:
@@ -772,11 +812,60 @@ class Pan123Client:
             # 同步找到的目录
             logger.info(f"开始同步目录: '{current_path}' (ID: {parent_id})")
             count = self.sync_directory(parent_id, current_path, base_dir_id)
-            logger.info(f"目录同步完成: '{path}', 更新 {count} 个目录")
+            logger.info(f"目录同步完成: '{relative_path}', 更新 {count} 个目录")
             return count
         except Exception as e:
             logger.error(f"目录同步失败: {str(e)}")
             return 0
+    
+    def _sync_full_path(self, full_path):
+        """
+        同步完整路径（多基目录模式）
+        :param full_path: 完整路径（包含基目录）
+        :return: 更新的目录数量
+        """
+        logger.info(f"同步完整路径: '{full_path}'")
+        
+        # 尝试匹配基目录
+        base_dir_id = None
+        base_dir_name = None
+        
+        # 按路径长度从长到短排序基目录，优先匹配更长的路径
+        sorted_base_dirs = sorted(
+            [(bid, bpath) for bid, bpath in self.export_base_dir_map.items() if bid != 0],
+            key=lambda x: len(x[1]),
+            reverse=True
+        )
+        
+        # 查找匹配的基目录（精确匹配或前缀匹配）
+        for bid, bpath in sorted_base_dirs:
+            # 检查完整路径是否以基目录路径开头（后面是路径分隔符或结束）
+            if full_path == bpath or full_path.startswith(bpath + '/'):
+                base_dir_id = bid
+                base_dir_name = bpath
+                logger.info(f"找到匹配基目录: '{bpath}' (ID: {bid})")
+                break
+        
+        if not base_dir_id:
+            logger.error(f"找不到匹配的基目录: '{full_path}'")
+            return 0
+        
+        # 提取子路径（去除基目录部分）
+        if full_path == base_dir_name:
+            sub_path = ""
+        else:
+            # 确保去除基目录路径和后续的斜杠
+            sub_path = full_path[len(base_dir_name):].strip('/')
+        
+        logger.info(f"基目录: '{base_dir_name}', 子路径: '{sub_path}'")
+        
+        if not sub_path:
+            # 直接同步整个基目录
+            logger.info(f"同步整个基目录: '{base_dir_name}' (ID: {base_dir_id})")
+            return self.sync_directory(base_dir_id, base_dir_name, base_dir_id)
+        
+        # 处理子路径
+        return self._sync_relative_path(sub_path, base_dir_id, base_dir_name)
     
     def sync_directory(self, directory_id, current_path, base_dir_id, current_depth=0):
         """同步指定目录及其子目录"""
@@ -1123,14 +1212,35 @@ class FastLinkProcessor:
         
         try:
             logger.debug(f"转换V2 ETag: {optimized_etag}")
+            
+            # 检查是否是有效的MD5格式（32位十六进制）
+            if len(optimized_etag) == 32 and all(c in '0123456789abcdefABCDEF' for c in optimized_etag):
+                logger.debug(f"ETag已经是有效的MD5格式: {optimized_etag}")
+                return optimized_etag.lower()
+            
+            # 转换Base62到十六进制
             num = 0
             for char in optimized_etag:
+                if char not in BASE62_CHARS:
+                    logger.error(f"❌ ETag包含无效字符: {char}")
+                    return optimized_etag
                 num = num * 62 + BASE62_CHARS.index(char)
             
+            # 转换为十六进制并确保32位
             hex_str = hex(num)[2:].lower()
-            
-            if len(hex_str) < 32:
+            if len(hex_str) > 32:
+                # 取后32位
+                hex_str = hex_str[-32:]
+                logger.warning(f"ETag转换后长度超过32位，截断为: {hex_str}")
+            elif len(hex_str) < 32:
+                # 前面补零
                 hex_str = hex_str.zfill(32)
+                logger.debug(f"ETag转换后不足32位，补零后: {hex_str}")
+            
+            # 验证是否为有效的MD5
+            if len(hex_str) != 32 or not all(c in '0123456789abcdef' for c in hex_str):
+                logger.error(f"❌ 转换后ETag格式无效: {hex_str}")
+                return optimized_etag
             
             logger.debug(f"转换后ETag: {hex_str}")
             return hex_str
@@ -1209,7 +1319,8 @@ class TelegramBotHandler:
                 context.bot.delete_message(chat_id=chat_id, message_id=message_id)
                 logger.debug(f"已自动删除消息: {message_id}")
             except Exception as e:
-                logger.error(f"删除消息失败: {str(e)}")
+                if "message to delete not found" not in str(e).lower():
+                    logger.error(f"删除消息失败: {str(e)}")
         
         # 使用线程延迟执行
         threading.Timer(delay, delete).start()
@@ -1634,13 +1745,13 @@ class TelegramBotHandler:
                     
                     # 创建新文件夹（带重试）
                     folder = self.pan_client.create_folder(parent_id, part)
-                    if folder:
+                    if not folder:
+                        logger.warning(f"⚠️ 创建文件夹失败: {part}，将使用根目录")
+                        parent_id = root_dir_id
+                    else:
                         folder_id = folder["FileId"]
                         folder_cache[cache_key] = folder_id
                         parent_id = folder_id
-                    else:
-                        logger.warning(f"⚠️ 创建文件夹失败: {part}，将使用根目录")
-                        parent_id = root_dir_id
                 
                 # 处理ETag
                 etag = file_info["etag"]
@@ -1794,11 +1905,12 @@ class TelegramBotHandler:
                 text="⏱️ 同步操作已自动取消（60秒未确认）"
             )
         except Exception as e:
-            logger.error(f"取消确认时出错: {str(e)}")
+            if "message to delete not found" not in str(e).lower():
+                logger.error(f"取消确认时出错: {str(e)}")
     
     def handle_text(self, update: Update, context: CallbackContext):
         """处理文本消息（秒传链接或导出选择或同步确认）"""
-        text = update.message.text.strip().lower()
+        text = update.message.text.strip()
         
         # 检查是否是导出选择
         if context.user_data.get('waiting_for_export_choice', False):
@@ -1808,9 +1920,10 @@ class TelegramBotHandler:
         
         # 检查是否是同步确认
         if context.user_data.get('waiting_sync_confirmation', False):
-            if text == '确认':
+            text_lower = text.lower()
+            if text_lower == '确认':
                 self.process_sync_confirmation(update, context)
-            elif text == '取消':
+            elif text_lower == '取消':
                 self.cancel_sync_operation(update, context)
             else:
                 self.send_auto_delete_message(
@@ -1824,7 +1937,8 @@ class TelegramBotHandler:
         if (text.startswith(LEGACY_FOLDER_LINK_PREFIX_V1) or 
             text.startswith(LEGACY_FOLDER_LINK_PREFIX_V2) or 
             text.startswith(COMMON_PATH_LINK_PREFIX_V1) or 
-            text.startswith(COMMON_PATH_LINK_PREFIX_V2)):
+            text.startswith(COMMON_PATH_LINK_PREFIX_V2) or
+            ('#' in text and '$' in text)):  # 更宽松的匹配
             logger.info(f"收到秒传链接: {text[:50]}...")
             self.send_auto_delete_message(update, context, "🔍 检测到秒传链接，开始解析...")
             self.process_fast_link(update, context, text)
@@ -1842,8 +1956,9 @@ class TelegramBotHandler:
                     chat_id=update.message.chat_id,
                     message_id=message_id
                 )
-            except:
-                pass
+            except Exception as e:
+                if "message to delete not found" not in str(e).lower():
+                    logger.error(f"删除确认消息失败: {str(e)}")
         
         # 获取同步类型
         sync_type = context.user_data.get('sync_type')
@@ -1868,8 +1983,9 @@ class TelegramBotHandler:
                     chat_id=update.message.chat_id,
                     message_id=message_id
                 )
-            except:
-                pass
+            except Exception as e:
+                if "message to delete not found" not in str(e).lower():
+                    logger.error(f"删除确认消息失败: {str(e)}")
         
         # 发送取消通知
         self.send_auto_delete_message(
