@@ -42,7 +42,7 @@ logging.getLogger("urllib3").setLevel(logging.WARNING)
 
 # ====================== 配置区域 ======================
 # 数据库文件路径 (使用相对路径)
-DB_PATH = "bot123.db"
+DB_PATH = os.getenv("DB_PATH", "bot123.db")
 
 # 123云盘API配置
 PAN_HOST = "https://www.123pan.com"
