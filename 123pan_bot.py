@@ -69,7 +69,7 @@ BASE62_CHARS = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 # 环境变量配置
 DEFAULT_SAVE_DIR = os.getenv("DEFAULT_SAVE_DIR", "").strip()  # 默认保存目录
-EXPORT_BASE_DIR = os.getenv("EXPORT_BASE_DIR", "").strip()    # 导出操作的基目录
+EXPORT_BASE_DIRS = [d.strip() for d in os.getenv("EXPORT_BASE_DIR", "").split(';') if d.strip()]  # 多个导出基目录
 SEARCH_MAX_DEPTH = int(os.getenv("SEARCH_MAX_DEPTH", ""))         # 搜索文件夹的最大深度
 # =====================================================
 
@@ -295,17 +295,20 @@ class Pan123Client:
         
         # 初始化默认目录ID
         self.default_save_dir_id = 0  # 根目录
-        self.export_base_dir_id = 0   # 根目录
+        self.export_base_dir_ids = []   # 存储多个基目录ID
+        self.export_base_dir_map = {0: "根目录"}  # 基目录ID到路径的映射
         
         # 设置默认保存目录
         if DEFAULT_SAVE_DIR:
             self.default_save_dir_id = self.get_or_create_directory(DEFAULT_SAVE_DIR)
             logger.info(f"默认保存目录已设置: '{DEFAULT_SAVE_DIR}' (ID: {self.default_save_dir_id})")
         
-        # 设置导出基目录
-        if EXPORT_BASE_DIR:
-            self.export_base_dir_id = self.get_or_create_directory(EXPORT_BASE_DIR)
-            logger.info(f"导出基目录已设置: '{EXPORT_BASE_DIR}' (ID: {self.export_base_dir_id})")
+        # 设置多个导出基目录
+        for base_dir in EXPORT_BASE_DIRS:
+            base_dir_id = self.get_or_create_directory(base_dir)
+            self.export_base_dir_ids.append(base_dir_id)
+            self.export_base_dir_map[base_dir_id] = base_dir
+            logger.info(f"导出基目录已设置: '{base_dir}' (ID: {base_dir_id})")
         
         # 设置搜索最大深度
         self.search_max_depth = SEARCH_MAX_DEPTH
@@ -603,18 +606,25 @@ class Pan123Client:
             with closing(sqlite3.connect(DB_PATH)) as conn:
                 conn.row_factory = sqlite3.Row
                 c = conn.cursor()
-                c.execute("SELECT * FROM directory_cache WHERE base_dir_id = ?", (self.export_base_dir_id,))
+                
+                if not self.export_base_dir_ids:
+                    c.execute("SELECT * FROM directory_cache")
+                else:
+                    placeholders = ','.join(['?'] * len(self.export_base_dir_ids))
+                    c.execute(f"SELECT * FROM directory_cache WHERE base_dir_id IN ({placeholders})", 
+                              self.export_base_dir_ids)
+                
                 rows = c.fetchall()
                 
                 for row in rows:
                     file_id = row["file_id"]
                     self.directory_cache[file_id] = dict(row)
                 
-                logger.info(f"已加载 {len(rows)} 个目录缓存 (导出基目录ID: {self.export_base_dir_id})")
+                logger.info(f"已加载 {len(rows)} 个目录缓存 (导出基目录ID: {self.export_base_dir_ids})")
         except Exception as e:
             logger.error(f"加载目录缓存失败: {str(e)}")
     
-    def update_directory_cache(self, file_id, filename, parent_id, full_path):
+    def update_directory_cache(self, file_id, filename, parent_id, full_path, base_dir_id):
         """更新目录缓存"""
         try:
             # 检查是否已存在
@@ -622,7 +632,8 @@ class Pan123Client:
                 existing = self.directory_cache[file_id]
                 if (existing["filename"] == filename and 
                     existing["parent_id"] == parent_id and 
-                    existing["full_path"] == full_path):
+                    existing["full_path"] == full_path and
+                    existing["base_dir_id"] == base_dir_id):
                     return False  # 无变化，无需更新
             
             # 更新内存缓存
@@ -631,7 +642,7 @@ class Pan123Client:
                 "filename": filename,
                 "parent_id": parent_id,
                 "full_path": full_path,
-                "base_dir_id": self.export_base_dir_id
+                "base_dir_id": base_dir_id
             }
             self.directory_cache[file_id] = cache_entry
             
@@ -642,10 +653,10 @@ class Pan123Client:
                 c.execute('''INSERT OR REPLACE INTO directory_cache 
                             (file_id, filename, parent_id, full_path, base_dir_id) 
                             VALUES (?,?,?,?,?)''',
-                          (file_id, filename, parent_id, full_path, self.export_base_dir_id))
+                          (file_id, filename, parent_id, full_path, base_dir_id))
                 conn.commit()
             
-            logger.info(f"更新目录缓存: {filename} (ID: {file_id}, 路径: {full_path})")
+            logger.info(f"更新目录缓存: {filename} (ID: {file_id}, 路径: {full_path}, 基目录ID: {base_dir_id})")
             return True
         except Exception as e:
             logger.error(f"更新目录缓存失败: {str(e)}")
@@ -689,7 +700,15 @@ class Pan123Client:
         logger.info("开始全量同步目录缓存...")
         
         try:
-            update_count = self.sync_directory(self.export_base_dir_id, EXPORT_BASE_DIR or "根目录")
+            update_count = 0
+            # 同步根目录
+            update_count += self.sync_directory(0, "根目录", base_dir_id=0)
+            
+            # 同步所有导出基目录
+            for base_dir_id in self.export_base_dir_ids:
+                base_dir_path = self.export_base_dir_map.get(base_dir_id, f"基目录({base_dir_id})")
+                update_count += self.sync_directory(base_dir_id, base_dir_path, base_dir_id=base_dir_id)
+                
             logger.info(f"全量同步完成，更新 {update_count} 个目录")
             return update_count
         except Exception as e:
@@ -711,8 +730,9 @@ class Pan123Client:
             return self.full_sync_directory_cache()
         
         # 从基目录开始查找
-        parent_id = self.export_base_dir_id
-        current_path = EXPORT_BASE_DIR or "根目录"
+        parent_id = self.export_base_dir_ids[0] if self.export_base_dir_ids else 0
+        current_path = self.export_base_dir_map.get(parent_id, "根目录")
+        base_dir_id = parent_id
         found = True
         
         try:
@@ -738,7 +758,8 @@ class Pan123Client:
                         parent_id,
                         part,
                         folder_info.get("parent_id", 0),
-                        current_path
+                        current_path,
+                        base_dir_id
                     )
                 else:
                     logger.error(f"找不到目录: {part} (父ID: {parent_id})")
@@ -750,14 +771,14 @@ class Pan123Client:
             
             # 同步找到的目录
             logger.info(f"开始同步目录: '{current_path}' (ID: {parent_id})")
-            count = self.sync_directory(parent_id, current_path)
+            count = self.sync_directory(parent_id, current_path, base_dir_id)
             logger.info(f"目录同步完成: '{path}', 更新 {count} 个目录")
             return count
         except Exception as e:
             logger.error(f"目录同步失败: {str(e)}")
             return 0
     
-    def sync_directory(self, directory_id, current_path, current_depth=0):
+    def sync_directory(self, directory_id, current_path, base_dir_id, current_depth=0):
         """同步指定目录及其子目录"""
         logger.info(f"开始同步目录: '{current_path}' (ID: {directory_id}, 深度: {current_depth})")
         update_count = 0
@@ -801,7 +822,8 @@ class Pan123Client:
                             item["fileId"],
                             item["filename"],
                             directory_id,
-                            item_path
+                            item_path,
+                            base_dir_id
                         )
                         if updated:
                             update_count += 1
@@ -812,6 +834,7 @@ class Pan123Client:
                             update_count += self.sync_directory(
                                 item["fileId"],
                                 item_path,
+                                base_dir_id,
                                 current_depth + 1
                             )
                 
@@ -895,7 +918,9 @@ class Pan123Client:
                             item["fileId"],
                             item["filename"],
                             parent_id,
-                            item_path
+                            item_path,
+                            # 基目录ID未知，暂时设为0
+                            0
                         )
                         
                         return {
@@ -1053,6 +1078,11 @@ class FastLinkProcessor:
         elif share_link.startswith(COMMON_PATH_LINK_PREFIX_V1):
             is_common_path_format = True
             share_link = share_link[len(COMMON_PATH_LINK_PREFIX_V1):]
+        elif share_link.startswith(LEGACY_FOLDER_LINK_PREFIX_V2):
+            is_v2_etag_format = True
+            share_link = share_link[len(LEGACY_FOLDER_LINK_PREFIX_V2):]
+        elif share_link.startswith(LEGACY_FOLDER_LINK_PREFIX_V1):
+            share_link = share_link[len(LEGACY_FOLDER_LINK_PREFIX_V1):]
         
         if is_common_path_format:
             delimiter_pos = share_link.find(COMMON_PATH_DELIMITER)
@@ -1060,15 +1090,10 @@ class FastLinkProcessor:
                 common_base_path = share_link[:delimiter_pos]
                 share_link = share_link[delimiter_pos + 1:]
         
-        if not is_common_path_format:
-            if share_link.startswith(LEGACY_FOLDER_LINK_PREFIX_V2):
-                is_v2_etag_format = True
-                share_link = share_link[len(LEGACY_FOLDER_LINK_PREFIX_V2):]
-            elif share_link.startswith(LEGACY_FOLDER_LINK_PREFIX_V1):
-                share_link = share_link[len(LEGACY_FOLDER_LINK_PREFIX_V1):]
-        
         files = []
         for s_link in share_link.split('$'):
+            if not s_link:
+                continue
             parts = s_link.split('#')
             if len(parts) < 3:
                 continue
@@ -1177,7 +1202,7 @@ class TelegramBotHandler:
             return func(self, update, context, *args, **kwargs)
         return wrapper
     
-    def auto_delete_message(self, context, chat_id, message_id, delay=10):
+    def auto_delete_message(self, context, chat_id, message_id, delay=60):
         """自动删除消息"""
         def delete():
             try:
@@ -1189,7 +1214,7 @@ class TelegramBotHandler:
         # 使用线程延迟执行
         threading.Timer(delay, delete).start()
     
-    def send_auto_delete_message(self, update, context, text, delay=10, chat_id=None):
+    def send_auto_delete_message(self, update, context, text, delay=60, chat_id=None):
         """发送自动删除的消息"""
         if chat_id is None:
             chat_id = update.message.chat_id
@@ -1241,6 +1266,7 @@ class TelegramBotHandler:
             direct_traffic = format_size(user_info.get("directTraffic", 0))
             
             # 构建消息
+            export_dirs = ", ".join(EXPORT_BASE_DIRS) if EXPORT_BASE_DIRS else "根目录"
             message = (
                 f"🚀 123云盘用户信息 | {'👑 尊享账户' if user_info.get('vip', False) else '🔒 普通账户'}\n"
                 f"══════════════════════\n"
@@ -1255,7 +1281,7 @@ class TelegramBotHandler:
                 f"══════════════════════\n\n"
                 f"⚙️ 当前配置:\n"
                 f"├ 保存目录: {DEFAULT_SAVE_DIR or '根目录'}\n"
-                f"├ 导出目录: {EXPORT_BASE_DIR or '根目录'}\n"
+                f"├ 导出目录: {export_dirs}\n"
                 f"├ 搜索深度: {SEARCH_MAX_DEPTH}层\n"
                 f"└ 数据缓存: {len(self.pan_client.directory_cache)}\n\n"
                 f"🤖 机器人控制中心\n"
@@ -1321,6 +1347,7 @@ class TelegramBotHandler:
             
             # 添加选择提示
             response_lines.append("\n请回复序号选择要导出的文件夹")
+            response_lines.append("支持多选：输入 0 全选，或输入逗号分隔的序号（如 1,2,3）")
             
             # 将所有结果合并为一条消息发送
             response_message = "\n".join(response_lines)
@@ -1356,7 +1383,7 @@ class TelegramBotHandler:
             return []
     
     def handle_export_choice(self, update: Update, context: CallbackContext, choice: str):
-        """处理用户选择的导出序号"""
+        """处理用户选择的导出序号（支持多选）"""
         try:
             # 获取保存的搜索结果
             results = context.user_data.get('export_search_results', [])
@@ -1364,93 +1391,113 @@ class TelegramBotHandler:
                 self.send_auto_delete_message(update, context, "❌ 选择超时或结果已过期，请重新搜索")
                 return
                 
-            # 验证用户输入
-            try:
-                choice_index = int(choice) - 1
-                if choice_index < 0 or choice_index >= len(results):
-                    self.send_auto_delete_message(update, context, "❌ 序号无效，请输入列表中的序号")
+            # 解析用户输入
+            if choice.strip() == "0":
+                # 全选
+                selected_indices = list(range(len(results)))
+            else:
+                # 处理逗号分隔的多个序号
+                try:
+                    selected_indices = [int(idx.strip()) - 1 for idx in choice.split(",")]
+                except ValueError:
+                    self.send_auto_delete_message(update, context, "❌ 格式错误，请输入数字序号（如 1 或 1,2,3）")
                     return
-            except ValueError:
-                self.send_auto_delete_message(update, context, "❌ 请输入有效数字序号")
-                return
                 
-            # 获取选中的文件夹
-            selected_folder = results[choice_index]
-            folder_id = selected_folder["file_id"]
-            folder_name = selected_folder["filename"]
-            folder_path = selected_folder["full_path"]
+                # 验证序号范围
+                if any(idx < 0 or idx >= len(results) for idx in selected_indices):
+                    self.send_auto_delete_message(update, context, f"❌ 序号无效，请输入1-{len(results)}之间的数字")
+                    return
             
             # 清除上下文状态
             context.user_data.pop('export_search_results', None)
             context.user_data.pop('waiting_for_export_choice', None)
             
-            # 开始导出
+            # 处理选中的文件夹
+            total = len(selected_indices)
             self.send_auto_delete_message(
                 update, context,
-                f"✅ 已选择: {folder_name}\n"
-                f"├ ID: {folder_id}\n"
-                f"└ 路径: {folder_path}\n"
-                f"开始导出内容..."
+                f"✅ 已选择 {total} 个文件夹，开始导出..."
             )
             
-            # 获取文件夹内容
-            files = self.pan_client.get_directory_files(folder_id, folder_name)
-            
-            if not files:
-                self.send_auto_delete_message(update, context, "⚠️ 该文件夹为空")
-                return
-            
-            # 创建JSON结构
-            json_data = {
-                "commonPath": folder_name,
-                "usesBase62EtagsInExport": False,
-                "files": [
-                    {
-                        "path": file_info["path"],
-                        "etag": file_info["etag"],
-                        "size": file_info["size"]
-                    }
-                    for file_info in files
-                ]
-            }
-            
-            # 清理文件夹名称
-            clean_folder_name = re.sub(r'[\\/*?:"<>|]', "", folder_name)
-            
-            # 生成文件名
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            file_name = f"{clean_folder_name}.json"
-            
-            # 保存为临时文件
-            with open(file_name, "w", encoding="utf-8") as f:
-                json.dump(json_data, f, ensure_ascii=False, indent=2)
-            
-            # 获取用户信息
-            user_info = self.pan_client.get_user_info()
-            nickname = user_info.get("nickname", "未知用户") if user_info else "未知用户"
-            is_vip = user_info.get("vip", False) if user_info else False
-            vip_status = "👑 尊享会员" if is_vip else "🔒 普通用户"
-            
-            # 创建分享信息
-            caption = (
-                f"✨来自：{nickname}的分享\n\n"
-                f"📁 文件名: {clean_folder_name}\n"
-                f"📝 文件数: {len(files)}\n\n"
-                f"❤️ 123因您分享更完美！"
-            )
-            
-            # 发送文件
-            with open(file_name, "rb") as f:
-                context.bot.send_document(
-                    chat_id=update.message.chat_id,
-                    document=f,
-                    filename=file_name,
-                    caption=caption
+            for i, idx in enumerate(selected_indices):
+                # 获取选中的文件夹
+                selected_folder = results[idx]
+                folder_id = selected_folder["file_id"]
+                folder_name = selected_folder["filename"]
+                folder_path = selected_folder["full_path"]
+                
+                # 开始导出
+                self.send_auto_delete_message(
+                    update, context,
+                    f"处理文件夹 [{i+1}/{total}]:\n"
+                    f"├ 名称: {folder_name}\n"
+                    f"├ ID: {folder_id}\n"
+                    f"└ 路径: {folder_path}"
                 )
+                
+                # 获取文件夹内容
+                files = self.pan_client.get_directory_files(folder_id, folder_name)
+                
+                if not files:
+                    self.send_auto_delete_message(update, context, f"⚠️ 文件夹为空: {folder_name}")
+                    continue
+                
+                # 创建JSON结构
+                json_data = {
+                    "commonPath": folder_name,
+                    "usesBase62EtagsInExport": False,
+                    "files": [
+                        {
+                            "path": file_info["path"],
+                            "etag": file_info["etag"],
+                            "size": file_info["size"]
+                        }
+                        for file_info in files
+                    ]
+                }
+                
+                # 清理文件夹名称
+                clean_folder_name = re.sub(r'[\\/*?:"<>|]', "", folder_name)
+                
+                # 生成文件名
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                file_name = f"{clean_folder_name}_{timestamp}.json"
+                
+                # 保存为临时文件
+                with open(file_name, "w", encoding="utf-8") as f:
+                    json.dump(json_data, f, ensure_ascii=False, indent=2)
+                
+                # 获取用户信息
+                user_info = self.pan_client.get_user_info()
+                nickname = user_info.get("nickname", "未知用户") if user_info else "未知用户"
+                is_vip = user_info.get("vip", False) if user_info else False
+                vip_status = "👑 尊享会员" if is_vip else "🔒 普通用户"
+                
+                # 创建分享信息
+                caption = (
+                    f"✨来自：{nickname}的分享\n\n"
+                    f"📁 文件名: {clean_folder_name}\n"
+                    f"📝 文件数: {len(files)}\n\n"
+                    f"❤️ 123因您分享更完美！"
+                )
+                
+                # 发送文件
+                with open(file_name, "rb") as f:
+                    context.bot.send_document(
+                        chat_id=update.message.chat_id,
+                        document=f,
+                        filename=file_name,
+                        caption=caption
+                    )
+                
+                # 删除临时文件
+                os.remove(file_name)
+                logger.info(f"已发送导出文件: {file_name}")
             
-            # 删除临时文件
-            os.remove(file_name)
-            logger.info(f"已发送导出文件: {file_name}")
+            self.send_auto_delete_message(
+                update, context,
+                f"✅ 导出完成！共处理 {total} 个文件夹"
+            )
             
         except Exception as e:
             logger.error(f"导出文件夹失败: {str(e)}")
@@ -1653,7 +1700,7 @@ class TelegramBotHandler:
                     # 简化文件名显示
                     file_name = result["file_name"]
                     if len(file_name) > 50:
-                        file_name = f"...{file_name[-47]}"
+                        file_name = f"...{file_name[-47]}" if file_name else "未知文件"
                     
                     failed_files.append(f"• {file_name}: {result['error']}")
             
@@ -1769,17 +1816,15 @@ class TelegramBotHandler:
                 self.send_auto_delete_message(
                     update, context,
                     "❌ 无效回复，请回复 '确认' 或 '取消'",
-                    delay=5
+                    delay=60
                 )
             return
         
         # 检查是否是秒传链接
-        if any(prefix in text for prefix in [
-            LEGACY_FOLDER_LINK_PREFIX_V1,
-            LEGACY_FOLDER_LINK_PREFIX_V2,
-            COMMON_PATH_LINK_PREFIX_V1,
-            COMMON_PATH_LINK_PREFIX_V2
-        ]):
+        if (text.startswith(LEGACY_FOLDER_LINK_PREFIX_V1) or 
+            text.startswith(LEGACY_FOLDER_LINK_PREFIX_V2) or 
+            text.startswith(COMMON_PATH_LINK_PREFIX_V1) or 
+            text.startswith(COMMON_PATH_LINK_PREFIX_V2)):
             logger.info(f"收到秒传链接: {text[:50]}...")
             self.send_auto_delete_message(update, context, "🔍 检测到秒传链接，开始解析...")
             self.process_fast_link(update, context, text)
@@ -1830,7 +1875,7 @@ class TelegramBotHandler:
         self.send_auto_delete_message(
             update, context,
             "❌ 同步操作已取消",
-            delay=10
+            delay=60
         )
     
     def execute_full_sync(self, update: Update, context: CallbackContext):
@@ -1918,7 +1963,7 @@ def main():
     
     # 记录配置信息
     #logger.info(f"转存目录: {DEFAULT_SAVE_DIR or '根目录'}")
-    #logger.info(f"导出基目录: {EXPORT_BASE_DIR or '根目录'}")
+    #logger.info(f"导出基目录: {', '.join(EXPORT_BASE_DIRS) if EXPORT_BASE_DIRS else '根目录'}")
     #logger.info(f"搜索最大深度: {SEARCH_MAX_DEPTH}层")
     
     logger.info("初始化123云盘客户端...")
