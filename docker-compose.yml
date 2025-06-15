@@ -3,7 +3,7 @@ services:
   123bot:
     privileged: true
     container_name: 123bot
-    image: dinding1/123bot:v0.0.2#今天先拉这个，后面可以改成latest
+    image: dinding1/123bot:v0.0.3
     restart: always
     environment:
       - TZ=Asia/Shanghai
