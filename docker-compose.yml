@@ -24,7 +24,3 @@ services:
       - HTTPS_PROXY=http://10.10.10.12:7890
     volumes:
       - /vol2/1000/docker/123bot/data:/data
-
-
-
-    
