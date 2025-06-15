@@ -3,15 +3,28 @@ services:
   123bot:
     privileged: true
     container_name: 123bot
-    image: dinding1/123bot:v0.0.3
+    image: docker.dinding.eu.org/dinding1/123bot:v0.0.3
     restart: always
     environment:
       - TZ=Asia/Shanghai
-        #TGBOT
-      - TG_BOT_TOKEN=TGBOT_TOKEN 必选
-      - TG_ADMIN_USER_IDS=管理员ID USERID 建议填
-      - PAN_CLIENT_ID=123API 必选
-      - PAN_CLIENT_SECRET=123API 必选
-      - HTTP_PROXY=#访问http协议走代理   选填
-      - NO_PROXY=172.17.0.1,127.0.0.1,localhost,10.10.10.11 #排除本地访问不走代理 选填
-      - HTTPS_PROXY=选填
+      #TGBOT TOKEN和管理员USERID
+      - TG_BOT_TOKEN=TOKEN
+      - TG_ADMIN_USER_IDS=USERID
+      #123云盘申请的开发者API
+      - PAN_CLIENT_ID=123API
+      - PAN_CLIENT_SECRET=123API
+      #秒传文件存放位置，不填就根目录，如下：存放在根目录/待整理目录下
+      - DEFAULT_SAVE_DIR=待整理
+      #生成JSON文件位置，不填就一整个123网盘，如下：只在根目录/媒体库目录里面内容可分享
+      - EXPORT_BASE_DIR=媒体库
+      #迭代深度，不填就不限制深度，建议填写，比如我云盘结构是：媒体库/电视剧/国产剧/琅琊榜（2021）/S01/琅琊榜.2025.S01E01.mkv;我填写2，就是迭代的时候只迭代到琅琊榜（2021）截至。
+      - SEARCH_MAX_DEPTH=2     
+      - HTTP_PROXY=http://10.10.10.12:7890 #访问http协议走代理
+      - NO_PROXY= 172.17.0.1,127.0.0.1,localhost,10.10.10.11 #排除本地访问不走代理
+      - HTTPS_PROXY=http://10.10.10.12:7890
+    volumes:
+      - /vol2/1000/docker/123bot/data:/data
+
+
+
+    
