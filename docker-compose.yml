@@ -12,6 +12,6 @@ services:
       - TG_ADMIN_USER_IDS=管理员ID USERID 建议填
       - PAN_CLIENT_ID=123API 必选
       - PAN_CLIENT_SECRET=123API 必选
-      - HTTP_PROXY= #访问http协议走代理   选填
-      - NO_PROXY= 172.17.0.1,127.0.0.1,localhost,10.10.10.11 #排除本地访问不走代理 选填
-      - HTTPS_PROXY= 选填
+      - HTTP_PROXY=#访问http协议走代理   选填
+      - NO_PROXY=172.17.0.1,127.0.0.1,localhost,10.10.10.11 #排除本地访问不走代理 选填
+      - HTTPS_PROXY=选填
