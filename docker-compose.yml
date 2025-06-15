@@ -3,7 +3,7 @@ services:
   123bot:
     privileged: true
     container_name: 123bot
-    image: docker.dinding.eu.org/dinding1/123bot:v0.0.3
+    image: dinding1/123bot:v0.0.3
     restart: always
     environment:
       - TZ=Asia/Shanghai
