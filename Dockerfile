@@ -32,4 +32,4 @@ ENV EXPORT_BASE_DIR=""
 ENV SEARCH_MAX_DEPTH=
 
 # 设置入口点
-CMD ["python", "bot123pan.py"]
+CMD ["python", "123pan_bot.py"]
