@@ -11,13 +11,14 @@ import sqlite3
 import threading
 from contextlib import closing
 from datetime import datetime, timedelta, timezone
-from telegram import Update, BotCommand
+from telegram import Update, BotCommand, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Updater, 
     MessageHandler, 
     Filters, 
     CallbackContext, 
-    CommandHandler
+    CommandHandler,
+    CallbackQueryHandler
 )
 from functools import wraps
 import urllib3
@@ -734,139 +735,6 @@ class Pan123Client:
             logger.error(f"全量同步失败: {str(e)}")
             return 0
     
-    def sync_directory_by_path(self, path):
-        """
-        同步指定路径的目录
-        :param path: 目录路径（支持完整路径或相对路径）
-        :return: 更新的目录数量
-        """
-        logger.info(f"开始同步目录路径: '{path}'")
-        
-        # 处理路径格式
-        path = path.strip().strip('/')
-        
-        # 如果只有一个基目录，使用相对路径模式
-        if len(self.export_base_dir_ids) == 1:
-            base_dir_id = self.export_base_dir_ids[0]
-            base_dir_path = self.export_base_dir_map[base_dir_id]
-            logger.info(f"单基目录模式: 基目录 '{base_dir_path}' (ID: {base_dir_id})")
-            return self._sync_relative_path(path, base_dir_id, base_dir_path)
-        # 多个基目录，使用完整路径模式
-        else:
-            logger.info(f"多基目录模式: 需要完整路径")
-            return self._sync_full_path(path)
-    
-    def _sync_relative_path(self, relative_path, base_dir_id, base_dir_path):
-        """
-        同步相对路径（单个基目录模式）
-        :param relative_path: 相对于基目录的路径
-        :param base_dir_id: 基目录ID
-        :param base_dir_path: 基目录路径
-        :return: 更新的目录数量
-        """
-        logger.info(f"同步相对路径: '{relative_path}' (基目录: '{base_dir_path}')")
-        
-        parts = [p for p in relative_path.split('/') if p]
-        if not parts:
-            logger.warning("路径为空，将同步整个基目录")
-            return self.sync_directory(base_dir_id, base_dir_path, base_dir_id)
-        
-        parent_id = base_dir_id
-        current_path = base_dir_path
-        found = True
-        
-        try:
-            # 逐级查找目录
-            for part in parts:
-                # 先在缓存中查找
-                cached = self.search_in_cache(part, parent_id)
-                if cached:
-                    parent_id = cached[0]["file_id"]
-                    current_path = cached[0]["full_path"]
-                    logger.debug(f"在缓存中找到目录: {part} (ID: {parent_id})")
-                    continue
-                
-                # 缓存中没有，通过API查找
-                folder_info = self.search_folder(part, parent_id)
-                if folder_info:
-                    parent_id = folder_info["fileId"]
-                    current_path = f"{current_path}/{part}" if current_path else part
-                    logger.info(f"通过API找到目录: {part} (ID: {parent_id})")
-                    
-                    # 添加到缓存
-                    self.update_directory_cache(
-                        parent_id,
-                        part,
-                        folder_info.get("parent_id", 0),
-                        current_path,
-                        base_dir_id
-                    )
-                else:
-                    logger.error(f"找不到目录: {part} (父ID: {parent_id})")
-                    found = False
-                    break
-            
-            if not found:
-                return 0
-            
-            # 同步找到的目录
-            logger.info(f"开始同步目录: '{current_path}' (ID: {parent_id})")
-            count = self.sync_directory(parent_id, current_path, base_dir_id)
-            logger.info(f"目录同步完成: '{relative_path}', 更新 {count} 个目录")
-            return count
-        except Exception as e:
-            logger.error(f"目录同步失败: {str(e)}")
-            return 0
-    
-    def _sync_full_path(self, full_path):
-        """
-        同步完整路径（多基目录模式）
-        :param full_path: 完整路径（包含基目录）
-        :return: 更新的目录数量
-        """
-        logger.info(f"同步完整路径: '{full_path}'")
-        
-        # 尝试匹配基目录
-        base_dir_id = None
-        base_dir_name = None
-        
-        # 按路径长度从长到短排序基目录，优先匹配更长的路径
-        sorted_base_dirs = sorted(
-            [(bid, bpath) for bid, bpath in self.export_base_dir_map.items() if bid != 0],
-            key=lambda x: len(x[1]),
-            reverse=True
-        )
-        
-        # 查找匹配的基目录（精确匹配或前缀匹配）
-        for bid, bpath in sorted_base_dirs:
-            # 检查完整路径是否以基目录路径开头（后面是路径分隔符或结束）
-            if full_path == bpath or full_path.startswith(bpath + '/'):
-                base_dir_id = bid
-                base_dir_name = bpath
-                logger.info(f"找到匹配基目录: '{bpath}' (ID: {bid})")
-                break
-        
-        if not base_dir_id:
-            logger.error(f"找不到匹配的基目录: '{full_path}'")
-            return 0
-        
-        # 提取子路径（去除基目录部分）
-        if full_path == base_dir_name:
-            sub_path = ""
-        else:
-            # 确保去除基目录路径和后续的斜杠
-            sub_path = full_path[len(base_dir_name):].strip('/')
-        
-        logger.info(f"基目录: '{base_dir_name}', 子路径: '{sub_path}'")
-        
-        if not sub_path:
-            # 直接同步整个基目录
-            logger.info(f"同步整个基目录: '{base_dir_name}' (ID: {base_dir_id})")
-            return self.sync_directory(base_dir_id, base_dir_name, base_dir_id)
-        
-        # 处理子路径
-        return self._sync_relative_path(sub_path, base_dir_id, base_dir_name)
-    
     def sync_directory(self, directory_id, current_path, base_dir_id, current_depth=0):
         """同步指定目录及其子目录"""
         logger.info(f"开始同步目录: '{current_path}' (ID: {directory_id}, 深度: {current_depth})")
@@ -1261,9 +1129,9 @@ class TelegramBotHandler:
         self.dispatcher.add_handler(CommandHandler("start", self.start_command))
         self.dispatcher.add_handler(CommandHandler("export", self.export_command))
         self.dispatcher.add_handler(CommandHandler("sync_full", self.sync_full_command))
-        self.dispatcher.add_handler(CommandHandler("sync", self.sync_command))
         self.dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, self.handle_text))
         self.dispatcher.add_handler(MessageHandler(Filters.document, self.handle_document))
+        self.dispatcher.add_handler(CallbackQueryHandler(self.button_callback))
         
         # 设置菜单命令
         self.set_menu_commands()
@@ -1273,7 +1141,6 @@ class TelegramBotHandler:
         commands = [
             BotCommand("start", "用户信息"),
             BotCommand("export", "导出秒传文件"),
-            BotCommand("sync", "同步指定目录"),
             BotCommand("sync_full", "全量同步"),
         ]
         
@@ -1327,8 +1194,18 @@ class TelegramBotHandler:
     
     def send_auto_delete_message(self, update, context, text, delay=60, chat_id=None):
         """发送自动删除的消息"""
+        # 优先使用传入的 chat_id
         if chat_id is None:
-            chat_id = update.message.chat_id
+            # 尝试从不同来源获取 chat_id
+            if update and update.message:
+                chat_id = update.message.chat_id
+            elif update and update.callback_query and update.callback_query.message:
+                chat_id = update.callback_query.message.chat_id
+            elif context and hasattr(context, '_chat_id'):
+                chat_id = context._chat_id
+            else:
+                logger.error("无法确定 chat_id，无法发送消息")
+                return None
         
         message = context.bot.send_message(chat_id=chat_id, text=text)
         self.auto_delete_message(context, chat_id, message.message_id, delay)
@@ -1396,8 +1273,8 @@ class TelegramBotHandler:
                 f"├ 搜索深度: {SEARCH_MAX_DEPTH}层\n"
                 f"└ 数据缓存: {len(self.pan_client.directory_cache)}\n\n"
                 f"🤖 机器人控制中心\n"
-                f"▫️ /export 琅琊榜\n"
-                f"▫️ /sync 电视剧/国产剧\n\n"
+                f"▫️ /export 导出文件\n"
+                f"▫️ /sync_full 全量同步\n\n"
                 f"⏱️ 已运行: {days}天{hours}小时{minutes}分{seconds}秒"
             )
             
@@ -1408,70 +1285,7 @@ class TelegramBotHandler:
         except Exception as e:
             logger.error(f"处理/start命令出错: {str(e)}")
             self.send_auto_delete_message(update, context, "❌ 获取用户信息失败，请稍后再试")
-    
-    @admin_required
-    def export_command(self, update: Update, context: CallbackContext):
-        """处理/export命令，模糊匹配文件夹并提供选择"""
-        logger.info("收到/export命令")
-        
-        # 获取命令参数（合并所有参数为搜索关键词）
-        search_query = " ".join(context.args) if context.args else ""
-        
-        if not search_query:
-            self.send_auto_delete_message(update, context, "❌ 请指定要搜索的文件夹名称！格式: /export <文件夹名称>")
-            return
-        
-        self.send_auto_delete_message(update, context, f"🔍 正在搜索文件夹: '{search_query}'...")
-        
-        try:
-            # 在数据库中进行模糊搜索
-            results = self.search_database_by_name(search_query)
-            
-            if not results:
-                self.send_auto_delete_message(update, context, f"❌ 未找到包含 '{search_query}' 的文件夹")
-                return
-            
-            # 格式化结果并保存到上下文
-            formatted_results = []
-            response_lines = []
-            
-            # 构建响应消息
-            response_lines.append(f"✅ 找到 {len(results)} 个匹配项:\n")
-            
-            for i, result in enumerate(results, start=1):
-                file_id = result["file_id"]
-                filename = result["filename"]
-                full_path = result["full_path"]
-                
-                formatted_results.append({
-                    "file_id": file_id,
-                    "filename": filename,
-                    "full_path": full_path
-                })
-                
-                # 添加结果到响应消息
-                response_lines.append(
-                    f"{i}. 📁 名称: {filename}\n"
-                    f"   🔢 ID: {file_id}\n"
-                    f"   📂 路径: {full_path}\n"
-                )
-            
-            # 添加选择提示
-            response_lines.append("\n请回复序号选择要导出的文件夹")
-            response_lines.append("支持多选：输入 0 全选，或输入逗号分隔的序号（如 1,2,3）")
-            
-            # 将所有结果合并为一条消息发送
-            response_message = "\n".join(response_lines)
-            update.message.reply_text(response_message)
-            
-            # 保存结果到上下文并提示用户选择
-            context.user_data['export_search_results'] = formatted_results
-            context.user_data['waiting_for_export_choice'] = True
-            
-        except Exception as e:
-            logger.error(f"搜索文件夹失败: {str(e)}")
-            self.send_auto_delete_message(update, context, f"❌ 搜索失败: {str(e)}")
-    
+
     def search_database_by_name(self, name_pattern):
         """在数据库中进行模糊搜索"""
         try:
@@ -1492,129 +1306,334 @@ class TelegramBotHandler:
         except Exception as e:
             logger.error(f"数据库搜索失败: {str(e)}")
             return []
-    
-    def handle_export_choice(self, update: Update, context: CallbackContext, choice: str):
-        """处理用户选择的导出序号（支持多选）"""
+
+    @admin_required
+    def export_command(self, update: Update, context: CallbackContext):
+        """处理/export命令，使用按钮选择文件夹"""
+        logger.info("收到/export命令")
+        
+        # 获取命令参数
+        search_query = " ".join(context.args) if context.args else ""
+        
+        if not search_query:
+            self.send_auto_delete_message(update, context, "❌ 请指定要搜索的文件夹名称！格式: /export <文件夹名称>")
+            return
+        
+        self.send_auto_delete_message(update, context, f"🔍 正在搜索文件夹: '{search_query}'...")
+        
         try:
-            # 获取保存的搜索结果
-            results = context.user_data.get('export_search_results', [])
+            # 在数据库中进行模糊搜索
+            results = self.search_database_by_name(search_query)
+            
             if not results:
-                self.send_auto_delete_message(update, context, "❌ 选择超时或结果已过期，请重新搜索")
+                self.send_auto_delete_message(update, context, f"❌ 未找到包含 '{search_query}' 的文件夹")
                 return
-                
-            # 解析用户输入
-            if choice.strip() == "0":
-                # 全选
-                selected_indices = list(range(len(results)))
-            else:
-                # 处理逗号分隔的多个序号
-                try:
-                    selected_indices = [int(idx.strip()) - 1 for idx in choice.split(",")]
-                except ValueError:
-                    self.send_auto_delete_message(update, context, "❌ 格式错误，请输入数字序号（如 1 或 1,2,3）")
-                    return
-                
-                # 验证序号范围
-                if any(idx < 0 or idx >= len(results) for idx in selected_indices):
-                    self.send_auto_delete_message(update, context, f"❌ 序号无效，请输入1-{len(results)}之间的数字")
-                    return
             
-            # 清除上下文状态
-            context.user_data.pop('export_search_results', None)
-            context.user_data.pop('waiting_for_export_choice', None)
+            # 保存结果到上下文
+            context.user_data['export_search_results'] = results
+            context.user_data['export_selected_indices'] = set()  # 存储用户选择的索引
             
-            # 处理选中的文件夹
-            total = len(selected_indices)
-            self.send_auto_delete_message(
-                update, context,
-                f"✅ 已选择 {total} 个文件夹，开始导出..."
+            # 创建按钮键盘
+            keyboard = []
+            max_buttons = 40  # Telegram最多支持100个按钮，我们限制为40个
+            
+            # 添加文件夹选择按钮
+            for i, result in enumerate(results[:max_buttons]):
+                filename = result["filename"]
+                # 截断过长的文件名
+                display_name = filename if len(filename) <= 50 else f"{filename[:47]}..."
+                keyboard.append([
+                    InlineKeyboardButton(
+                        f"{i+1}. {display_name}", 
+                        callback_data=f"export_toggle_{i}"
+                    )
+                ])
+            
+            # 添加操作按钮
+            action_buttons = [
+                InlineKeyboardButton("✅ 全选", callback_data="export_select_all"),
+                InlineKeyboardButton("❌ 取消全选", callback_data="export_deselect_all"),
+                InlineKeyboardButton("🚀 开始导出", callback_data="export_confirm"),
+                InlineKeyboardButton("❌ 取消操作", callback_data="export_cancel")
+            ]
+            
+            # 分两行排列操作按钮
+            keyboard.append(action_buttons[:2])
+            keyboard.append(action_buttons[2:])
+            
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            # 发送选择消息
+            message = update.message.reply_text(
+                f"✅ 找到 {len(results)} 个匹配项\n请选择要导出的文件夹:",
+                reply_markup=reply_markup
             )
             
-            for i, idx in enumerate(selected_indices):
-                # 获取选中的文件夹
-                selected_folder = results[idx]
-                folder_id = selected_folder["file_id"]
-                folder_name = selected_folder["filename"]
-                folder_path = selected_folder["full_path"]
-                
-                # 开始导出
-                self.send_auto_delete_message(
-                    update, context,
-                    f"处理文件夹 [{i+1}/{total}]:\n"
-                    f"├ 名称: {folder_name}\n"
-                    f"├ ID: {folder_id}\n"
-                    f"└ 路径: {folder_path}"
-                )
-                
-                # 获取文件夹内容
-                files = self.pan_client.get_directory_files(folder_id, folder_name)
-                
-                if not files:
-                    self.send_auto_delete_message(update, context, f"⚠️ 文件夹为空: {folder_name}")
-                    continue
-                
-                # 创建JSON结构
-                json_data = {
-                    "commonPath": folder_name,
-                    "usesBase62EtagsInExport": False,
-                    "files": [
-                        {
-                            "path": file_info["path"],
-                            "etag": file_info["etag"],
-                            "size": file_info["size"]
-                        }
-                        for file_info in files
-                    ]
-                }
-                
-                # 清理文件夹名称
-                clean_folder_name = re.sub(r'[\\/*?:"<>|]', "", folder_name)
-                
-                # 生成文件名
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                file_name = f"{clean_folder_name}_{timestamp}.json"
-                
-                # 保存为临时文件
-                with open(file_name, "w", encoding="utf-8") as f:
-                    json.dump(json_data, f, ensure_ascii=False, indent=2)
-                
-                # 获取用户信息
-                user_info = self.pan_client.get_user_info()
-                nickname = user_info.get("nickname", "未知用户") if user_info else "未知用户"
-                is_vip = user_info.get("vip", False) if user_info else False
-                vip_status = "👑 尊享会员" if is_vip else "🔒 普通用户"
-                
-                # 创建分享信息
-                caption = (
-                    f"✨来自：{nickname}的分享\n\n"
-                    f"📁 文件名: {clean_folder_name}\n"
-                    f"📝 文件数: {len(files)}\n\n"
-                    f"❤️ 123因您分享更完美！"
-                )
-                
-                # 发送文件
-                with open(file_name, "rb") as f:
-                    context.bot.send_document(
-                        chat_id=update.message.chat_id,
-                        document=f,
-                        filename=file_name,
-                        caption=caption
-                    )
-                
-                # 删除临时文件
-                os.remove(file_name)
-                logger.info(f"已发送导出文件: {file_name}")
+            # 保存消息ID用于后续更新
+            context.user_data['export_message_id'] = message.message_id
             
-            self.send_auto_delete_message(
-                update, context,
-                f"✅ 导出完成！共处理 {total} 个文件夹"
+            # 设置60秒超时定时器
+            context.job_queue.run_once(
+                self.export_timeout, 
+                60, 
+                context=update.message.chat_id,
+                name=f"export_timeout_{message.message_id}"
             )
             
         except Exception as e:
-            logger.error(f"导出文件夹失败: {str(e)}")
-            self.send_auto_delete_message(update, context, f"❌ 导出失败: {str(e)}")
+            logger.error(f"搜索文件夹失败: {str(e)}")
+            self.send_auto_delete_message(update, context, f"❌ 搜索失败: {str(e)}")
     
-    @admin_required
+    def export_choice_callback(self, update: Update, context: CallbackContext):
+        """处理导出选择的回调"""
+        query = update.callback_query
+        query.answer()
+        
+        data = query.data
+        chat_id = query.message.chat_id
+        message_id = query.message.message_id
+        
+        # 获取上下文数据
+        results = context.user_data.get('export_search_results', [])
+        selected_indices = context.user_data.get('export_selected_indices', set())
+        
+        if not results:
+            query.edit_message_text("❌ 选择超时或结果已过期，请重新搜索")
+            return
+        
+        # 处理不同类型的回调
+        if data.startswith("export_toggle_"):
+            # 切换选择状态
+            try:
+                index = int(data.split("_")[2])
+                if index < len(results):
+                    if index in selected_indices:
+                        selected_indices.remove(index)
+                    else:
+                        selected_indices.add(index)
+            except (ValueError, IndexError):
+                pass
+        
+        elif data == "export_select_all":
+            # 全选
+            selected_indices = set(range(len(results)))
+        
+        elif data == "export_deselect_all":
+            # 取消全选
+            selected_indices = set()
+        
+        elif data == "export_confirm":
+            # 确认导出
+            self.process_export_selection(update, context, selected_indices)
+            return
+        
+        elif data == "export_cancel":
+            # 取消操作
+            query.edit_message_text("❌ 导出操作已取消")
+            self.cleanup_export_context(context)
+            return
+        
+        # 更新上下文
+        context.user_data['export_selected_indices'] = selected_indices
+        
+        # 更新消息
+        self.update_export_message(update, context, results, selected_indices)
+    
+    def update_export_message(self, update: Update, context: CallbackContext, results, selected_indices):
+        """更新导出选择消息"""
+        query = update.callback_query
+        selected_count = len(selected_indices)
+        
+        # 创建新键盘（保留原有结构）
+        keyboard = []
+        max_buttons = 40
+        
+        # 添加文件夹选择按钮（更新选中状态）
+        for i, result in enumerate(results[:max_buttons]):
+            filename = result["filename"]
+            display_name = filename if len(filename) <= 15 else f"{filename[:12]}..."
+            
+            # 添加选中标记
+            prefix = "✅ " if i in selected_indices else "⬜ "
+            keyboard.append([
+                InlineKeyboardButton(
+                    f"{prefix}{i+1}. {display_name}", 
+                    callback_data=f"export_toggle_{i}"
+                )
+            ])
+        
+        # 添加操作按钮
+        action_buttons = [
+            InlineKeyboardButton("✅ 全选", callback_data="export_select_all"),
+            InlineKeyboardButton("❌ 取消全选", callback_data="export_deselect_all"),
+            InlineKeyboardButton(f"🚀 导出({selected_count})", callback_data="export_confirm"),
+            InlineKeyboardButton("❌ 取消", callback_data="export_cancel")
+        ]
+        
+        # 分两行排列操作按钮
+        keyboard.append(action_buttons[:2])
+        keyboard.append(action_buttons[2:])
+        
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        # 更新消息
+        query.edit_message_text(
+            text=f"✅ 找到 {len(results)} 个匹配项\n已选择 {selected_count} 个文件夹:",
+            reply_markup=reply_markup
+        )
+    
+    def export_timeout(self, context: CallbackContext):
+        """导出选择超时处理"""
+        job = context.job
+        chat_id = job.context
+        
+        # 获取上下文数据
+        if 'export_message_id' in context.user_data:
+            message_id = context.user_data['export_message_id']
+            
+            try:
+                # 编辑消息为超时提示
+                context.bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    text="⏱️ 操作超时，导出已自动取消"
+                )
+            except Exception as e:
+                logger.warning(f"编辑超时消息失败: {str(e)}")
+        
+        # 清理上下文
+        self.cleanup_export_context(context)
+    
+    def cleanup_export_context(self, context: CallbackContext):
+        """清理导出相关的上下文数据"""
+        keys_to_remove = [
+            'export_search_results', 
+            'export_selected_indices', 
+            'export_message_id'
+        ]
+        
+        for key in keys_to_remove:
+            if key in context.user_data:
+                del context.user_data[key]
+    
+    def process_export_selection(self, update: Update, context: CallbackContext, selected_indices):
+        """处理选择的导出任务"""
+        query = update.callback_query
+        
+        # 获取保存的搜索结果
+        results = context.user_data.get('export_search_results', [])
+        if not results:
+            query.edit_message_text("❌ 选择超时或结果已过期，请重新搜索")
+            return
+            
+        # 检查是否选择了文件夹
+        if not selected_indices:
+            query.edit_message_text("❌ 请至少选择一个文件夹")
+            return
+            
+        # 编辑消息显示处理中
+        query.edit_message_text(f"⏳ 开始导出 {len(selected_indices)} 个文件夹...")
+        
+        # 取消超时任务
+        if 'export_message_id' in context.user_data:
+            message_id = context.user_data['export_message_id']
+            job_name = f"export_timeout_{message_id}"
+            
+            # 查找并取消任务
+            current_jobs = context.job_queue.get_jobs_by_name(job_name)
+            for job in current_jobs:
+                job.schedule_removal()
+        
+        # 处理选中的文件夹
+        total = len(selected_indices)
+        
+        for i, idx in enumerate(selected_indices):
+            # 获取选中的文件夹
+            selected_folder = results[idx]
+            folder_id = selected_folder["file_id"]
+            folder_name = selected_folder["filename"]
+            folder_path = selected_folder["full_path"]
+            
+            # 更新处理进度
+            if i % 3 == 0:  # 每处理3个文件夹更新一次进度
+                try:
+                    query.edit_message_text(
+                        f"⏳ 正在处理文件夹 [{i+1}/{total}]:\n"
+                        f"├ 名称: {folder_name}\n"
+                        f"└ 路径: {folder_path}"
+                    )
+                except:
+                    pass
+            
+            # 获取文件夹内容
+            files = self.pan_client.get_directory_files(folder_id, folder_name)
+            
+            if not files:
+                logger.warning(f"文件夹为空: {folder_name}")
+                continue
+            
+            # 创建JSON结构
+            json_data = {
+                "commonPath": folder_name,
+                "usesBase62EtagsInExport": False,
+                "files": [
+                    {
+                        "path": file_info["path"],
+                        "etag": file_info["etag"],
+                        "size": file_info["size"]
+                    }
+                    for file_info in files
+                ]
+            }
+            
+            # 清理文件夹名称
+            clean_folder_name = re.sub(r'[\\/*?:"<>|]', "", folder_name)
+            
+            # 生成文件名
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            file_name = f"{clean_folder_name}_{timestamp}.json"
+            
+            # 保存为临时文件
+            with open(file_name, "w", encoding="utf-8") as f:
+                json.dump(json_data, f, ensure_ascii=False, indent=2)
+            
+            # 获取用户信息
+            user_info = self.pan_client.get_user_info()
+            nickname = user_info.get("nickname", "未知用户") if user_info else "未知用户"
+            is_vip = user_info.get("vip", False) if user_info else False
+            vip_status = "👑 尊享会员" if is_vip else "🔒 普通用户"
+            
+            # 创建分享信息
+            caption = (
+                f"✨来自：{nickname}的分享\n\n"
+                f"📁 文件名: {clean_folder_name}\n"
+                f"📝 文件数: {len(files)}\n\n"
+                f"❤️ 123因您分享更完美！"
+            )
+            
+            # 发送文件
+            with open(file_name, "rb") as f:
+                context.bot.send_document(
+                    chat_id=query.message.chat_id,
+                    document=f,
+                    filename=file_name,
+                    caption=caption
+                )
+            
+            # 删除临时文件
+            os.remove(file_name)
+            logger.info(f"已发送导出文件: {file_name}")
+        
+        # 发送完成消息
+        context.bot.send_message(
+            chat_id=query.message.chat_id,
+            text=f"✅ 导出完成！共处理 {total} 个文件夹"
+        )
+        
+        # 清理上下文
+        self.cleanup_export_context(context)
+ 
+    
     def handle_document(self, update: Update, context: CallbackContext):
         """处理文档消息（JSON文件）"""
         document = update.message.document
@@ -1825,180 +1844,65 @@ class TelegramBotHandler:
 
     @admin_required
     def sync_full_command(self, update: Update, context: CallbackContext):
-        """处理/sync_full命令，全量同步目录缓存（带文字确认）"""
+        """处理/sync_full命令，全量同步目录缓存（带按钮确认）"""
         logger.info("收到/sync_full命令")
         
-        # 发送确认消息
+        # 创建按钮
+        keyboard = [
+            [
+                InlineKeyboardButton("✅ 确认", callback_data='sync_full_confirm'),
+                InlineKeyboardButton("❌ 取消", callback_data='sync_full_cancel')
+            ]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        # 发送消息
         message = update.message.reply_text(
             "⚠️ 确认要执行全量同步吗？\n"
-            "这将更新整个媒体库的目录缓存，可能需要较长时间。\n\n"
-            "请回复 '确认' 开始同步，或 '取消' 中止操作。\n"
-            "⏱️ 60秒内未回复将自动取消。"
+            "这将更新整个媒体库的目录缓存，可能需要较长时间。",
+            reply_markup=reply_markup
         )
         
-        # 设置上下文状态
-        context.user_data['waiting_sync_confirmation'] = True
-        context.user_data['sync_type'] = 'full'
+        # 保存消息ID，用于后续删除
         context.user_data['confirmation_message_id'] = message.message_id
+
+    def button_callback(self, update: Update, context: CallbackContext):
+        """处理按钮回调"""
+        query = update.callback_query
+        query.answer()
         
-        # 设置60秒后自动取消
-        context.job_queue.run_once(
-            self.cancel_sync_confirmation, 
-            60, 
-            context={
-                'chat_id': update.message.chat_id,
-                'message_id': message.message_id
-            }
-        )
-    
-    @admin_required
-    def sync_command(self, update: Update, context: CallbackContext):
-        """处理/sync命令，同步指定目录（带文字确认）"""
-        logger.info("收到/sync命令")
+        data = query.data
         
-        # 获取命令参数
-        path = " ".join(context.args) if context.args else ""
-        
-        if not path:
-            self.send_auto_delete_message(update, context, "❌ 请指定要同步的目录路径！格式: /sync <目录路径>")
-            return
-        
-        # 发送确认消息
-        message = update.message.reply_text(
-            f"⚠️ 确认要同步目录吗？\n"
-            f"路径: '{path}'\n\n"
-            f"请回复 '确认' 开始同步，或 '取消' 中止操作。\n"
-            f"⏱️ 60秒内未回复将自动取消。"
-        )
-        
-        # 设置上下文状态
-        context.user_data['waiting_sync_confirmation'] = True
-        context.user_data['sync_type'] = 'partial'
-        context.user_data['sync_path'] = path
-        context.user_data['confirmation_message_id'] = message.message_id
-        
-        # 设置60秒后自动取消
-        context.job_queue.run_once(
-            self.cancel_sync_confirmation, 
-            60, 
-            context={
-                'chat_id': update.message.chat_id,
-                'message_id': message.message_id
-            }
-        )
-    
-    def cancel_sync_confirmation(self, context: CallbackContext):
-        """60秒后自动取消同步确认"""
-        job = context.job
-        context_data = job.context
-        
-        chat_id = context_data['chat_id']
-        message_id = context_data['message_id']
-        
-        try:
-            # 删除确认消息
-            context.bot.delete_message(chat_id=chat_id, message_id=message_id)
+        # 根据回调类型分发处理
+        if data.startswith("export_"):
+            self.export_choice_callback(update, context)
+        elif data.startswith("sync_full_"):
+            # 原有的全量同步处理
+            chat_id = query.message.chat_id
+            message_id = query.message.message_id
             
-            # 发送取消通知
-            context.bot.send_message(
-                chat_id=chat_id,
-                text="⏱️ 同步操作已自动取消（60秒未确认）"
-            )
-        except Exception as e:
-            if "message to delete not found" not in str(e).lower():
-                logger.error(f"取消确认时出错: {str(e)}")
-    @admin_required
-    def handle_text(self, update: Update, context: CallbackContext):
-        """处理文本消息（秒传链接或导出选择或同步确认）"""
-        text = update.message.text.strip()
-        
-        # 检查是否是导出选择
-        if context.user_data.get('waiting_for_export_choice', False):
-            logger.info(f"收到导出选择: {text}")
-            self.handle_export_choice(update, context, text)
-            return
-        
-        # 检查是否是同步确认
-        if context.user_data.get('waiting_sync_confirmation', False):
-            text_lower = text.lower()
-            if text_lower == '确认':
-                self.process_sync_confirmation(update, context)
-            elif text_lower == '取消':
-                self.cancel_sync_operation(update, context)
-            else:
-                self.send_auto_delete_message(
-                    update, context,
-                    "❌ 无效回复，请回复 '确认' 或 '取消'",
-                    delay=60
-                )
-            return
-        
-        # 检查是否是秒传链接
-        if (text.startswith(LEGACY_FOLDER_LINK_PREFIX_V1) or 
-            text.startswith(LEGACY_FOLDER_LINK_PREFIX_V2) or 
-            text.startswith(COMMON_PATH_LINK_PREFIX_V1) or 
-            text.startswith(COMMON_PATH_LINK_PREFIX_V2) or
-            ('#' in text and '$' in text)):  # 更宽松的匹配
-            logger.info(f"收到秒传链接: {text[:50]}...")
-            self.send_auto_delete_message(update, context, "🔍 检测到秒传链接，开始解析...")
-            self.process_fast_link(update, context, text)
-    
-    def process_sync_confirmation(self, update: Update, context: CallbackContext):
-        """处理同步确认"""
-        # 清除状态
-        context.user_data.pop('waiting_sync_confirmation', None)
-        message_id = context.user_data.pop('confirmation_message_id', None)
-        
-        # 删除确认消息
-        if message_id:
-            try:
-                context.bot.delete_message(
-                    chat_id=update.message.chat_id,
-                    message_id=message_id
-                )
-            except Exception as e:
-                if "message to delete not found" not in str(e).lower():
-                    logger.error(f"删除确认消息失败: {str(e)}")
-        
-        # 获取同步类型
-        sync_type = context.user_data.get('sync_type')
-        path = context.user_data.get('sync_path', '')
-        
-        # 执行同步操作
-        if sync_type == 'full':
-            self.execute_full_sync(update, context)
-        elif sync_type == 'partial':
-            self.execute_partial_sync(update, context, path)
-    
-    def cancel_sync_operation(self, update: Update, context: CallbackContext):
-        """取消同步操作"""
-        # 清除状态
-        context.user_data.pop('waiting_sync_confirmation', None)
-        message_id = context.user_data.pop('confirmation_message_id', None)
-        
-        # 删除确认消息
-        if message_id:
-            try:
-                context.bot.delete_message(
-                    chat_id=update.message.chat_id,
-                    message_id=message_id
-                )
-            except Exception as e:
-                if "message to delete not found" not in str(e).lower():
-                    logger.error(f"删除确认消息失败: {str(e)}")
-        
-        # 发送取消通知
-        self.send_auto_delete_message(
-            update, context,
-            "❌ 同步操作已取消",
-            delay=60
-        )
-    
+            if data == 'sync_full_confirm':
+                try:
+                    context.bot.delete_message(chat_id=chat_id, message_id=message_id)
+                except Exception as e:
+                    logger.error(f"删除消息失败: {str(e)}")
+                self.execute_full_sync(update, context)
+            elif data == 'sync_full_cancel':
+                try:
+                    context.bot.delete_message(chat_id=chat_id, message_id=message_id)
+                except Exception as e:
+                    logger.error(f"删除消息失败: {str(e)}")
+                context.bot.send_message(chat_id=chat_id, text="❌ 全量同步已取消")
+
     def execute_full_sync(self, update: Update, context: CallbackContext):
         """执行全量同步"""
+        # 尝试从上下文获取 chat_id
+        chat_id = getattr(context, '_chat_id', None)
+        
         self.send_auto_delete_message(
             update, context, 
-            "🔄 正在执行全量同步，这可能需要一些时间..."
+            "🔄 正在执行全量同步，这可能需要一些时间...",
+            chat_id=chat_id
         )
         
         try:
@@ -2011,48 +1915,34 @@ class TelegramBotHandler:
                 f"✅ 全量同步完成！\n"
                 f"├ 更新目录: {update_count} 个\n"
                 f"├ 总缓存数: {len(self.pan_client.directory_cache)}\n"
-                f"└ 耗时: {elapsed:.2f}秒"
+                f"└ 耗时: {elapsed:.2f}秒",
+                chat_id=chat_id
             )
         except Exception as e:
             logger.error(f"全量同步失败: {str(e)}")
             self.send_auto_delete_message(
                 update, context, 
-                f"❌ 全量同步失败: {str(e)}"
+                f"❌ 全量同步失败: {str(e)}",
+                chat_id=chat_id
             )
-    
-    def execute_partial_sync(self, update: Update, context: CallbackContext, path: str):
-        """执行目录同步"""
-        self.send_auto_delete_message(
-            update, context, 
-            f"🔄 正在同步目录: '{path}'..."
-        )
-        
-        try:
-            start_time = time.time()
-            update_count = self.pan_client.sync_directory_by_path(path)
-            elapsed = time.time() - start_time
             
-            if update_count == 0:
-                self.send_auto_delete_message(
-                    update, context, 
-                    f"⚠️ 目录同步完成，但未更新任何目录\n"
-                    f"└ 耗时: {elapsed:.2f}秒\n"
-                    f"可能原因: 目录已是最新状态或路径不存在"
-                )
-            else:
-                self.send_auto_delete_message(
-                    update, context, 
-                    f"✅ 目录同步完成！\n"
-                    f"├ 更新目录: {update_count} 个\n"
-                    f"├ 总缓存数: {len(self.pan_client.directory_cache)}\n"
-                    f"└ 耗时: {elapsed:.2f}秒"
-                )
-        except Exception as e:
-            logger.error(f"目录同步失败: {str(e)}")
-            self.send_auto_delete_message(
-                update, context, 
-                f"❌ 目录同步失败: {str(e)}"
-            )
+        # 清理上下文
+        if hasattr(context, '_chat_id'):
+            del context._chat_id
+
+    def handle_text(self, update: Update, context: CallbackContext):
+        """处理文本消息（秒传链接）"""
+        text = update.message.text.strip()
+        
+        # 检查是否是秒传链接
+        if (text.startswith(LEGACY_FOLDER_LINK_PREFIX_V1) or 
+            text.startswith(LEGACY_FOLDER_LINK_PREFIX_V2) or 
+            text.startswith(COMMON_PATH_LINK_PREFIX_V1) or 
+            text.startswith(COMMON_PATH_LINK_PREFIX_V2) or
+            ('#' in text and '$' in text)):  # 更宽松的匹配
+            logger.info(f"收到秒传链接: {text[:50]}...")
+            self.send_auto_delete_message(update, context, "🔍 检测到秒传链接，开始解析...")
+            self.process_fast_link(update, context, text)
 
 def main():
     # 从环境变量读取配置
