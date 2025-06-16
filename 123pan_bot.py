@@ -1829,10 +1829,11 @@ class TelegramBotHandler:
         return results
     
     def send_transfer_results(self, update: Update, context: CallbackContext, results):
-        """发送转存结果，包含失败文件详情"""
+        """发送转存结果，包含失败文件详情（此消息不自动删除）"""
         success_count = sum(1 for r in results if r["success"])
         failed_count = len(results) - success_count
         
+        # 构建基础结果文本
         result_text = (
             f"📊 转存完成！\n"
             f"✅ 成功: {success_count}\n"
@@ -1857,9 +1858,10 @@ class TelegramBotHandler:
             if failed_count > 10:
                 result_text += f"\n...及其他 {failed_count - 10} 个失败文件"
         
-        # 发送并自动删除
-        self.send_auto_delete_message(update, context, result_text)
-
+        # 使用普通消息发送（不自动删除）
+        chat_id = update.message.chat_id
+        context.bot.send_message(chat_id=chat_id, text=result_text)
+    
     @admin_required
     def sync_full_command(self, update: Update, context: CallbackContext):
         """处理/sync_full命令，全量同步目录缓存（带按钮确认）"""
