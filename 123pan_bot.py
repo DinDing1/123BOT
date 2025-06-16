@@ -1373,10 +1373,14 @@ class TelegramBotHandler:
             context.user_data['export_message_id'] = message.message_id
             
             # 设置60秒超时定时器
+            job_context = {
+                "chat_id": update.message.chat_id,
+                "user_data": context.user_data
+            }
             context.job_queue.run_once(
                 self.export_timeout, 
                 60, 
-                context=update.message.chat_id,
+                context=job_context,
                 name=f"export_timeout_{message.message_id}"
             )
             
@@ -1430,7 +1434,7 @@ class TelegramBotHandler:
         elif data == "export_cancel":
             # 取消操作
             query.edit_message_text("❌ 导出操作已取消")
-            self.cleanup_export_context(context)
+            self.cleanup_export_context(context.user_data)
             return
         
         # 更新上下文
@@ -1485,26 +1489,40 @@ class TelegramBotHandler:
     def export_timeout(self, context: CallbackContext):
         """导出选择超时处理"""
         job = context.job
-        chat_id = job.context
+        if not job or not job.context:
+            logger.warning("超时任务缺少上下文数据")
+            return
         
-        # 获取上下文数据
-        if 'export_message_id' in context.user_data:
-            message_id = context.user_data['export_message_id']
-            
+        job_context = job.context
+        chat_id = job_context.get("chat_id")
+        user_data = job_context.get("user_data", {})
+
+        if not chat_id:
+            logger.warning("超时任务缺少 chat_id")
+            return
+        
+        # 获取消息ID
+        if 'export_message_id' in user_data:
+            message_id = user_data['export_message_id']
+
             try:
                 # 编辑消息为超时提示
-                context.bot.edit_message_text(
+                self.updater.bot.edit_message_text(
                     chat_id=chat_id,
                     message_id=message_id,
                     text="⏱️ 操作超时，导出已自动取消"
                 )
             except Exception as e:
-                logger.warning(f"编辑超时消息失败: {str(e)}")
+                error_msg = str(e).lower()
+                if "message to edit not found" in error_msg:
+                    logger.debug("消息已被用户删除，无需处理")
+                else:
+                    logger.warning(f"编辑超时消息失败: {str(e)}")
         
         # 清理上下文
-        self.cleanup_export_context(context)
+        self.cleanup_export_context(user_data)
     
-    def cleanup_export_context(self, context: CallbackContext):
+    def cleanup_export_context(self, user_data: dict):
         """清理导出相关的上下文数据"""
         keys_to_remove = [
             'export_search_results', 
@@ -1513,8 +1531,8 @@ class TelegramBotHandler:
         ]
         
         for key in keys_to_remove:
-            if key in context.user_data:
-                del context.user_data[key]
+            if key in user_data:
+                del user_data[key]
     
     def process_export_selection(self, update: Update, context: CallbackContext, selected_indices):
         """处理选择的导出任务"""
@@ -1631,7 +1649,7 @@ class TelegramBotHandler:
         )
         
         # 清理上下文
-        self.cleanup_export_context(context)
+        self.cleanup_export_context(context.user_data)
  
     
     def handle_document(self, update: Update, context: CallbackContext):
