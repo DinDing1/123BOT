@@ -1451,7 +1451,7 @@ class TelegramBotHandler:
         # 添加文件夹选择按钮（更新选中状态）
         for i, result in enumerate(results[:max_buttons]):
             filename = result["filename"]
-            display_name = filename if len(filename) <= 15 else f"{filename[:12]}..."
+            display_name = filename if len(filename) <= 50 else f"{filename[:47]}..."
             
             # 添加选中标记
             prefix = "✅ " if i in selected_indices else "⬜ "
