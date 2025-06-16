@@ -1907,7 +1907,7 @@ class TelegramBotHandler:
         except Exception as e:
             if "message to delete not found" not in str(e).lower():
                 logger.error(f"取消确认时出错: {str(e)}")
-    
+    @admin_required
     def handle_text(self, update: Update, context: CallbackContext):
         """处理文本消息（秒传链接或导出选择或同步确认）"""
         text = update.message.text.strip()
