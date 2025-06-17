@@ -722,9 +722,21 @@ class Pan123Client:
         logger.info("开始全量同步目录缓存...")
         
         try:
+            # 清空旧缓存数据
+            with closing(sqlite3.connect(DB_PATH)) as conn:
+                c = conn.cursor()
+                # 清空目录缓存表
+                c.execute("DELETE FROM directory_cache")
+                # 重置自增ID（可选，但有助于保持数据库整洁）
+                c.execute("DELETE FROM sqlite_sequence WHERE name='directory_cache'")
+                conn.commit()
+                logger.info("已清空旧缓存数据表")
+
+            # 清空内存缓存
+            self.directory_cache = {}
+            logger.info("已清空内存缓存")
+
             update_count = 0
-            # 同步根目录
-            update_count += self.sync_directory(0, "根目录", base_dir_id=0)
             
             # 同步所有导出基目录
             for base_dir_id in self.export_base_dir_ids:
