@@ -25,6 +25,7 @@ import urllib3
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 import binascii
+from urllib.parse import urlparse, parse_qs
 
 # 禁用SSL警告
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -1018,6 +1019,82 @@ class Pan123Client:
         
         logger.info(f"找到 {len(all_files)} 个文件 (ID: {directory_id})")
         return all_files
+    
+
+##########################123分享开始################################
+    
+    def get_share_files(self, share_key, password="", parent_id=0, page=1, next_page=0):
+        """获取单页分享项目（包含所有必需参数）"""
+        url = f"{PAN_HOST}/api/share/get"
+        params = {
+            "ShareKey": share_key,
+            "SharePwd": password,
+            "limit": 100,
+            "Page": page,
+            "Next": next_page,
+            "parentFileId": parent_id,
+            "orderBy": "file_id",
+            "orderDirection": "asc",
+            "event": "homeListFile",
+            "driveId": 0,
+            "trashed": "false",
+            "inDirectSpace": "false"
+        }
+        
+        try:
+            # 使用限流保护的API调用
+            response = self._call_api("GET", url, params=params, timeout=30)
+            if not response or response.status_code != 200:
+                logger.error(f"获取分享内容失败: HTTP {response.status_code if response else '无响应'}")
+                return None
+                
+            data = response.json()
+            if data.get("code") != 0:
+                logger.error(f"API错误: {data.get('code')} - {data.get('message')}")
+                return None
+                
+            return data.get("data", {})
+        except Exception as e:
+            logger.error(f"获取分享内容出错: {str(e)}")
+            return None
+    
+    def get_all_share_files(self, share_key, password=""):
+        """递归获取分享中的所有文件"""
+        all_files = []
+        
+        def process_folder(parent_id=0, base_path=""):
+            next_page = 0
+            while True:
+                # 获取当前页的内容
+                result = self.get_share_files(share_key, password, parent_id, 1, next_page)
+                if not result:
+                    break
+                    
+                # 处理文件列表
+                for item in result.get("InfoList", []):
+                    item_path = f"{base_path}/{item['FileName']}" if base_path else item['FileName']
+                    
+                    if item["Type"] == 0:  # 文件
+                        all_files.append({
+                            "file_name": item_path,
+                            "etag": item["Etag"],
+                            "size": item["Size"],
+                            "is_v2_etag": False  # 分享API返回的是标准MD5
+                        })
+                    elif item["Type"] == 1:  # 文件夹
+                        # 递归处理子文件夹
+                        process_folder(item["FileId"], item_path)
+                
+                # 检查是否有更多页面
+                next_page = result.get("Next", -1)
+                if next_page == -1:
+                    break
+        
+        # 从根目录开始处理
+        process_folder()
+        return all_files
+
+##########################123分享截至################################
 
 class FastLinkProcessor:
     @staticmethod
@@ -1651,7 +1728,7 @@ class TelegramBotHandler:
         # 清理上下文
         self.cleanup_export_context(context.user_data)
  
-    
+    @admin_required
     def handle_document(self, update: Update, context: CallbackContext):
         """处理文档消息（JSON文件）"""
         document = update.message.document
@@ -1950,6 +2027,92 @@ class TelegramBotHandler:
         if hasattr(context, '_chat_id'):
             del context._chat_id
 
+#########################123分享开始################################
+
+    def parse_share_url(self, share_url):
+        """解析分享链接，提取ShareKey和提取码（提取码可选）"""
+        try:
+            # 使用更健壮的正则表达式匹配分享链接
+            pattern = r'(https?://(?:[a-zA-Z0-9-]+\.)*123[a-zA-Z0-9-]*\.[a-z]{2,6}/s/([a-zA-Z0-9\-_]+))(?:[\s\S]*?(?:提取码|密码|code)[\s:：=]*(\w{4}))?'
+            match = re.search(pattern, share_url, re.IGNORECASE)
+
+            if match:
+                # 完整URL
+                full_url = match.group(1)
+                # ShareKey
+                share_key = match.group(2)
+                # 提取码（可选）
+                password = match.group(3) if match.group(3) else ""
+                # 尝试从URL查询参数中获取提取码（优先级更高）
+                parsed = urlparse(full_url)
+                query_params = parse_qs(parsed.query)
+                if 'pwd' in query_params:
+                    password = query_params['pwd'][0]
+                logger.debug(f"解析分享链接: URL={full_url}, ShareKey={share_key}, Password={password}")
+                return share_key, password
+            
+            logger.warning(f"无法解析分享链接: {share_url}")
+            return None, None
+        except Exception as e:
+            logger.error(f"解析分享链接失败: {str(e)}")
+            return None, None
+        
+    def process_share_link(self, update: Update, context: CallbackContext, share_url):
+        """处理123云盘分享链接转存"""
+        # 首先解析分享链接
+        parsed = self.parse_share_url(share_url)
+        if not parsed:
+            self.send_auto_delete_message(update, context, "❌ 无法解析分享链接")
+            return
+        
+        # 解包解析结果
+        share_key, password = parsed
+        
+        logger.info(f"解析分享链接: ShareKey={share_key}, Password={password}")
+        self.send_auto_delete_message(update, context, f"🔍 解析成功! ShareKey: {share_key}...")
+        
+        # 发送初始进度消息
+        chat_id = update.message.chat_id
+        progress_msg = context.bot.send_message(
+            chat_id=chat_id,
+            text=f"⏳ 正在获取分享内容，请稍候...\nShareKey: {share_key}"
+        )
+        
+        try:
+            # 获取分享中的所有文件
+            files = self.pan_client.get_all_share_files(share_key, password)
+            
+            if not files:
+                context.bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=progress_msg.message_id,
+                    text="❌ 分享中没有文件或获取失败"
+                )
+                return
+            
+            # 更新进度消息
+            context.bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=progress_msg.message_id,
+                text=f"✅ 成功获取 {len(files)} 个文件，开始转存..."
+            )
+            
+            # 转存文件
+            results = self.transfer_files(update, context, files)
+            
+            # 发送结果
+            self.send_transfer_results(update, context, results)
+            
+        except Exception as e:
+            logger.error(f"处理分享链接出错: {str(e)}")
+            context.bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=progress_msg.message_id,
+                text=f"❌ 处理分享链接时出错: {str(e)}"
+            )
+
+#########################123分享截至################################
+    @admin_required
     def handle_text(self, update: Update, context: CallbackContext):
         """处理文本消息（秒传链接）"""
         text = update.message.text.strip()
@@ -1963,6 +2126,12 @@ class TelegramBotHandler:
             logger.info(f"收到秒传链接: {text[:50]}...")
             self.send_auto_delete_message(update, context, "🔍 检测到秒传链接，开始解析...")
             self.process_fast_link(update, context, text)
+
+        # 检查是否是123云盘分享链接
+        elif re.search(r'123[a-zA-Z0-9-]*\.[a-z]{2,6}/(s|b)/[a-zA-Z0-9\-_]+', text, re.IGNORECASE):
+            logger.info(f"收到123云盘分享链接: {text}")
+            self.send_auto_delete_message(update, context, "🔍 检测到123云盘分享链接，开始解析...")
+            self.process_share_link(update, context, text)
 
 def main():
     # 从环境变量读取配置
