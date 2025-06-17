@@ -1256,7 +1256,7 @@ class TelegramBotHandler:
             return func(self, update, context, *args, **kwargs)
         return wrapper
     
-    def auto_delete_message(self, context, chat_id, message_id, delay=5):
+    def auto_delete_message(self, context, chat_id, message_id, delay=3):
         """自动删除消息"""
         def delete():
             try:
@@ -1269,7 +1269,7 @@ class TelegramBotHandler:
         # 使用线程延迟执行
         threading.Timer(delay, delete).start()
     
-    def send_auto_delete_message(self, update, context, text, delay=5, chat_id=None):
+    def send_auto_delete_message(self, update, context, text, delay=3, chat_id=None):
         """发送自动删除的消息"""
         # 优先使用传入的 chat_id
         if chat_id is None:
