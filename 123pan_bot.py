@@ -1062,6 +1062,7 @@ class Pan123Client:
     def get_all_share_files(self, share_key, password=""):
         """递归获取分享中的所有文件"""
         all_files = []
+        added_paths = set()  # 新增：用于记录已添加的文件路径
         
         def process_folder(parent_id=0, base_path=""):
             next_page = 0
@@ -1076,12 +1077,14 @@ class Pan123Client:
                     item_path = f"{base_path}/{item['FileName']}" if base_path else item['FileName']
                     
                     if item["Type"] == 0:  # 文件
-                        all_files.append({
-                            "file_name": item_path,
-                            "etag": item["Etag"],
-                            "size": item["Size"],
-                            "is_v2_etag": False  # 分享API返回的是标准MD5
-                        })
+                        if item_path not in added_paths:
+                            all_files.append({
+                                "file_name": item_path,
+                                "etag": item["Etag"],
+                                "size": item["Size"],
+                                "is_v2_etag": False  # 分享API返回的是标准MD5
+                            })
+                            added_paths.add(item_path)  # 记录已添加路径
                     elif item["Type"] == 1:  # 文件夹
                         # 递归处理子文件夹
                         process_folder(item["FileId"], item_path)
@@ -1093,6 +1096,7 @@ class Pan123Client:
         
         # 从根目录开始处理
         process_folder()
+        logger.info(f"获取到 {len(all_files)} 个唯一文件 (去重后)")
         return all_files
 
 ##########################123分享截至################################
