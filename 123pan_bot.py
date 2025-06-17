@@ -75,6 +75,11 @@ BASE62_CHARS = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 DEFAULT_SAVE_DIR = os.getenv("DEFAULT_SAVE_DIR", "").strip()  # 默认保存目录
 EXPORT_BASE_DIRS = [d.strip() for d in os.getenv("EXPORT_BASE_DIR", "").split(';') if d.strip()]  # 多个导出基目录
 SEARCH_MAX_DEPTH = int(os.getenv("SEARCH_MAX_DEPTH", ""))         # 搜索文件夹的最大深度
+
+# API速率控制配置
+API_RATE_LIMIT = float(os.getenv("API_RATE_LIMIT", "2.0"))      # 全局API请求速率（请求/秒）
+TRANSFER_RATE_LIMIT = float(os.getenv("TRANSFER_RATE_LIMIT", "3"))  # 转存操作速率（请求/秒）
+
 # =====================================================
 
 def init_db():
@@ -288,19 +293,21 @@ class TokenManager:
             "Platform": "open_platform",
             "Content-Type": "application/json"
         }
-
 class Pan123Client:
     def __init__(self, client_id, client_secret):
         self.token_manager = TokenManager(client_id, client_secret)
         self.session = self._create_session()
         self.last_api_call = 0  # 记录最后一次API调用时间
-        self.api_rate_limit = 2  # 降低API调用频率
+        self.api_rate_limit = API_RATE_LIMIT  # 使用环境变量配置的API速率
         self.retry_delay = 2.0  # 增加限流时重试延迟（秒）
         
         # 初始化默认目录ID
         self.default_save_dir_id = 0  # 根目录
         self.export_base_dir_ids = []   # 存储多个基目录ID
         self.export_base_dir_map = {0: "根目录"}  # 基目录ID到路径的映射
+        
+        # API速率控制
+        self.rate_limit_lock = threading.Lock()
         
         # 设置默认保存目录
         if DEFAULT_SAVE_DIR:
@@ -406,40 +413,61 @@ class Pan123Client:
             
         return None
 
-    # 添加API调用控制方法
     def _call_api(self, method, url, **kwargs):
-        """控制API调用频率，避免限流"""
+        """控制API调用频率，避免限流（增强版）"""
         retry_count = 0
-        max_retries = 3
+        max_retries = 5
         
         while retry_count < max_retries:
             try:
-                # 计算距离上次调用的时间
-                elapsed = time.time() - self.last_api_call
-                required_delay = 1.0 / self.api_rate_limit
-                
-                # 如果调用过快，等待足够的时间
-                if elapsed < required_delay:
-                    wait_time = required_delay - elapsed
-                    logger.debug(f"API调用过快，等待 {wait_time:.2f} 秒")
-                    time.sleep(wait_time)
-                
-                # 发送API请求
-                response = self.session.request(method, url, **kwargs)
-                self.last_api_call = time.time()
+                # 速率控制
+                with self.rate_limit_lock:
+                    elapsed = time.time() - self.last_api_call
+                    required_delay = 1.0 / self.api_rate_limit
+                    
+                    if elapsed < required_delay:
+                        wait_time = required_delay - elapsed
+                        logger.debug(f"API调用过快，等待 {wait_time:.2f} 秒")
+                        time.sleep(wait_time)
+                    
+                    # 发送API请求
+                    response = self.session.request(method, url, **kwargs)
+                    self.last_api_call = time.time()
                 
                 # 检查是否被限流
                 if response.status_code == 429:
-                    logger.warning(f"API限流，等待 {self.retry_delay} 秒后重试...")
-                    time.sleep(self.retry_delay)
+                    # 从响应头获取重试时间
+                    retry_after = response.headers.get('Retry-After')
+                    wait_time = float(retry_after) if retry_after else 10.0
+                    
+                    logger.warning(f"API限流，等待 {wait_time} 秒后重试...")
+                    time.sleep(wait_time)
                     continue
+                
+                # 检查响应内容中的限流错误
+                try:
+                    data = response.json()
+                    if data.get("code") == 429 or "操作频繁" in data.get("message", ""):
+                        wait_time = 10.0  # 默认等待10秒
+                        logger.warning(f"API限流（内容检测），等待 {wait_time} 秒后重试...")
+                        time.sleep(wait_time)
+                        continue
+                except:
+                    pass
                 
                 return response
                 
-            except (requests.exceptions.SSLError, requests.exceptions.ConnectionError) as e:
+            except (requests.exceptions.SSLError, 
+                    requests.exceptions.ConnectionError,
+                    requests.exceptions.ChunkedEncodingError,
+                    requests.exceptions.HTTPError) as e:
                 retry_count += 1
-                logger.error(f"❌ SSL/连接错误: {str(e)}，重试 {retry_count}/{max_retries}")
+                logger.error(f"❌ 网络连接错误: {str(e)}，重试 {retry_count}/{max_retries}")
                 time.sleep(2 ** retry_count)  # 指数退避
+            except ConnectionResetError as e:
+                retry_count += 1
+                logger.error(f"❌ 连接被重置: {str(e)}，重试 {retry_count}/{max_retries}")
+                time.sleep(5)  # 固定5秒等待
             except Exception as e:
                 logger.error(f"API调用出错: {str(e)}")
                 return None
@@ -545,8 +573,8 @@ class Pan123Client:
                 return None
         return None
     
-    def rapid_upload(self, etag, size, file_name, parent_id, retry_count=3):
-        """秒传文件（带重试机制）"""
+    def rapid_upload(self, etag, size, file_name, parent_id, max_retries=8):
+        """秒传文件（带指数退避重试机制）"""
         logger.info(f"尝试秒传文件: '{file_name}' (大小: {size} bytes, 父ID: {parent_id})")
         
         # 保存原始Etag
@@ -560,8 +588,18 @@ class Pan123Client:
             etag = FastLinkProcessor.optimized_etag_to_hex(etag, True)
             logger.info(f"转换后Etag: {etag}")
         
-        for attempt in range(retry_count):
+        # 指数退避参数
+        base_delay = 2.0  # 初始延迟2秒
+        max_delay = 180.0  # 最大延迟3分钟
+        
+        for attempt in range(max_retries):
             try:
+                # 计算当前延迟（指数退避）
+                delay = min(max_delay, base_delay * (2 ** attempt))
+                if attempt > 0:
+                    logger.warning(f"⚠️ 秒传失败，等待 {delay:.1f} 秒后重试 (尝试 {attempt+1}/{max_retries})...")
+                    time.sleep(delay)
+                
                 url = f"{PAN_HOST}{API_PATHS['UPLOAD_REQUEST']}"
                 payload = {
                     "driveId": 0,
@@ -578,16 +616,18 @@ class Pan123Client:
                 }
                 headers = self._get_auth_headers()
                 
-                # 使用更健壮的请求方式
-                response = self.session.post(
-                    url, 
-                    json=payload, 
-                    headers=headers, 
-                    timeout=20,
-                    verify=False  # 明确禁用SSL验证
-                )
+                # 使用API调用方法（带速率控制）
+                response = self._call_api("POST", url, json=payload, headers=headers, timeout=30)
                 
-                data = response.json()
+                if not response:
+                    logger.error("❌ API调用失败")
+                    continue
+                
+                try:
+                    data = response.json()
+                except json.JSONDecodeError:
+                    logger.error(f"❌ 响应JSON解析失败: {response.text[:200]}")
+                    continue
                 
                 if data.get("code") == 0 and data["data"].get("Info", {}).get("FileId"):
                     file_id = data["data"]["Info"]["FileId"]
@@ -603,23 +643,28 @@ class Pan123Client:
                         etag = original_etag  # 下次重试使用原始Etag
                         continue
                     
-                    if attempt < retry_count - 1:
-                        time.sleep(1)
+                    # 如果是限流错误，增加延迟并调整全局速率
+                    if "操作频繁" in error_msg or "限流" in error_msg or "频繁" in error_msg:
+                        # 动态降低全局速率
+                        with self.rate_limit_lock:
+                            self.api_rate_limit = max(0.8, self.api_rate_limit * 0.9)  # 更宽松的调整
+                        logger.warning(f"⚠️ 触发限流，降低全局速率至 {self.api_rate_limit:.2f} 请求/秒")
                         continue
+                    
+                    # 其他错误直接返回
                     return None
-            except (requests.exceptions.SSLError, requests.exceptions.ConnectionError) as e:
-                logger.error(f"❌ SSL/连接错误: {str(e)}")
-                if attempt < retry_count - 1:
-                    logger.info(f"等待1秒后重试 ({attempt+1}/{retry_count})...")
-                    time.sleep(1)
-                    continue
-                return None
+            except (requests.exceptions.SSLError, 
+                    requests.exceptions.ConnectionError,
+                    requests.exceptions.ChunkedEncodingError) as e:
+                logger.error(f"❌ 网络连接错误: {str(e)}")
+            except ConnectionResetError as e:
+                logger.error(f"❌ 连接被重置: {str(e)}")
+                # 连接重置后增加额外延迟
+                time.sleep(5)
             except Exception as e:
                 logger.error(f"❌ 秒传过程中出错: {str(e)}")
-                if attempt < retry_count - 1:
-                    time.sleep(1)
-                    continue
-                return None
+        
+        logger.error(f"❌ 秒传失败，已达到最大重试次数 {max_retries}")
         return None
     
     def load_directory_cache(self):
@@ -737,11 +782,14 @@ class Pan123Client:
             logger.info("已清空内存缓存")
 
             update_count = 0
-            
-            # 同步所有导出基目录
+            # 只同步所有导出基目录
             for base_dir_id in self.export_base_dir_ids:
                 base_dir_path = self.export_base_dir_map.get(base_dir_id, f"基目录({base_dir_id})")
-                update_count += self.sync_directory(base_dir_id, base_dir_path, base_dir_id=base_dir_id)
+                update_count += self.sync_directory(
+                    base_dir_id, 
+                    base_dir_path, 
+                    base_dir_id=base_dir_id
+                )
                 
             logger.info(f"全量同步完成，更新 {update_count} 个目录")
             return update_count
@@ -1033,9 +1081,6 @@ class Pan123Client:
         logger.info(f"找到 {len(all_files)} 个文件 (ID: {directory_id})")
         return all_files
     
-
-##########################123分享开始################################
-    
     def get_share_files(self, share_key, password="", parent_id=0, page=1, next_page=0):
         """获取单页分享项目（包含所有必需参数）"""
         url = f"{PAN_HOST}/api/share/get"
@@ -1110,8 +1155,6 @@ class Pan123Client:
         process_folder()
         logger.info(f"获取到 {len(all_files)} 个唯一文件 (去重后)")
         return all_files
-
-##########################123分享截至################################
 
     def clear_trash(self):
         """清空回收站"""
@@ -1871,20 +1914,30 @@ class TelegramBotHandler:
             logger.error(f"❌ 处理JSON文件出错: {str(e)}")
             self.send_auto_delete_message(update, context, f"❌ 处理JSON文件时出错: {str(e)}")
     
-    
     def transfer_files(self, update: Update, context: CallbackContext, files):
-        """转存文件列表（带重试机制）"""
+        """转存文件列表（带重试机制和优化速率控制）"""
         logger.info(f"开始转存 {len(files)} 个文件...")
         results = []
         total_files = len(files)
-        root_dir_id = self.pan_client.default_save_dir_id  # 使用配置的默认保存目录
+        root_dir_id = self.pan_client.default_save_dir_id
         
         # 创建文件夹缓存
         folder_cache = {}
         
+        # 使用环境变量配置的转存速率
+        RATE_LIMIT = TRANSFER_RATE_LIMIT
+        last_request_time = time.time()
+        
         for i, file_info in enumerate(files):
             file_path = file_info["file_name"]
             logger.info(f"处理文件 [{i+1}/{total_files}]: {file_path}")
+            
+            # 速率控制：确保请求间隔至少 1/RATE_LIMIT 秒
+            elapsed = time.time() - last_request_time
+            required_delay = max(0, 1.0/RATE_LIMIT - elapsed)
+            if required_delay > 0:
+                logger.debug(f"速率控制: 等待 {required_delay:.2f} 秒")
+                time.sleep(required_delay)
             
             try:
                 # 处理文件路径
@@ -1906,7 +1959,8 @@ class TelegramBotHandler:
                         parent_id = folder_cache[cache_key]
                         continue
                     
-                    # 创建新文件夹（带重试）
+                    # 创建新文件夹（带更长的延迟）
+                    time.sleep(0.3)  # 文件夹创建额外延迟（减少到0.3秒）
                     folder = self.pan_client.create_folder(parent_id, part)
                     if not folder:
                         logger.warning(f"⚠️ 创建文件夹失败: {part}，将使用根目录")
@@ -1921,7 +1975,10 @@ class TelegramBotHandler:
                 if file_info.get("is_v2_etag", False):
                     etag = FastLinkProcessor.optimized_etag_to_hex(etag, True)
                 
-                # 秒传文件（带重试）
+                # 记录请求时间
+                last_request_time = time.time()
+                
+                # 秒传文件（带增强重试）
                 result = self.pan_client.rapid_upload(
                     etag, 
                     file_info["size"],
@@ -1943,6 +2000,21 @@ class TelegramBotHandler:
                         "error": "秒传失败"
                     })
                     logger.error(f"❌ 文件转存失败: {file_path}")
+                    
+                    # 失败后增加额外延迟
+                    time.sleep(1.5)  # 减少到1.5秒
+            except (requests.exceptions.ConnectionError, 
+                    requests.exceptions.ChunkedEncodingError,
+                    ConnectionResetError) as e:
+                logger.error(f"❌ 网络连接错误: {str(e)}")
+                results.append({
+                    "success": False,
+                    "file_name": file_path,
+                    "error": f"网络错误: {str(e)}"
+                })
+                
+                # 出错后增加额外延迟
+                time.sleep(3.0)  # 减少到3秒
             except Exception as e:
                 logger.error(f"❌ 转存文件 {file_path} 出错: {str(e)}")
                 results.append({
@@ -1950,6 +2022,9 @@ class TelegramBotHandler:
                     "file_name": file_path,
                     "error": str(e)
                 })
+                
+                # 出错后增加额外延迟
+                time.sleep(2.0)  # 减少到2秒
         
         logger.info(f"文件转存完成，成功: {sum(1 for r in results if r['success'])}, 失败: {len(results) - sum(1 for r in results if r['success'])}")
         return results
