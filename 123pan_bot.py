@@ -1960,14 +1960,12 @@ class TelegramBotHandler:
             failed_files = []
             for result in results:
                 if not result["success"]:
-                    # 简化文件名显示
                     file_name = result["file_name"]
-                    if len(file_name) > 50:
-                        file_name = f"...{file_name[-47]}" if file_name else "未知文件"
-                    
                     failed_files.append(f"• {file_name}: {result['error']}")
-            
-            result_text += "\n\n❌ 失败文件:\n" + "\n".join(failed_files[:10])  # 最多显示10个失败文件
+
+            # 只显示前10个失败文件（完整文件名）
+            failed_text = "\n".join(failed_files[:10])
+            result_text += "\n\n❌ 失败文件:\n" + failed_text
             
             if failed_count > 10:
                 result_text += f"\n...及其他 {failed_count - 10} 个失败文件"
