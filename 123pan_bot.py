@@ -55,6 +55,7 @@ API_PATHS = {
     "LIST_FILES_V2": "/api/v2/file/list",
     "FILE_INFOS": "/api/v1/file/infos",
     "UPLOAD_REQUEST": "/b/api/file/upload_request",
+    "CLEAR_TRASH": "/api/file/trash_delete_all",  # 清空回收站
 }
 
 # 开放平台地址
@@ -1096,6 +1097,35 @@ class Pan123Client:
 
 ##########################123分享截至################################
 
+    def clear_trash(self):
+        """清空回收站"""
+        logger.info("清空回收站中...")
+        try:
+            url = f"{PAN_HOST}{API_PATHS['CLEAR_TRASH']}"
+            headers = self._get_auth_headers()
+            payload = {"event": "recycleClear"}  # 必须携带的参数
+            
+            # 使用限流保护的API调用
+            response = self._call_api("POST", url, json=payload, headers=headers, timeout=30)
+            if not response or response.status_code != 200:
+                logger.error(f"清空回收站失败: HTTP {response.status_code if response else '无响应'}")
+                return False
+                
+            data = response.json()
+            if data.get("code") == 7301:
+                logger.info("✅ 回收站已为空")
+                return True
+
+            if data.get("code") != 0:
+                logger.error(f"API错误: {data.get('code')} - {data.get('message')}")
+                return False
+                
+            logger.info("✅ 回收站已清空")
+            return True
+        except Exception as e:
+            logger.error(f"清空回收站出错: {str(e)}")
+            return False
+
 class FastLinkProcessor:
     @staticmethod
     def parse_share_link(share_link):
@@ -1206,6 +1236,7 @@ class TelegramBotHandler:
         self.dispatcher.add_handler(CommandHandler("start", self.start_command))
         self.dispatcher.add_handler(CommandHandler("export", self.export_command))
         self.dispatcher.add_handler(CommandHandler("sync_full", self.sync_full_command))
+        self.dispatcher.add_handler(CommandHandler("clear_trash", self.clear_trash_command))  # 新增清空回收站命令
         self.dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, self.handle_text))
         self.dispatcher.add_handler(MessageHandler(Filters.document, self.handle_document))
         self.dispatcher.add_handler(CallbackQueryHandler(self.button_callback))
@@ -1219,6 +1250,7 @@ class TelegramBotHandler:
             BotCommand("start", "用户信息"),
             BotCommand("export", "导出秒传文件"),
             BotCommand("sync_full", "全量同步"),
+            BotCommand("clear_trash", "清空回收站"),  # 新增命令
         ]
         
         max_retries = 3
@@ -1351,7 +1383,8 @@ class TelegramBotHandler:
                 f"└ 数据缓存: {len(self.pan_client.directory_cache)}\n\n"
                 f"🤖 机器人控制中心\n"
                 f"▫️ /export 导出文件\n"
-                f"▫️ /sync_full 全量同步\n\n"
+                f"▫️ /sync_full 全量同步\n"
+                f"▫️ /clear_trash 清空回收站\n\n"
                 f"⏱️ 已运行: {days}天{hours}小时{minutes}分{seconds}秒"
             )
             
@@ -2026,6 +2059,23 @@ class TelegramBotHandler:
         # 清理上下文
         if hasattr(context, '_chat_id'):
             del context._chat_id
+
+    @admin_required
+    def clear_trash_command(self, update: Update, context: CallbackContext):
+        """处理/clear_trash命令，直接清空回收站"""
+        logger.info("收到/clear_trash命令")
+        
+        # 直接执行清空操作
+        self.send_auto_delete_message(update, context, "🔄 正在清空回收站...")
+        
+        try:
+            if self.pan_client.clear_trash():
+                self.send_auto_delete_message(update, context, "✅ 回收站已成功清空", delay=5)
+            else:
+                self.send_auto_delete_message(update, context, "❌ 清空回收站失败，请查看日志", delay=5)
+        except Exception as e:
+            logger.error(f"清空回收站出错: {str(e)}")
+            self.send_auto_delete_message(update, context, f"❌ 清空回收站时出错: {str(e)}", delay=5)
 
 #########################123分享开始################################
 
