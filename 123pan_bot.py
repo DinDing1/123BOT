@@ -32,7 +32,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 ######################版本信息###########
 def get_version():
     """从 VERSION 文件中读取版本号"""
-    version_file = os.path.join(os.path.dirname(__file__), "VERSION")
+    version_file = "/app/VERSION"
     if os.path.exists(version_file):
         with open(version_file, "r", encoding="utf-8") as f:
             return f.read().strip()
