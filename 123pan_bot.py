@@ -1369,7 +1369,9 @@ class TelegramBotHandler:
             query.edit_message_text("❌ 请至少选择一个文件夹")
             return
             
+        # 发送临时消息并设置自动删除
         query.edit_message_text(f"⏳ 开始导出 {len(selected_indices)} 个文件夹...")
+        self.auto_delete_message(context, query.message.chat_id, query.message.message_id, 3)
         
         if 'export_message_id' in context.user_data:
             message_id = context.user_data['export_message_id']
@@ -1659,9 +1661,8 @@ class TelegramBotHandler:
         
         result_text = (
             f"📊 转存完成！\n"
-            f"├ 原始文件数量: {original_total_count}\n"
-            f"├ 原始文件大小: {original_total_size_gb:.2f} GB\n"
-            f"├ 过滤文件数量: {filtered_count} (非视频/字幕)\n"
+            f"├ 文件数量: {original_total_count}\n"
+            f"├ 文件大小: {original_total_size_gb:.2f} GB\n"
             f"├ 成功数量: {success_count} (大小: {success_size_gb:.2f} GB)\n"
             f"├ 失败数量: {failed_count}\n"
             f"├ 保存目录: {DEFAULT_SAVE_DIR or '根目录'}\n"
