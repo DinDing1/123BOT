@@ -18,11 +18,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libffi-dev \
     wget
 
-# 安装编译工具
-RUN pip install --upgrade pip
+# 安装依赖到系统目录而不是用户目录
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-RUN pip install pyinstaller==6.2.0
+RUN pip install --no-cache-dir pyinstaller==6.2.0
 
 # 复制源码
 COPY . .
@@ -36,11 +35,13 @@ FROM python:3.11-slim
 WORKDIR /app
 
 # 从构建阶段复制编译后的程序
-COPY --from=builder /app/dist/pan_bot /app/pan_bot
-COPY --from=builder /root/.local /root/.local
+COPY --from=builder /app/dist/pan_bot /app/
+
+# 安装运行时依赖（直接安装到系统目录）
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
 # 设置环境变量和路径
-ENV PATH="/root/.local/bin:${PATH}"
 ENV DB_PATH="/data/bot123.db"
 VOLUME /data
 
