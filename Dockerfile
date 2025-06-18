@@ -36,11 +36,11 @@ WORKDIR /app
 
 # 从构建阶段复制编译后的程序
 COPY --from=builder /app/dist/pan_bot /app/
-
+COPY --from=builder /app/VERSION /app/
 # 安装运行时依赖（直接安装到系统目录）
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-COPY VERSION .
+
 
 # 设置环境变量和路径
 ENV DB_PATH="/data/bot123.db"
