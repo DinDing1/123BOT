@@ -1863,7 +1863,7 @@ def main():
     BOT_TOKEN = os.getenv("TG_BOT_TOKEN","")
     CLIENT_ID = os.getenv("PAN_CLIENT_ID","")
     CLIENT_SECRET = os.getenv("PAN_CLIENT_SECRET","")
-    ADMIN_USER_IDS = [int(id.strip()) for id in os.getenv("TG_ADMIN_USER_IDS", ").split(",") if id.strip()]
+    ADMIN_USER_IDS = [int(id.strip()) for id in os.getenv("TG_ADMIN_USER_IDS", "").split(",") if id.strip()]
     
     if not BOT_TOKEN:
         logger.error("❌ 环境变量 TG_BOT_TOKEN 未设置")
