@@ -1156,7 +1156,7 @@ class TelegramBotHandler:
     
     @admin_required
     def start_command(self, update: Update, context: CallbackContext):
-        """处理/start命令"""
+        """处理/start命令 - 优化版用户信息输出"""
         try:
             user_info = self.pan_client.get_user_info()
             if not user_info:
@@ -1193,38 +1193,61 @@ class TelegramBotHandler:
             space_used = format_size(user_info.get("spaceUsed", 0))
             direct_traffic = format_size(user_info.get("directTraffic", 0))
             
-            # 构建消息
-            export_dirs = ", ".join(EXPORT_BASE_DIRS) if EXPORT_BASE_DIRS else "根目录"
+            # 计算存储空间使用率
+            if user_info.get("spacePermanent", 0) > 0:
+                usage_percent = (user_info.get("spaceUsed", 0) / user_info.get("spacePermanent", 1)) * 100
+                usage_bar = self.generate_usage_bar(usage_percent)
+            else:
+                usage_percent = 0
+                usage_bar = ""
+            
+            # 构建炫酷的用户信息消息
             message = (
-                f"🚀 123云盘用户信息 | {'👑 尊享账户' if user_info.get('vip', False) else '🔒 普通账户'}\n"
-                f"══════════════════════\n"
-                f"👤 昵称: {user_info.get('nickname', '未知')}\n"
-                f"🆔 账户ID: {uid}\n"
-                f"📱 手机号码: {phone}\n\n"
-                f"💾 存储空间\n"
+                f"🚀 <b>123云盘用户信息</b> | {'👑 <b>尊享账户</b>' if user_info.get('vip', False) else '🔒 <b>普通账户</b>'}\n"
+                f"══════════════════════════════════\n"
+                f"👤 <b>昵称:</b> {user_info.get('nickname', '未知')}\n"
+                f"🆔 <b>账户ID:</b> {uid}\n"
+                f"📱 <b>手机号码:</b> {phone}\n\n"
+                f"💾 <b>存储空间</b> ({usage_percent:.1f}%)\n"
                 f"├ 永久: {space_permanent}\n"
-                f"└ 已用: {space_used}\n\n"
-                f"📡 流量信息\n"
+                f"├ 已用: {space_used}\n"
+                f"└ {usage_bar}\n\n"
+                f"📡 <b>流量信息</b>\n"
                 f"└ 直链: {direct_traffic}\n"
-                f"══════════════════════\n\n"
-                f"⚙️ 当前配置:\n"
-                f"├ 保存目录: {DEFAULT_SAVE_DIR or '根目录'}\n"
-                f"├ 导出目录: {export_dirs}\n"
-                f"├ 搜索深度: {SEARCH_MAX_DEPTH}层\n"
-                f"└ 数据缓存: {len(self.pan_client.directory_cache)}\n\n"
-                f"🤖 机器人控制中心\n"
-                f"▫️ /export 导出文件\n"
-                f"▫️ /sync_full 全量同步\n"
-                f"▫️ /clear_trash 清空回收站\n\n"
-                f"⏱️ 已运行: {days}天{hours}小时{minutes}分{seconds}秒\n"
-                f"📦 Version: {VERSION}"
+                f"══════════════════════════════════\n\n"
+                f"⚙️ <b>当前配置:</b>\n"
+                f"├ 保存目录: <code>{DEFAULT_SAVE_DIR or '根目录'}</code>\n"
+                f"├ 导出目录: <code>{', '.join(EXPORT_BASE_DIRS) if EXPORT_BASE_DIRS else '根目录'}</code>\n"
+                f"├ 搜索深度: <code>{SEARCH_MAX_DEPTH}层</code>\n"
+                f"└ 数据缓存: <code>{len(self.pan_client.directory_cache)}</code>\n\n"
+                f"🤖 <b>机器人控制中心</b>\n"
+                f"▫️ /export - 导出文件\n"
+                f"▫️ /sync_full - 全量同步\n"
+                f"▫️ /clear_trash - 清空回收站\n\n"
+                f"⏱️ <b>已运行:</b> {days}天{hours}小时{minutes}分{seconds}秒\n"
+                f"📦 <b>版本:</b> <code>{VERSION}</code>"
             )
 
-            update.message.reply_text(message)
-            logger.info("已发送用户信息")
+            update.message.reply_text(
+                message, 
+                parse_mode="HTML",
+                disable_web_page_preview=True
+            )
+            logger.info("已发送炫酷版用户信息")
         except Exception as e:
             logger.error(f"处理/start命令出错: {str(e)}")
             self.send_auto_delete_message(update, context, "❌ 获取用户信息失败")
+
+    def generate_usage_bar(self, percent, length=20):
+        """生成使用率进度条"""
+        filled = int(round(length * percent / 100))
+        empty = length - filled
+        
+        # 使用Unicode字符创建更炫酷的进度条
+        bar = "█" * filled  # 实心方块表示已用部分
+        bar += "░" * empty   # 空心方块表示剩余部分
+        
+        return f"[{bar}]"
 
     def search_database_by_name(self, name_pattern):
         """在数据库中进行模糊搜索"""
