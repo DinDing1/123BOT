@@ -47,6 +47,7 @@ ENV DB_PATH="/data/bot123.db"
 VOLUME /data
 
 # 设置默认环境变量
+ENV TG_PROXY=""
 ENV TG_BOT_TOKEN=""
 ENV PAN_CLIENT_ID=""
 ENV PAN_CLIENT_SECRET=""
