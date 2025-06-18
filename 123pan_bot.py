@@ -303,6 +303,7 @@ class Pan123Client:
     def _create_session(self):
         """创建带重试机制的Session"""
         session = requests.Session()
+        session.trust_env = False
         retry_strategy = Retry(
             total=5,
             backoff_factor=1,
@@ -1224,8 +1225,8 @@ class TelegramBotHandler:
                 f"▫️ /export - 导出文件\n"
                 f"▫️ /sync_full - 全量同步\n"
                 f"▫️ /clear_trash - 清空回收站\n\n"
-                f"⏱️ <b>已运行:</b> {days}天{hours}小时{minutes}分{seconds}秒\n"
-                f"📦 <b>版本:</b> <code>{VERSION}</code>"
+                f"📦 <b>Version:</b> <code>{VERSION}</code>\n"
+                f"⏱️ <b>已运行:</b> {days}天{hours}小时{minutes}分{seconds}秒"
             )
 
             update.message.reply_text(
