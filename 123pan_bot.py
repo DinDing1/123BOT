@@ -29,6 +29,18 @@ from urllib.parse import urlparse, parse_qs
 # 禁用SSL警告
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
+######################版本信息###########
+def get_version():
+    """从 VERSION 文件中读取版本号"""
+    version_file = os.path.join(os.path.dirname(__file__), "VERSION")
+    if os.path.exists(version_file):
+        with open(version_file, "r", encoding="utf-8") as f:
+            return f.read().strip()
+    return "未知版本"
+
+VERSION = get_version()
+#######################################
+
 # 配置日志
 logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s',
@@ -71,17 +83,17 @@ COMMON_PATH_DELIMITER = "%"
 BASE62_CHARS = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 # 环境变量配置
-DEFAULT_SAVE_DIR = os.getenv("DEFAULT_SAVE_DIR", "待整理").strip()
-EXPORT_BASE_DIRS = [d.strip() for d in os.getenv("EXPORT_BASE_DIR", "媒体库").split(';') if d.strip()]
-SEARCH_MAX_DEPTH = int(os.getenv("SEARCH_MAX_DEPTH", "2"))
+DEFAULT_SAVE_DIR = os.getenv("DEFAULT_SAVE_DIR", "").strip()
+EXPORT_BASE_DIRS = [d.strip() for d in os.getenv("EXPORT_BASE_DIR", "").split(';') if d.strip()]
+SEARCH_MAX_DEPTH = int(os.getenv("SEARCH_MAX_DEPTH", ""))
 
 # API速率控制配置
 API_RATE_LIMIT = float(os.getenv("API_RATE_LIMIT", "2.0"))
 TRANSFER_RATE_LIMIT = float(os.getenv("TRANSFER_RATE_LIMIT", "3"))
 
 # 允许的文件类型配置
-ALLOWED_VIDEO_EXTENSIONS = [ext.strip().lower() for ext in os.getenv("ALLOWED_VIDEO_EXT", ".mp4,.mkv,.avi,.mov,.flv,.wmv,.webm,.ts,.m2ts").split(',') if ext.strip()]
-ALLOWED_SUB_EXTENSIONS = [ext.strip().lower() for ext in os.getenv("ALLOWED_SUB_EXT", ".srt,.ass,.ssa,.sub,.idx,.vtt").split(',') if ext.strip()]
+ALLOWED_VIDEO_EXTENSIONS = [ext.strip().lower() for ext in os.getenv("ALLOWED_VIDEO_EXT", ".mp4,.mkv,.avi,.mov,.flv,.wmv,.webm,.ts,.m2ts,.iso,.mp3,.flac,.wav").split(',') if ext.strip()]
+ALLOWED_SUB_EXTENSIONS = [ext.strip().lower() for ext in os.getenv("ALLOWED_SUB_EXT", ".srt,.ass,.ssa,.sub,.idx,.vtt,.sup").split(',') if ext.strip()]
 
 # =====================================================
 
@@ -1178,16 +1190,15 @@ class TelegramBotHandler:
                 f"├ 保存目录: {DEFAULT_SAVE_DIR or '根目录'}\n"
                 f"├ 导出目录: {export_dirs}\n"
                 f"├ 搜索深度: {SEARCH_MAX_DEPTH}层\n"
-                f"├ 视频扩展: {', '.join(ALLOWED_VIDEO_EXTENSIONS)}\n"
-                f"├ 字幕扩展: {', '.join(ALLOWED_SUB_EXTENSIONS)}\n"
                 f"└ 数据缓存: {len(self.pan_client.directory_cache)}\n\n"
                 f"🤖 机器人控制中心\n"
                 f"▫️ /export 导出文件\n"
                 f"▫️ /sync_full 全量同步\n"
                 f"▫️ /clear_trash 清空回收站\n\n"
-                f"⏱️ 已运行: {days}天{hours}小时{minutes}分{seconds}秒"
+                f"⏱️ 已运行: {days}天{hours}小时{minutes}分{seconds}秒\n"
+                f"📦 Version: {VERSION}"
             )
-            
+
             update.message.reply_text(message)
             logger.info("已发送用户信息")
         except Exception as e:
@@ -1849,10 +1860,10 @@ class TelegramBotHandler:
 
 def main():
     # 从环境变量读取配置
-    BOT_TOKEN = os.getenv("TG_BOT_TOKEN","5509161323:AAGTDUsaAoVMAq_GFQtzyG2qsTzmpbTyZGI")
-    CLIENT_ID = os.getenv("PAN_CLIENT_ID","ebb0f8aaf08f47739a39299f51930e9d")
-    CLIENT_SECRET = os.getenv("PAN_CLIENT_SECRET","c6c9c92bae9a4928b90ed992308b7b1f")
-    ADMIN_USER_IDS = [int(id.strip()) for id in os.getenv("TG_ADMIN_USER_IDS", "1817565003").split(",") if id.strip()]
+    BOT_TOKEN = os.getenv("TG_BOT_TOKEN","")
+    CLIENT_ID = os.getenv("PAN_CLIENT_ID","")
+    CLIENT_SECRET = os.getenv("PAN_CLIENT_SECRET","")
+    ADMIN_USER_IDS = [int(id.strip()) for id in os.getenv("TG_ADMIN_USER_IDS", ").split(",") if id.strip()]
     
     if not BOT_TOKEN:
         logger.error("❌ 环境变量 TG_BOT_TOKEN 未设置")
