@@ -124,6 +124,23 @@ def init_db():
             c.execute('''CREATE INDEX IF NOT EXISTS idx_full_path ON directory_cache (full_path)''')
             c.execute('''CREATE INDEX IF NOT EXISTS idx_base_dir ON directory_cache (base_dir_id)''')
             
+            # 创建用户权限表
+            c.execute('''CREATE TABLE IF NOT EXISTS user_privileges (
+                user_id INTEGER PRIMARY KEY,
+                privilege_level TEXT NOT NULL DEFAULT 'user',  -- 'user'或'svip'
+                export_count INTEGER NOT NULL DEFAULT 0,
+                last_export_date TIMESTAMP,
+                join_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )''')
+            
+            # 创建导出历史表
+            c.execute('''CREATE TABLE IF NOT EXISTS export_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                export_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                folder_count INTEGER NOT NULL
+            )''')
+            
             conn.commit()
     except Exception as e:
         logger.error(f"数据库初始化失败: {str(e)}")
@@ -1067,6 +1084,9 @@ class TelegramBotHandler:
         self.dispatcher.add_handler(CommandHandler("export", self.export_command))
         self.dispatcher.add_handler(CommandHandler("sync_full", self.sync_full_command))
         self.dispatcher.add_handler(CommandHandler("clear_trash", self.clear_trash_command))
+        self.dispatcher.add_handler(CommandHandler("add", self.add_command))
+        self.dispatcher.add_handler(CommandHandler("delete", self.delete_command))
+        self.dispatcher.add_handler(CommandHandler("info", self.info_command))
         self.dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, self.handle_text))
         self.dispatcher.add_handler(MessageHandler(Filters.document, self.handle_document))
         self.dispatcher.add_handler(CallbackQueryHandler(self.button_callback))
@@ -1080,6 +1100,9 @@ class TelegramBotHandler:
             BotCommand("start", "用户信息"),
             BotCommand("export", "导出秒传文件"),
             BotCommand("sync_full", "全量同步"),
+            BotCommand("info", "查询用户信息"),
+            BotCommand("add", "添加用户"),
+            BotCommand("delete", "删除用户"),            
             BotCommand("clear_trash", "清空回收站"),
         ]
         
@@ -1105,6 +1128,7 @@ class TelegramBotHandler:
         def wrapper(self, update: Update, context: CallbackContext, *args, **kwargs):
             user_id = update.message.from_user.id
             if user_id not in self.allowed_user_ids:
+                #update.message.reply_text("❌ 您不是管理员，无权执行此操作")
                 return
             return func(self, update, context, *args, **kwargs)
         return wrapper
@@ -1203,6 +1227,9 @@ class TelegramBotHandler:
                 f"🤖 <b>机器人控制中心</b>\n"
                 f"▫️ /export - 导出文件\n"
                 f"▫️ /sync_full - 全量同步\n"
+                f"▫️ /info - 查询用户信息\n"
+                f"▫️ /add - 添加用户\n"    
+                f"▫️ /delete - 删除用户\n"                                             
                 f"▫️ /clear_trash - 清空回收站\n\n"
                 f"📦 <b>Version:</b> <code>{VERSION}</code>\n"
                 f"⏱️ <b>已运行:</b> {days}天{hours}小时{minutes}分{seconds}秒"
@@ -1242,14 +1269,88 @@ class TelegramBotHandler:
         except Exception as e:
             logger.error(f"数据库搜索失败: {str(e)}")
             return []
+    
+    def get_user_privilege(self, user_id):
+        """获取用户权限信息"""
+        try:
+            with closing(sqlite3.connect(DB_PATH)) as conn:
+                conn.row_factory = sqlite3.Row
+                c = conn.cursor()
+                c.execute("SELECT * FROM user_privileges WHERE user_id = ?", (user_id,))
+                row = c.fetchone()
+                if row:
+                    return dict(row)
+        except Exception as e:
+            logger.error(f"查询用户权限失败: {str(e)}")
+        return None
+    
+    def update_user_export_count(self, user_id, folder_count):
+        """更新用户导出次数"""
+        try:
+            with closing(sqlite3.connect(DB_PATH)) as conn:
+                c = conn.cursor()
+                today = datetime.now().strftime("%Y-%m-%d")
+                
+                # 获取当前用户信息
+                user_info = self.get_user_privilege(user_id)
+                if user_info:
+                    # 检查是否需要重置
+                    last_export_date = user_info.get("last_export_date")
+                    if last_export_date and last_export_date != today:
+                        # 重置次数
+                        c.execute("UPDATE user_privileges SET export_count = 0, last_export_date = ? WHERE user_id = ?", 
+                                  (today, user_id))
+                    
+                    # 增加导出次数
+                    c.execute("UPDATE user_privileges SET export_count = export_count + ?, last_export_date = ? WHERE user_id = ?", 
+                              (folder_count, today, user_id))
+                else:
+                    # 新用户
+                    c.execute("INSERT INTO user_privileges (user_id, privilege_level, export_count, last_export_date) VALUES (?, ?, ?, ?)",
+                              (user_id, "user", folder_count, today))
+                
+                # 记录导出历史
+                c.execute("INSERT INTO export_history (user_id, folder_count) VALUES (?, ?)",
+                          (user_id, folder_count))
+                
+                conn.commit()
+            return True
+        except Exception as e:
+            logger.error(f"更新用户导出次数失败: {str(e)}")
+            return False
 
-    @admin_required
     def export_command(self, update: Update, context: CallbackContext):
         """处理/export命令"""
+        user_id = update.message.from_user.id
         search_query = " ".join(context.args) if context.args else ""
         if not search_query:
             self.send_auto_delete_message(update, context, "❌ 请指定文件夹名称！格式: /export <文件夹名称>")
             return
+        
+        # 检查用户权限
+        user_info = self.get_user_privilege(user_id)
+        
+        # 管理员不受限制
+        is_admin = user_id in self.allowed_user_ids
+        
+        if not is_admin and not user_info:
+            update.message.reply_text("❌ 您没有使用导出功能的权限，请联系管理员")
+            return
+        
+        # 普通用户检查导出限制
+        if not is_admin and user_info.get("privilege_level") == "user":
+            today = datetime.now().strftime("%Y-%m-%d")
+            last_export_date = user_info.get("last_export_date", "")
+            export_count = user_info.get("export_count", 0)
+            
+            # 如果是新的一天，重置次数
+            if last_export_date != today:
+                export_count = 0
+            
+            # 检查是否超过限制
+            if export_count >= 3:
+                update.message.reply_text("❌ 您今日的导出次数已达上限（3次），请明天再试或联系管理员升级权限")
+                return
         
         self.send_auto_delete_message(update, context, f"🔍 正在搜索文件夹: '{search_query}'...")
         
@@ -1404,8 +1505,30 @@ class TelegramBotHandler:
             query.edit_message_text("❌ 请至少选择一个文件夹")
             return
             
+        user_id = query.from_user.id
+        folder_count = len(selected_indices)
+        
+        # 检查用户权限
+        user_info = self.get_user_privilege(user_id)
+        is_admin = user_id in self.allowed_user_ids
+        
+        # 普通用户检查导出限制
+        if not is_admin and user_info and user_info.get("privilege_level") == "user":
+            today = datetime.now().strftime("%Y-%m-%d")
+            last_export_date = user_info.get("last_export_date", "")
+            export_count = user_info.get("export_count", 0)
+            
+            # 如果是新的一天，重置次数
+            if last_export_date != today:
+                export_count = 0
+            
+            # 检查是否超过限制
+            if export_count + folder_count > 3:
+                query.edit_message_text(f"❌ 您今日的导出次数已达上限（3次），已使用: {export_count}次，本次请求: {folder_count}次")
+                return
+        
         # 发送临时消息并设置自动删除
-        query.edit_message_text(f"⏳ 开始导出 {len(selected_indices)} 个文件夹...")
+        query.edit_message_text(f"⏳ 开始导出 {folder_count} 个文件夹...")
         self.auto_delete_message(context, query.message.chat_id, query.message.message_id, 3)
         
         if 'export_message_id' in context.user_data:
@@ -1414,7 +1537,7 @@ class TelegramBotHandler:
             for job in context.job_queue.get_jobs_by_name(job_name):
                 job.schedule_removal()
         
-        total = len(selected_indices)
+        total = folder_count
         # 用于存储所有进度消息的ID
         progress_messages = []
         
@@ -1483,6 +1606,9 @@ class TelegramBotHandler:
             os.remove(file_name)
             logger.info(f"已发送导出文件: {file_name}")
         
+        # 更新用户导出次数
+        self.update_user_export_count(user_id, folder_count)
+        
         # 导出完成后删除所有进度消息
         chat_id = query.message.chat_id
         for msg_id in progress_messages:
@@ -1491,7 +1617,7 @@ class TelegramBotHandler:
             except Exception as e:
                 logger.warning(f"删除进度消息失败: {str(e)}")
         
-        #context.bot.send_message(chat_id=chat_id, text=f"✅ 导出完成！共处理 {total} 个文件夹")
+        #context.bot.send_message(chat_id=chat_id, text=f"✅ 导出完成！共处理 {folder_count} 个文件夹")
         self.cleanup_export_context(context.user_data)
  
     @admin_required
@@ -1881,6 +2007,197 @@ class TelegramBotHandler:
         elif re.search(r'https?://(?:[a-zA-Z0-9-]+\.)*123[a-zA-Z0-9-]*\.[a-z]{2,6}/s/[a-zA-Z0-9\-_]+', text):
             self.send_auto_delete_message(update, context, "🔗 检测到123云盘分享链接，开始解析...")
             self.process_share_link(update, context, text)
+    
+    @admin_required
+    def add_command(self, update: Update, context: CallbackContext):
+        """处理/add命令"""
+        args = context.args
+        if not args or len(args) < 1:
+            update.message.reply_text("❌ 用法: /add [svip] <用户ID>")
+            return
+        
+        try:
+            # 检查是否指定了权限级别
+            if args[0].lower() == "svip":
+                if len(args) < 2:
+                    update.message.reply_text("❌ 请提供用户ID")
+                    return
+                user_id = int(args[1])
+                privilege_level = "svip"
+            else:
+                user_id = int(args[0])
+                privilege_level = "user"
+            
+            # 添加用户到数据库
+            with closing(sqlite3.connect(DB_PATH)) as conn:
+                c = conn.cursor()
+                c.execute('''INSERT OR REPLACE INTO user_privileges 
+                            (user_id, privilege_level) 
+                            VALUES (?, ?)''', 
+                          (user_id, privilege_level))
+                conn.commit()
+            
+            update.message.reply_text(f"✅ 成功添加用户: {user_id} ({privilege_level}权限)")
+            logger.info(f"添加用户: {user_id} ({privilege_level})")
+        except (ValueError, IndexError):
+            update.message.reply_text("❌ 无效的用户ID格式")
+        except Exception as e:
+            logger.error(f"添加用户失败: {str(e)}")
+            update.message.reply_text(f"❌ 添加用户失败: {str(e)}")
+    
+    @admin_required
+    def delete_command(self, update: Update, context: CallbackContext):
+        """处理/delete命令"""
+        args = context.args
+        if not args or len(args) < 1:
+            update.message.reply_text("❌ 用法: /delete <用户ID>")
+            return
+        
+        try:
+            user_id = int(args[0])
+            
+            # 从数据库删除用户
+            with closing(sqlite3.connect(DB_PATH)) as conn:
+                c = conn.cursor()
+                c.execute("DELETE FROM user_privileges WHERE user_id = ?", (user_id,))
+                conn.commit()
+                
+                if c.rowcount > 0:
+                    update.message.reply_text(f"✅ 成功删除用户: {user_id}")
+                    logger.info(f"删除用户: {user_id}")
+                else:
+                    update.message.reply_text(f"❌ 用户不存在: {user_id}")
+        except ValueError:
+            update.message.reply_text("❌ 无效的用户ID格式")
+        except Exception as e:
+            logger.error(f"删除用户失败: {str(e)}")
+            update.message.reply_text(f"❌ 删除用户失败: {str(e)}")
+    
+    def info_command(self, update: Update, context: CallbackContext):
+        """处理/info命令 - 优化版用户信息"""
+        user = update.message.from_user
+        user_id = user.id
+        username = f"@{user.username}" if user.username else "未设置"
+        first_name = user.first_name or ""
+        last_name = user.last_name or ""
+        full_name = f"{first_name} {last_name}".strip()  
+
+    # 获取用户权限信息
+        user_info = self.get_user_privilege(user_id)              
+        
+        # 获取导出历史
+        try:
+            with closing(sqlite3.connect(DB_PATH)) as conn:
+                conn.row_factory = sqlite3.Row
+                c = conn.cursor()
+                # 今日导出次数
+                today = datetime.now().strftime("%Y-%m-%d")
+                c.execute("SELECT SUM(folder_count) FROM export_history WHERE user_id = ? AND DATE(export_date) = ?", 
+                          (user_id, today))
+                today_export = c.fetchone()[0] or 0
+                
+                # 总导出次数
+                c.execute("SELECT SUM(folder_count) FROM export_history WHERE user_id = ?", (user_id,))
+                total_export = c.fetchone()[0] or 0
+                
+                # 最后导出时间
+                c.execute("SELECT MAX(export_date) FROM export_history WHERE user_id = ?", (user_id,))
+                last_export = c.fetchone()[0]
+
+                if user_info:
+                    join_date = user_info.get("join_date")
+                else:
+                    c.execute("""
+                              SELECT MIN(export_date) 
+                              FROM export_history 
+                              WHERE user_id = ?
+                    """, (user_id,))
+                    join_date_row = c.fetchone()
+                    join_date = join_date_row[0] if join_date_row[0] else None                     
+        except Exception as e:
+            logger.error(f"查询导出历史失败: {str(e)}")
+            today_export = 0
+            total_export = 0
+            last_export = None
+            join_date = None
+
+        # 计算下次重置时间（UTC时间次日0点）
+        now_utc = datetime.now(timezone.utc)
+        reset_time = datetime(
+            now_utc.year, 
+            now_utc.month, 
+            now_utc.day,
+            tzinfo=timezone.utc
+        ) + timedelta(days=1)
+
+        def format_time(dt):
+            if not dt:
+                return "从未导出"
+            if isinstance(dt, str):
+                dt = datetime.fromisoformat(dt)
+            return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
+        
+        # 确定用户状态
+        if user_id in self.allowed_user_ids:
+            status = "👑 管理员"
+            status_icon = "⭐"
+            status_desc = "拥有所有权限"
+            export_limit = "无限制"
+            remaining = "无限制"
+        elif user_info and user_info.get("privilege_level") == "svip":
+            status = "🌟 SVIP用户"
+            status_icon = "💎"
+            status_desc = "高级特权用户"
+            export_limit = "无限制"
+            remaining = "无限制"
+        else:
+            status = "👤 普通用户"
+            status_icon = "🔒"
+            status_desc = "基础权限用户"
+            remaining = max(0, 3 - today_export)
+            export_limit = f"3 个/天 (剩余: {remaining})"
+
+        # 构建用户信息消息
+        message_parts = [
+            f"<b>👤 用户信息</b>",
+            "══════════════════════",
+            f"<b>├ 用户ID:</b> <code>{user_id}</code>",
+            f"<b>├ 用户名:</b> {username}",
+        ]
+
+        if full_name:
+            message_parts.append(f"<b>├ 显示名称:</b> {full_name}")
+
+        message_parts.extend([
+            f"<b>├ 状态:</b> {status}",
+            f"<b>├ 状态描述:</b> {status_desc} {status_icon}",
+            "══════════════════════",
+            f"<b>├ 导出权限:</b>",
+            f"   ├ 今日已导出: <b>{today_export}</b> 个JSON文件",
+            f"   ├ 剩余导出次数: <b>{remaining}</b>",
+            f"   ├ 总导出次数: <b>{total_export}</b>",
+            f"   ├ 权限限制: {export_limit}",
+            f"   ├ 最后导出时间: {format_time(last_export)}",
+            f"   └ 下次重置: {reset_time.strftime('%Y-%m-%d %H:%M:%S UTC')}",
+            "══════════════════════",
+        ])
+        if join_date:
+            message_parts.append(f"<b>└ 加入时间:</b> {format_time(join_date)}")
+        else:
+            message_parts.append(f"<b>└ 加入时间:</b> 未知")
+
+        # 添加提示信息
+        if status == "👤 普通用户":
+            if today_export >= 3:
+                message_parts.append("\n⚠️ <i>您的今日导出次数已达上限，请明天再试</i>")
+            else:
+                message_parts.append("\nℹ️ <i>作为普通用户，您每天可导出最多 3 个JSON文件</i>")
+            message_parts.append("\n💎 <i>联系管理员升级SVIP可享受无限制导出权限</i>")
+
+        # 组合所有消息部分
+        message = "\n".join(message_parts)
+        update.message.reply_text(message, parse_mode="HTML")
+        logger.info(f"发送用户信息: {user_id}")
 
 def main():
     # 从环境变量读取配置
