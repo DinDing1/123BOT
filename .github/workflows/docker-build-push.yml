@@ -35,6 +35,6 @@ jobs:
           platforms: linux/amd64,linux/arm64  # 多架构支持
           push: true
           tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/123bot:latest
-            ${{ secrets.DOCKERHUB_USERNAME }}/123bot:${{ steps.version.outputs.version }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/123bot_user:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/123bot_user:${{ steps.version.outputs.version }}
 
