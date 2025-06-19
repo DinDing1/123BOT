@@ -83,9 +83,11 @@ COMMON_PATH_DELIMITER = "%"
 BASE62_CHARS = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 # 环境变量配置
-DEFAULT_SAVE_DIR = os.getenv("DEFAULT_SAVE_DIR", "").strip()
-EXPORT_BASE_DIRS = [d.strip() for d in os.getenv("EXPORT_BASE_DIR", "").split(';') if d.strip()]
-SEARCH_MAX_DEPTH = int(os.getenv("SEARCH_MAX_DEPTH", ""))
+DEFAULT_SAVE_DIR = os.getenv("DEFAULT_SAVE_DIR", "待整理").strip()
+EXPORT_BASE_DIRS = [d.strip() for d in os.getenv("EXPORT_BASE_DIR", "媒体库").split(';') if d.strip()]
+SEARCH_MAX_DEPTH = int(os.getenv("SEARCH_MAX_DEPTH", "2"))
+DAILY_EXPORT_LIMIT = int(os.getenv("DAILY_EXPORT_LIMIT", "3"))  # 默认每天3次
+BANNED_EXPORT_NAMES = [name.strip().lower() for name in os.getenv("BANNED_EXPORT_NAMES", "电视剧;电影").split(';') if name.strip()] #导出黑名单
 
 # API速率控制配置
 API_RATE_LIMIT = float(os.getenv("API_RATE_LIMIT", "2.0"))
@@ -1142,7 +1144,7 @@ class TelegramBotHandler:
                 pass
         threading.Timer(delay, delete).start()
     
-    def send_auto_delete_message(self, update, context, text, delay=3, chat_id=None):
+    def send_auto_delete_message(self, update, context, text, delay=3, chat_id=None, parse_mode=None):
         """发送自动删除的消息"""
         if chat_id is None:
             if update and update.message:
@@ -1154,7 +1156,7 @@ class TelegramBotHandler:
             else:
                 return None
         
-        message = context.bot.send_message(chat_id=chat_id, text=text)
+        message = context.bot.send_message(chat_id=chat_id, text=text, parse_mode=parse_mode)
         self.auto_delete_message(context, chat_id, message.message_id, delay)
         return message
     
@@ -1326,7 +1328,7 @@ class TelegramBotHandler:
         if not search_query:
             self.send_auto_delete_message(update, context, "❌ 请指定文件夹名称！格式: /export <文件夹名称>")
             return
-        
+         
         # 检查用户权限
         user_info = self.get_user_privilege(user_id)
         
@@ -1334,9 +1336,15 @@ class TelegramBotHandler:
         is_admin = user_id in self.allowed_user_ids
         
         if not is_admin and not user_info:
-            update.message.reply_text("❌ 您没有使用导出功能的权限，请联系管理员")
+            #update.message.reply_text("❌ 您没有使用导出功能的权限，请联系管理员")
+            self.send_auto_delete_message(update, context, "❌ 您没有使用导出功能的权限，请联系管理员")
             return
         
+        # 检查是否在禁止导出列表中
+        if search_query.lower() in BANNED_EXPORT_NAMES:
+            self.send_auto_delete_message(update, context, f"❌ 禁止导出名称为 '{search_query}' 的文件夹")
+            return
+     
         # 普通用户检查导出限制
         if not is_admin and user_info.get("privilege_level") == "user":
             today = datetime.now().strftime("%Y-%m-%d")
@@ -1348,8 +1356,9 @@ class TelegramBotHandler:
                 export_count = 0
             
             # 检查是否超过限制
-            if export_count >= 3:
-                update.message.reply_text("❌ 您今日的导出次数已达上限（3次），请明天再试或联系管理员升级权限")
+            if export_count >= DAILY_EXPORT_LIMIT:
+                #update.message.reply_text(f"❌ 您今日的导出次数已达上限（{DAILY_EXPORT_LIMIT}次），请明天再试或联系管理员升级权限")
+                self.send_auto_delete_message(update, context, f"❌ 您今日的导出次数已达上限（{DAILY_EXPORT_LIMIT}次），请明天再试或联系管理员升级权限")
                 return
         
         self.send_auto_delete_message(update, context, f"🔍 正在搜索文件夹: '{search_query}'...")
@@ -2036,14 +2045,15 @@ class TelegramBotHandler:
                             VALUES (?, ?)''', 
                           (user_id, privilege_level))
                 conn.commit()
-            
-            update.message.reply_text(f"✅ 成功添加用户: {user_id} ({privilege_level}权限)")
+
+            self.send_auto_delete_message(update, context, f"✅ 成功添加用户: {user_id} ({privilege_level}权限)")
+
             logger.info(f"添加用户: {user_id} ({privilege_level})")
         except (ValueError, IndexError):
             update.message.reply_text("❌ 无效的用户ID格式")
         except Exception as e:
             logger.error(f"添加用户失败: {str(e)}")
-            update.message.reply_text(f"❌ 添加用户失败: {str(e)}")
+            self.send_auto_delete_message(update, context, f"❌ 添加用户失败: {str(e)}")
     
     @admin_required
     def delete_command(self, update: Update, context: CallbackContext):
@@ -2077,13 +2087,19 @@ class TelegramBotHandler:
         """处理/info命令 - 优化版用户信息"""
         user = update.message.from_user
         user_id = user.id
+        # 获取用户权限信息
+        user_info = self.get_user_privilege(user_id)
+        # 检查用户是否已注册（管理员、SVIP或普通用户）
+        if user_id not in self.allowed_user_ids and not user_info:
+            # 未注册用户，发送提示消息并自动撤回
+            message = "❌ 您尚未注册，无法使用此功能\n请联系管理员添加您的账户"
+            self.send_auto_delete_message(update, context, message, delay=5)
+            return
+        # 以下是已注册用户的处理逻辑
         username = f"@{user.username}" if user.username else "未设置"
         first_name = user.first_name or ""
         last_name = user.last_name or ""
-        full_name = f"{first_name} {last_name}".strip()  
-
-    # 获取用户权限信息
-        user_info = self.get_user_privilege(user_id)              
+        full_name = f"{first_name} {last_name}".strip()          
         
         # 获取导出历史
         try:
@@ -2154,8 +2170,8 @@ class TelegramBotHandler:
             status = "👤 普通用户"
             status_icon = "🔒"
             status_desc = "基础权限用户"
-            remaining = max(0, 3 - today_export)
-            export_limit = f"3 个/天 (剩余: {remaining})"
+            remaining = max(0, DAILY_EXPORT_LIMIT - today_export)
+            export_limit = f"{DAILY_EXPORT_LIMIT} 个/天 (剩余: {remaining})"
 
         # 构建用户信息消息
         message_parts = [
@@ -2173,8 +2189,8 @@ class TelegramBotHandler:
             f"<b>├ 状态描述:</b> {status_desc} {status_icon}",
             "══════════════════════",
             f"<b>├ 导出权限:</b>",
-            f"   ├ 今日已导出: <b>{today_export}</b> 个JSON文件",
-            f"   ├ 剩余导出次数: <b>{remaining}</b>",
+            f"   ├ 今日导出: <b>{today_export}</b> 个JSON文件",
+            f"   ├ 剩余次数: <b>{remaining}</b>",
             f"   ├ 总导出次数: <b>{total_export}</b>",
             f"   ├ 权限限制: {export_limit}",
             f"   ├ 最后导出时间: {format_time(last_export)}",
@@ -2188,23 +2204,23 @@ class TelegramBotHandler:
 
         # 添加提示信息
         if status == "👤 普通用户":
-            if today_export >= 3:
-                message_parts.append("\n⚠️ <i>您的今日导出次数已达上限，请明天再试</i>")
+            if today_export >= DAILY_EXPORT_LIMIT:
+                message_parts.append(f"\n⚠️ <i>您的今日导出次数已达上限({DAILY_EXPORT_LIMIT}次)，请明天再试</i>")
             else:
-                message_parts.append("\nℹ️ <i>作为普通用户，您每天可导出最多 3 个JSON文件</i>")
+                message_parts.append(f"\nℹ️ <i>作为普通用户，您每天可导出最多 {DAILY_EXPORT_LIMIT} 个JSON文件</i>")
             message_parts.append("\n💎 <i>联系管理员升级SVIP可享受无限制导出权限</i>")
 
         # 组合所有消息部分
         message = "\n".join(message_parts)
-        update.message.reply_text(message, parse_mode="HTML")
+        self.send_auto_delete_message(update, context, message, delay=10, parse_mode="HTML")
         logger.info(f"发送用户信息: {user_id}")
 
 def main():
     # 从环境变量读取配置
-    BOT_TOKEN = os.getenv("TG_BOT_TOKEN","")
-    CLIENT_ID = os.getenv("PAN_CLIENT_ID","")
-    CLIENT_SECRET = os.getenv("PAN_CLIENT_SECRET","")
-    ADMIN_USER_IDS = [int(id.strip()) for id in os.getenv("TG_ADMIN_USER_IDS", "").split(",") if id.strip()]
+    BOT_TOKEN = os.getenv("TG_BOT_TOKEN","5509161323:AAGTDUsaAoVMAq_GFQtzyG2qsTzmpbTyZGI")
+    CLIENT_ID = os.getenv("PAN_CLIENT_ID","ebb0f8aaf08f47739a39299f51930e9d")
+    CLIENT_SECRET = os.getenv("PAN_CLIENT_SECRET","c6c9c92bae9a4928b90ed992308b7b1f")
+    ADMIN_USER_IDS = [int(id.strip()) for id in os.getenv("TG_ADMIN_USER_IDS", "1817565003").split(",") if id.strip()]
     
     if not BOT_TOKEN:
         logger.error("❌ 环境变量 TG_BOT_TOKEN 未设置")
