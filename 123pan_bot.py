@@ -24,7 +24,6 @@ from functools import wraps
 import urllib3
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
-from urllib.parse import urlparse, parse_qs
 
 # 禁用SSL警告
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -66,7 +65,7 @@ API_PATHS = {
     "LIST_FILES_V2": "/api/v2/file/list",
     "UPLOAD_REQUEST": "/b/api/file/upload_request",
     "CLEAR_TRASH": "/api/file/trash_delete_all",
-    "GET_SHARE": "/b/api/share/get",  # 添加分享链接接口
+    "GET_SHARE": "/b/api/share/get",
 }
 
 # 开放平台地址
@@ -83,11 +82,11 @@ COMMON_PATH_DELIMITER = "%"
 BASE62_CHARS = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 # 环境变量配置
-DEFAULT_SAVE_DIR = os.getenv("DEFAULT_SAVE_DIR", "待整理").strip()
-EXPORT_BASE_DIRS = [d.strip() for d in os.getenv("EXPORT_BASE_DIR", "媒体库").split(';') if d.strip()]
+DEFAULT_SAVE_DIR = os.getenv("DEFAULT_SAVE_DIR", "").strip()
+EXPORT_BASE_DIRS = [d.strip() for d in os.getenv("EXPORT_BASE_DIR", "").split(';') if d.strip()]
 SEARCH_MAX_DEPTH = int(os.getenv("SEARCH_MAX_DEPTH", "2"))
-DAILY_EXPORT_LIMIT = int(os.getenv("DAILY_EXPORT_LIMIT", "3"))  # 默认每天3次
-BANNED_EXPORT_NAMES = [name.strip().lower() for name in os.getenv("BANNED_EXPORT_NAMES", "电视剧;电影").split(';') if name.strip()] #导出黑名单
+DAILY_EXPORT_LIMIT = int(os.getenv("DAILY_EXPORT_LIMIT", "3")) #导出次数
+BANNED_EXPORT_NAMES = [name.strip().lower() for name in os.getenv("BANNED_EXPORT_NAMES", "电视剧;电影").split(';') if name.strip()]
 
 # API速率控制配置
 API_RATE_LIMIT = float(os.getenv("API_RATE_LIMIT", "2.0"))
@@ -104,45 +103,52 @@ def init_db():
     try:
         with closing(sqlite3.connect(DB_PATH)) as conn:
             c = conn.cursor()
-            c.execute('''CREATE TABLE IF NOT EXISTS token_cache (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                access_token TEXT NOT NULL,
-                client_id TEXT NOT NULL,
-                client_secret TEXT NOT NULL,
-                expired_at TIMESTAMP NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )''')
+            # 创建所有表
+            tables = [
+                '''CREATE TABLE IF NOT EXISTS token_cache (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    access_token TEXT NOT NULL,
+                    client_id TEXT NOT NULL,
+                    client_secret TEXT NOT NULL,
+                    expired_at TIMESTAMP NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )''',
+                '''CREATE TABLE IF NOT EXISTS directory_cache (
+                    file_id INTEGER PRIMARY KEY,
+                    filename TEXT NOT NULL,
+                    parent_id INTEGER NOT NULL,
+                    full_path TEXT NOT NULL,
+                    base_dir_id INTEGER NOT NULL,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )''',
+                '''CREATE TABLE IF NOT EXISTS user_privileges (
+                    user_id INTEGER PRIMARY KEY,
+                    privilege_level TEXT NOT NULL DEFAULT 'user',
+                    export_count INTEGER NOT NULL DEFAULT 0,
+                    last_export_date TIMESTAMP,
+                    join_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )''',
+                '''CREATE TABLE IF NOT EXISTS export_history (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    export_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    folder_count INTEGER NOT NULL
+                )'''
+            ]
             
-            c.execute('''CREATE TABLE IF NOT EXISTS directory_cache (
-                file_id INTEGER PRIMARY KEY,
-                filename TEXT NOT NULL,
-                parent_id INTEGER NOT NULL,
-                full_path TEXT NOT NULL,
-                base_dir_id INTEGER NOT NULL,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )''')
+            for table in tables:
+                c.execute(table)
             
-            c.execute('''CREATE INDEX IF NOT EXISTS idx_filename ON directory_cache (filename)''')
-            c.execute('''CREATE INDEX IF NOT EXISTS idx_full_path ON directory_cache (full_path)''')
-            c.execute('''CREATE INDEX IF NOT EXISTS idx_base_dir ON directory_cache (base_dir_id)''')
+            # 创建索引
+            indexes = [
+                "CREATE INDEX IF NOT EXISTS idx_filename ON directory_cache (filename)",
+                "CREATE INDEX IF NOT EXISTS idx_full_path ON directory_cache (full_path)",
+                "CREATE INDEX IF NOT EXISTS idx_base_dir ON directory_cache (base_dir_id)"
+            ]
             
-            # 创建用户权限表
-            c.execute('''CREATE TABLE IF NOT EXISTS user_privileges (
-                user_id INTEGER PRIMARY KEY,
-                privilege_level TEXT NOT NULL DEFAULT 'user',  -- 'user'或'svip'
-                export_count INTEGER NOT NULL DEFAULT 0,
-                last_export_date TIMESTAMP,
-                join_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )''')
-            
-            # 创建导出历史表
-            c.execute('''CREATE TABLE IF NOT EXISTS export_history (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER NOT NULL,
-                export_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                folder_count INTEGER NOT NULL
-            )''')
-            
+            for index in indexes:
+                c.execute(index)
+                
             conn.commit()
     except Exception as e:
         logger.error(f"数据库初始化失败: {str(e)}")
@@ -190,13 +196,13 @@ class TokenManager:
                     expired_at = datetime.fromisoformat(expired_at_str).astimezone(timezone.utc)
                     now = datetime.now(timezone.utc)
                     
-                    if (expired_at > now + timedelta(minutes=5) and
-                        self.client_id == cached_id and 
-                        self.client_secret == cached_secret):
-                        
+                    if (expired_at > now + timedelta(minutes=5) and \
+                       self.client_id == cached_id and \
+                       self.client_secret == cached_secret):
                         self.access_token = token
                         self.token_expiry = expired_at
                         logger.info("使用缓存Token")
+                    
                         return True
         except Exception:
             pass
@@ -246,13 +252,11 @@ class TokenManager:
             self.access_token = data["data"]["accessToken"]
             expired_at_str = data["data"]["expiredAt"]
             
+            # 统一处理时间格式
             if expired_at_str.endswith('Z'):
-                self.token_expiry = datetime.fromisoformat(expired_at_str[:-1]).replace(tzinfo=timezone.utc)
-            elif '+' in expired_at_str or '-' in expired_at_str:
-                dt = datetime.fromisoformat(expired_at_str)
-                self.token_expiry = dt.astimezone(timezone.utc)
-            else:
-                self.token_expiry = datetime.fromisoformat(expired_at_str).replace(tzinfo=timezone.utc)
+                expired_at_str = expired_at_str[:-1] + "+00:00"
+            
+            self.token_expiry = datetime.fromisoformat(expired_at_str).astimezone(timezone.utc)
             
             if self.save_token_to_cache(self.access_token, self.token_expiry):
                 logger.info(f"更新Token成功，有效期至: {self.token_expiry} (UTC)")
@@ -291,7 +295,7 @@ class Pan123Client:
         self.session = self._create_session()
         self.last_api_call = 0
         self.api_rate_limit = API_RATE_LIMIT
-        self.share_root_folder = ""  # 添加这个属性
+        self.share_root_folder = ""
         
         # 初始化目录ID
         self.default_save_dir_id = 0
@@ -404,10 +408,10 @@ class Pan123Client:
                 
                 if response.status_code == 429:
                     retry_after = response.headers.get('Retry-After')
-                    wait_time = float(retry_after) if retry_after else 5.0  # 减少等待时间
+                    wait_time = float(retry_after) if retry_after else 5.0
                     logger.warning(f"API限流，等待 {wait_time} 秒后重试...")
                     time.sleep(wait_time)
-                    retry_count += 1  # 增加重试计数
+                    retry_count += 1
                     continue
                 
                 try:
@@ -415,7 +419,7 @@ class Pan123Client:
                     if data.get("code") == 429 or "操作频繁" in data.get("message", ""):
                         logger.warning("API限流（内容检测），等待5秒后重试...")
                         time.sleep(5.0)
-                        retry_count += 1  # 增加重试计数
+                        retry_count += 1
                         continue
                 except:
                     pass
@@ -429,10 +433,6 @@ class Pan123Client:
                 retry_count += 1
                 logger.error(f"网络连接错误: {str(e)}，重试 {retry_count}/{max_retries}")
                 time.sleep(2 ** retry_count)
-            except ConnectionResetError as e:
-                retry_count += 1
-                logger.error(f"连接被重置: {str(e)}，重试 {retry_count}/{max_retries}")
-                time.sleep(5)
             except Exception as e:
                 logger.error(f"API调用出错: {str(e)}")
                 retry_count += 1
@@ -799,7 +799,6 @@ class Pan123Client:
    
     def extract_share_info(self, share_url):
         """从分享链接提取分享Key和密码（使用改进的正则）"""
-        # 使用提供的正则表达式
         pattern = r'(https?://(?:[a-zA-Z0-9-]+\.)*123[a-zA-Z0-9-]*\.[a-z]{2,6}+/s/)([a-zA-Z0-9\-_]+)(?:[\s\S]*?(?:提取码|密码|code)[\s:：=]*(\w{4}))?'
         match = re.search(pattern, share_url)
         if not match:
@@ -976,7 +975,7 @@ class Pan123Client:
                 
                 # 添加当前页的项目
                 for item in data["data"]["InfoList"]:
-                    item["Type"] = item.get("Type", 0)  # 确保有Type字段
+                    item["Type"] = item.get("Type", 0)
                     items.append(item)
                 
                 # 检查是否有下一页
@@ -999,18 +998,20 @@ class FastLinkProcessor:
         is_common_path_format = False
         is_v2_etag_format = False
         
-        if share_link.startswith(COMMON_PATH_LINK_PREFIX_V2):
-            is_common_path_format = True
-            is_v2_etag_format = True
-            share_link = share_link[len(COMMON_PATH_LINK_PREFIX_V2):]
-        elif share_link.startswith(COMMON_PATH_LINK_PREFIX_V1):
-            is_common_path_format = True
-            share_link = share_link[len(COMMON_PATH_LINK_PREFIX_V1):]
-        elif share_link.startswith(LEGACY_FOLDER_LINK_PREFIX_V2):
-            is_v2_etag_format = True
-            share_link = share_link[len(LEGACY_FOLDER_LINK_PREFIX_V2):]
-        elif share_link.startswith(LEGACY_FOLDER_LINK_PREFIX_V1):
-            share_link = share_link[len(LEGACY_FOLDER_LINK_PREFIX_V1):]
+        # 使用前缀映射简化处理
+        prefix_map = {
+            COMMON_PATH_LINK_PREFIX_V2: (True, True),
+            COMMON_PATH_LINK_PREFIX_V1: (True, False),
+            LEGACY_FOLDER_LINK_PREFIX_V2: (False, True),
+            LEGACY_FOLDER_LINK_PREFIX_V1: (False, False)
+        }
+        
+        for prefix, (is_common, is_v2) in prefix_map.items():
+            if share_link.startswith(prefix):
+                share_link = share_link[len(prefix):]
+                is_common_path_format = is_common
+                is_v2_etag_format = is_v2
+                break
         
         if is_common_path_format:
             delimiter_pos = share_link.find(COMMON_PATH_DELIMITER)
@@ -1050,6 +1051,7 @@ class FastLinkProcessor:
             return optimized_etag
         
         try:
+            # 如果已经是十六进制格式，直接返回
             if len(optimized_etag) == 32 and all(c in '0123456789abcdefABCDEF' for c in optimized_etag):
                 return optimized_etag.lower()
             
@@ -1060,13 +1062,12 @@ class FastLinkProcessor:
                 num = num * 62 + BASE62_CHARS.index(char)
             
             hex_str = hex(num)[2:].lower()
+            # 处理长度
             if len(hex_str) > 32:
                 hex_str = hex_str[-32:]
             elif len(hex_str) < 32:
                 hex_str = hex_str.zfill(32)
             
-            if len(hex_str) != 32 or not all(c in '0123456789abcdef' for c in hex_str):
-                return optimized_etag
             return hex_str
         except Exception as e:
             logger.error(f"ETag转换失败: {str(e)}")
@@ -1099,10 +1100,10 @@ class TelegramBotHandler:
     def set_menu_commands(self):
         """设置Telegram Bot菜单命令"""
         commands = [
-            BotCommand("start", "用户信息"),
+            BotCommand("start", "个人信息"),
             BotCommand("export", "导出秒传文件"),
             BotCommand("sync_full", "全量同步"),
-            BotCommand("info", "查询用户信息"),
+            BotCommand("info", "用户信息"),
             BotCommand("add", "添加用户"),
             BotCommand("delete", "删除用户"),            
             BotCommand("clear_trash", "清空回收站"),
@@ -1130,7 +1131,6 @@ class TelegramBotHandler:
         def wrapper(self, update: Update, context: CallbackContext, *args, **kwargs):
             user_id = update.message.from_user.id
             if user_id not in self.allowed_user_ids:
-                #update.message.reply_text("❌ 您不是管理员，无权执行此操作")
                 return
             return func(self, update, context, *args, **kwargs)
         return wrapper
@@ -1207,7 +1207,7 @@ class TelegramBotHandler:
                 usage_percent = 0
                 usage_bar = ""
             
-            # 构建炫酷的用户信息消息
+            # 构建用户信息消息
             message = (
                 f"🚀 <b>123云盘用户信息</b> | {'👑 <b>尊享账户</b>' if user_info.get('vip', False) else '🔒 <b>普通账户</b>'}\n"
                 f"══════════════════════\n"
@@ -1242,7 +1242,7 @@ class TelegramBotHandler:
                 parse_mode="HTML",
                 disable_web_page_preview=True
             )
-            logger.info("已发送炫酷版用户信息")
+            logger.info("已发送用户信息")
         except Exception as e:
             logger.error(f"处理/start命令出错: {str(e)}")
             self.send_auto_delete_message(update, context, "❌ 获取用户信息失败")
@@ -1251,12 +1251,7 @@ class TelegramBotHandler:
         """生成使用率进度条"""
         filled = int(round(length * percent / 100))
         empty = length - filled
-        
-        # 使用Unicode字符创建更炫酷的进度条
-        bar = "█" * filled  # 实心方块表示已用部分
-        bar += "░" * empty   # 空心方块表示剩余部分
-        
-        return f"[{bar}]"
+        return "[" + "█" * filled + "░" * empty + "]"
 
     def search_database_by_name(self, name_pattern):
         """在数据库中进行模糊搜索"""
@@ -1331,22 +1326,19 @@ class TelegramBotHandler:
          
         # 检查用户权限
         user_info = self.get_user_privilege(user_id)
-        
-        # 管理员不受限制
         is_admin = user_id in self.allowed_user_ids
         
-        if not is_admin and not user_info:
-            #update.message.reply_text("❌ 您没有使用导出功能的权限，请联系管理员")
-            self.send_auto_delete_message(update, context, "❌ 您没有使用导出功能的权限，请联系管理员")
-            return
-        
-        # 检查是否在禁止导出列表中
-        if search_query.lower() in BANNED_EXPORT_NAMES:
-            self.send_auto_delete_message(update, context, f"❌ 禁止导出名称为 '{search_query}' 的文件夹")
-            return
+        # 非管理员用户检查权限
+        if not is_admin:
+            if not user_info:
+                self.send_auto_delete_message(update, context, "❌ 您没有使用导出功能的权限，请联系管理员")
+                return
+                
+            if search_query.lower() in BANNED_EXPORT_NAMES:
+                self.send_auto_delete_message(update, context, f"❌ 禁止导出名称为 '{search_query}' 的文件夹")
+                return
      
-        # 普通用户检查导出限制
-        if not is_admin and user_info.get("privilege_level") == "user":
+            # 检查是否超过限制
             today = datetime.now().strftime("%Y-%m-%d")
             last_export_date = user_info.get("last_export_date", "")
             export_count = user_info.get("export_count", 0)
@@ -1355,9 +1347,7 @@ class TelegramBotHandler:
             if last_export_date != today:
                 export_count = 0
             
-            # 检查是否超过限制
             if export_count >= DAILY_EXPORT_LIMIT:
-                #update.message.reply_text(f"❌ 您今日的导出次数已达上限（{DAILY_EXPORT_LIMIT}次），请明天再试或联系管理员升级权限")
                 self.send_auto_delete_message(update, context, f"❌ 您今日的导出次数已达上限（{DAILY_EXPORT_LIMIT}次），请明天再试或联系管理员升级权限")
                 return
         
@@ -1507,7 +1497,7 @@ class TelegramBotHandler:
                 del user_data[key]
     
     def process_export_selection(self, update: Update, context: CallbackContext, selected_indices):
-        """处理选择的导出任务，添加消息撤回"""
+        """处理选择的导出任务"""
         query = update.callback_query
         results = context.user_data.get('export_search_results', [])
         if not results or not selected_indices:
@@ -1532,8 +1522,8 @@ class TelegramBotHandler:
                 export_count = 0
             
             # 检查是否超过限制
-            if export_count + folder_count > 3:
-                query.edit_message_text(f"❌ 您今日的导出次数已达上限（3次），已使用: {export_count}次，本次请求: {folder_count}次")
+            if export_count + folder_count > DAILY_EXPORT_LIMIT:
+                query.edit_message_text(f"❌ 您今日的导出次数已达上限（{DAILY_EXPORT_LIMIT}次），已使用: {export_count}次，本次请求: {folder_count}次")
                 return
         
         # 发送临时消息并设置自动删除
@@ -1547,7 +1537,6 @@ class TelegramBotHandler:
                 job.schedule_removal()
         
         total = folder_count
-        # 用于存储所有进度消息的ID
         progress_messages = []
         
         for i, idx in enumerate(selected_indices):
@@ -1561,12 +1550,9 @@ class TelegramBotHandler:
             # 每处理3个文件夹更新一次进度
             if i % 3 == 0:
                 try:
-                    # 发送进度消息并记录消息ID
                     msg = context.bot.send_message(
                         chat_id=query.message.chat_id,
-                        text=f"⏳ 正在处理文件夹 [{i+1}/{total}]:\n"
-                             f"├ 名称: {folder_name}\n"
-                             f"└ 路径: {folder_path}"
+                        text=f"⏳ 正在处理文件夹 [{i+1}/{total}]:\n├ 名称: {folder_name}\n└ 路径: {folder_path}"
                     )
                     progress_messages.append(msg.message_id)
                 except Exception as e:
@@ -1626,7 +1612,6 @@ class TelegramBotHandler:
             except Exception as e:
                 logger.warning(f"删除进度消息失败: {str(e)}")
         
-        #context.bot.send_message(chat_id=chat_id, text=f"✅ 导出完成！共处理 {folder_count} 个文件夹")
         self.cleanup_export_context(context.user_data)
  
     @admin_required
@@ -1940,7 +1925,6 @@ class TelegramBotHandler:
             def do_share_transfer():
                 try:
                     start_time = time.time()
-                    # 注意：现在返回四个值，包括总大小
                     success, failure, results, total_size = self.pan_client.save_share_files(
                         share_url, 
                         self.pan_client.default_save_dir_id
@@ -2005,6 +1989,7 @@ class TelegramBotHandler:
         """处理文本消息 - 仅保留秒传链接处理"""
         text = update.message.text.strip()
         
+        # 秒传链接处理
         if (text.startswith(LEGACY_FOLDER_LINK_PREFIX_V1) or 
             text.startswith(LEGACY_FOLDER_LINK_PREFIX_V2) or 
             text.startswith(COMMON_PATH_LINK_PREFIX_V1) or 
@@ -2012,7 +1997,7 @@ class TelegramBotHandler:
             ('#' in text and '$' in text)):
             self.send_auto_delete_message(update, context, "🔍 检测到秒传链接，开始解析...")
             self.process_fast_link(update, context, text)
-        # 处理123云盘分享链接（使用改进的正则匹配）
+        # 123云盘分享链接处理
         elif re.search(r'https?://(?:[a-zA-Z0-9-]+\.)*123[a-zA-Z0-9-]*\.[a-z]{2,6}/s/[a-zA-Z0-9\-_]+', text):
             self.send_auto_delete_message(update, context, "🔗 检测到123云盘分享链接，开始解析...")
             self.process_share_link(update, context, text)
@@ -2089,13 +2074,12 @@ class TelegramBotHandler:
         user_id = user.id
         # 获取用户权限信息
         user_info = self.get_user_privilege(user_id)
-        # 检查用户是否已注册（管理员、SVIP或普通用户）
+        # 检查用户是否已注册
         if user_id not in self.allowed_user_ids and not user_info:
-            # 未注册用户，发送提示消息并自动撤回
             message = "❌ 您尚未注册，无法使用此功能\n请联系管理员添加您的账户"
             self.send_auto_delete_message(update, context, message, delay=5)
             return
-        # 以下是已注册用户的处理逻辑
+        
         username = f"@{user.username}" if user.username else "未设置"
         first_name = user.first_name or ""
         last_name = user.last_name or ""
@@ -2123,11 +2107,7 @@ class TelegramBotHandler:
                 if user_info:
                     join_date = user_info.get("join_date")
                 else:
-                    c.execute("""
-                              SELECT MIN(export_date) 
-                              FROM export_history 
-                              WHERE user_id = ?
-                    """, (user_id,))
+                    c.execute("SELECT MIN(export_date) FROM export_history WHERE user_id = ?", (user_id,))
                     join_date_row = c.fetchone()
                     join_date = join_date_row[0] if join_date_row[0] else None                     
         except Exception as e:
@@ -2156,19 +2136,16 @@ class TelegramBotHandler:
         # 确定用户状态
         if user_id in self.allowed_user_ids:
             status = "👑 管理员"
-            status_icon = "⭐"
             status_desc = "拥有所有权限"
             export_limit = "无限制"
             remaining = "无限制"
         elif user_info and user_info.get("privilege_level") == "svip":
             status = "🌟 SVIP用户"
-            status_icon = "💎"
             status_desc = "高级特权用户"
             export_limit = "无限制"
             remaining = "无限制"
         else:
             status = "👤 普通用户"
-            status_icon = "🔒"
             status_desc = "基础权限用户"
             remaining = max(0, DAILY_EXPORT_LIMIT - today_export)
             export_limit = f"{DAILY_EXPORT_LIMIT} 个/天 (剩余: {remaining})"
@@ -2186,7 +2163,7 @@ class TelegramBotHandler:
 
         message_parts.extend([
             f"<b>├ 状态:</b> {status}",
-            f"<b>├ 状态描述:</b> {status_desc} {status_icon}",
+            f"<b>├ 状态描述:</b> {status_desc}",
             "══════════════════════",
             f"<b>├ 导出权限:</b>",
             f"   ├ 今日导出: <b>{today_export}</b> 个JSON文件",
@@ -2217,10 +2194,10 @@ class TelegramBotHandler:
 
 def main():
     # 从环境变量读取配置
-    BOT_TOKEN = os.getenv("TG_BOT_TOKEN","5509161323:AAGTDUsaAoVMAq_GFQtzyG2qsTzmpbTyZGI")
-    CLIENT_ID = os.getenv("PAN_CLIENT_ID","ebb0f8aaf08f47739a39299f51930e9d")
-    CLIENT_SECRET = os.getenv("PAN_CLIENT_SECRET","c6c9c92bae9a4928b90ed992308b7b1f")
-    ADMIN_USER_IDS = [int(id.strip()) for id in os.getenv("TG_ADMIN_USER_IDS", "1817565003").split(",") if id.strip()]
+    BOT_TOKEN = os.getenv("TG_BOT_TOKEN","")
+    CLIENT_ID = os.getenv("PAN_CLIENT_ID","")
+    CLIENT_SECRET = os.getenv("PAN_CLIENT_SECRET","")
+    ADMIN_USER_IDS = [int(id.strip()) for id in os.getenv("TG_ADMIN_USER_IDS", "").split(",") if id.strip()]
     
     if not BOT_TOKEN:
         logger.error("❌ 环境变量 TG_BOT_TOKEN 未设置")
