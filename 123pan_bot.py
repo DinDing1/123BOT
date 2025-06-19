@@ -1058,21 +1058,7 @@ class TelegramBotHandler:
         self.token = token
         self.pan_client = pan_client
         self.allowed_user_ids = allowed_user_ids
-        
-        # 配置代理
-        self.proxy_url = self.get_proxy_url()
-        logger.info(f"TG_BOT代理: {self.proxy_url or '无'}")
-        
-        # 初始化Updater时添加代理支持
-        request_kwargs = {}
-        if self.proxy_url:
-            request_kwargs['proxy_url'] = self.proxy_url
-        
-        self.updater = Updater(
-            token, 
-            use_context=True,
-            request_kwargs=request_kwargs
-        )
+        self.updater = Updater(token, use_context=True)
         self.dispatcher = self.updater.dispatcher
         self.start_time = pan_client.token_manager.start_time
         
@@ -1087,13 +1073,6 @@ class TelegramBotHandler:
         
         # 设置菜单命令
         self.set_menu_commands()
-    
-    def get_proxy_url(self):
-        """获取代理配置"""
-        # 优先使用HTTP代理
-        proxy_url = os.getenv("TG_PROXY")
-        if proxy_url:
-            return proxy_url
     
     def set_menu_commands(self):
         """设置Telegram Bot菜单命令"""
