@@ -1342,6 +1342,16 @@ class TelegramBotHandler:
         # 检查用户权限
         user_info = self.get_user_privilege(user_id)
         is_admin = user_id in self.allowed_user_ids
+        is_svip = user_info and user_info.get("privilege_level") == "svip"  # 新增SVIP检查
+
+        # 非管理员且非SVIP用户检查权限
+        if not is_admin and not is_svip:  # 修改检查条件
+            if not user_info:
+                self.send_auto_delete_message(update, context, "❌ 您没有使用导出功能的权限，请联系管理员")
+                return
+            if search_query.lower() in BANNED_EXPORT_NAMES:
+                self.send_auto_delete_message(update, context, f"❌ 禁止导出名称为 '{search_query}' 的文件夹")
+                return
         
         # 非管理员用户检查权限
         if not is_admin:
@@ -1547,9 +1557,10 @@ class TelegramBotHandler:
         # 检查用户权限
         user_info = self.get_user_privilege(user_id)
         is_admin = user_id in self.allowed_user_ids
+        is_svip = user_info and user_info.get("privilege_level") == "svip"  # 新增SVIP检查
         
         # 普通用户检查导出限制
-        if not is_admin and user_info and user_info.get("privilege_level") == "user":
+        if not is_admin and not is_svip:  # 修改检查条件
             today = datetime.now().strftime("%Y-%m-%d")
             last_export_date = user_info.get("last_export_date", "")
             export_count = user_info.get("export_count", 0)
@@ -2194,7 +2205,7 @@ class TelegramBotHandler:
                     logger.info(f"无权限删除消息 (用户: {user_id})")
                 else:
                     logger.warning(f"删除群消息失败: {str(e)} (用户: {user_id})")
-                    
+
         # 获取用户权限信息
         user_info = self.get_user_privilege(user_id)
         # 检查用户是否已注册
