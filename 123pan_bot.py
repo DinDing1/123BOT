@@ -1144,8 +1144,6 @@ class TelegramBotHandler:
                 # 特殊处理群聊消息删除权限问题
                 if "message can't be deleted" in str(e):
                     logger.warning(f"无权限删除消息: {chat_id}/{message_id}")
-                else:
-                    logger.warning(f"删除消息失败: {str(e)}")
         threading.Timer(delay, delete).start()
     
     def send_auto_delete_message(self, update, context, text, delay=3, chat_id=None, parse_mode=None):
@@ -1332,7 +1330,10 @@ class TelegramBotHandler:
             try:
                 update.message.delete()
             except Exception as e:
-                logger.warning(f"删除群消息失败: {str(e)}")
+                if "Message to delete not found" in str(e):
+                    logger.info(f"用户消息已被自动删除或不存在")
+                else:
+                    logger.warning(f"删除群消息失败: {str(e)}")
 
         if not search_query:
             self.send_auto_delete_message(update, context, "❌ 请指定文件夹名称！格式: /export <文件夹名称>")
@@ -1406,8 +1407,19 @@ class TelegramBotHandler:
             keyboard.append(action_buttons[:2])
             keyboard.append(action_buttons[2:])
             reply_markup = InlineKeyboardMarkup(keyboard)
+
+            if in_group:
+                message = context.bot.send_message(
+                    chat_id=update.message.chat_id,
+                    text=f"✅ 找到 {len(results)} 个匹配项\n请选择要导出的文件夹:",
+                    reply_markup=reply_markup
+                )
+            else:
+                message = update.message.reply_text(
+                    f"✅ 找到 {len(results)} 个匹配项\n请选择要导出的文件夹:",
+                    reply_markup=reply_markup
+                )
             
-            message = update.message.reply_text(f"✅ 找到 {len(results)} 个匹配项\n请选择要导出的文件夹:", reply_markup=reply_markup)
             context.user_data['export_message_id'] = message.message_id
             
             job_context = {
@@ -1562,8 +1574,14 @@ class TelegramBotHandler:
                     chat_id=context.user_data['group_chat_id'],
                     message_id=context.user_data['group_temp_msg_id']
                 )
+                logger.info("已成功撤回临时消息")
             except Exception as e:
-                logger.warning(f"撤回群消息失败: {str(e)}")
+                if "Message to delete not found" in str(e):
+                    logger.info("临时消息已被自动删除或不存在")
+                elif "message can't be deleted" in str(e):
+                    logger.info("无权限删除消息，可能是群组设置限制")
+                else:
+                    logger.warning(f"撤回群消息失败: {str(e)}")
 
         
         # # 发送新提示
@@ -1698,7 +1716,8 @@ class TelegramBotHandler:
             try:
                 context.bot.delete_message(chat_id=chat_id, message_id=msg_id)
             except Exception as e:
-                logger.warning(f"删除进度消息失败: {str(e)}")
+                if "Message to delete not found" not in str(e):
+                    logger.warning(f"删除进度消息失败: {str(e)}")
         
         self.cleanup_export_context(context.user_data)
  
@@ -2160,6 +2179,22 @@ class TelegramBotHandler:
         """处理/info命令 - 优化版用户信息"""
         user = update.message.from_user
         user_id = user.id
+        chat_id = update.message.chat_id
+        chat_type = update.message.chat.type
+
+        # 在群聊中删除用户发送的/info消息
+        if chat_type in ['group', 'supergroup']:
+            try:
+                context.bot.delete_message(chat_id=chat_id, message_id=update.message.message_id)
+                logger.info(f"已删除群聊中的/info消息 (用户: {user_id})")
+            except Exception as e:
+                if "Message to delete not found" in str(e):
+                    logger.info(f"消息已被自动删除或不存在 (用户: {user_id})")
+                elif "message can't be deleted" in str(e):
+                    logger.info(f"无权限删除消息 (用户: {user_id})")
+                else:
+                    logger.warning(f"删除群消息失败: {str(e)} (用户: {user_id})")
+                    
         # 获取用户权限信息
         user_info = self.get_user_privilege(user_id)
         # 检查用户是否已注册
