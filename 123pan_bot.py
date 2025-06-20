@@ -1352,16 +1352,6 @@ class TelegramBotHandler:
             if search_query.lower() in BANNED_EXPORT_NAMES:
                 self.send_auto_delete_message(update, context, f"❌ 禁止导出名称为 '{search_query}' 的文件夹")
                 return
-        
-        # 非管理员用户检查权限
-        if not is_admin:
-            if not user_info:
-                self.send_auto_delete_message(update, context, "❌ 您没有使用导出功能的权限，请联系管理员")
-                return
-                
-            if search_query.lower() in BANNED_EXPORT_NAMES:
-                self.send_auto_delete_message(update, context, f"❌ 禁止导出名称为 '{search_query}' 的文件夹")
-                return
      
             # 检查是否超过限制
             today = datetime.now().strftime("%Y-%m-%d")
@@ -1376,7 +1366,6 @@ class TelegramBotHandler:
                 self.send_auto_delete_message(update, context, f"❌ 您今日的导出次数已达上限（{DAILY_EXPORT_LIMIT}次），请明天再试或联系管理员升级权限")
                 return
         
-        # 修改消息发送部分
         if in_group:
             # 发送提示消息并保存消息ID以便撤回
             msg = self.send_auto_delete_message(
@@ -1560,7 +1549,7 @@ class TelegramBotHandler:
         is_svip = user_info and user_info.get("privilege_level") == "svip"  # 新增SVIP检查
         
         # 普通用户检查导出限制
-        if not is_admin and not is_svip:  # 修改检查条件
+        if not is_admin and not is_svip:  # 普通用户
             today = datetime.now().strftime("%Y-%m-%d")
             last_export_date = user_info.get("last_export_date", "")
             export_count = user_info.get("export_count", 0)
