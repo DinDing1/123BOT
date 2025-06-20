@@ -84,7 +84,7 @@ BASE62_CHARS = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 # 环境变量配置
 DEFAULT_SAVE_DIR = os.getenv("DEFAULT_SAVE_DIR", "").strip()
 EXPORT_BASE_DIRS = [d.strip() for d in os.getenv("EXPORT_BASE_DIR", "").split(';') if d.strip()]
-SEARCH_MAX_DEPTH = int(os.getenv("SEARCH_MAX_DEPTH", "2"))
+SEARCH_MAX_DEPTH = int(os.getenv("SEARCH_MAX_DEPTH", ""))
 DAILY_EXPORT_LIMIT = int(os.getenv("DAILY_EXPORT_LIMIT", "3")) #导出次数
 BANNED_EXPORT_NAMES = [name.strip().lower() for name in os.getenv("BANNED_EXPORT_NAMES", "电视剧;电影").split(';') if name.strip()]
 
@@ -1564,10 +1564,29 @@ class TelegramBotHandler:
                 continue
             
             logger.info(f"文件夹 '{folder_name}' 中找到 {len(files)} 个文件")
+
+            # 计算文件统计信息
+            total_size = sum(file_info["size"] for file_info in files)
+            file_count = len(files)
+            # 格式化总大小
+            def format_size(size_bytes):
+                if size_bytes >= 1024 ** 4:
+                    return f"{size_bytes / (1024 ** 4):.2f} TB"
+                elif size_bytes >= 1024 ** 3:
+                    return f"{size_bytes / (1024 ** 3):.2f} GB"
+                elif size_bytes >= 1024 ** 2:
+                    return f"{size_bytes / (1024 ** 2):.2f} MB"
+                elif size_bytes >= 1024:
+                    return f"{size_bytes / 1024:.2f} KB"
+                else:
+                    return f"{size_bytes} bytes"
             
             json_data = {
-                "commonPath": folder_name,
                 "usesBase62EtagsInExport": False,
+                "commonPath": folder_name,
+                "totalFilesCount": file_count,
+                "totalSize": total_size,
+                "formattedTotalSize": format_size(total_size),
                 "files": [
                     {"path": file_info["path"], "etag": file_info["etag"], "size": file_info["size"]}
                     for file_info in files
@@ -1576,17 +1595,23 @@ class TelegramBotHandler:
             
             clean_folder_name = re.sub(r'[\\/*?:"<>|]', "", folder_name)
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            file_name = f"{clean_folder_name}_{timestamp}.json"
+            file_name = f"{clean_folder_name}.json"
             
             with open(file_name, "w", encoding="utf-8") as f:
                 json.dump(json_data, f, ensure_ascii=False, indent=2)
             
             user_info = self.pan_client.get_user_info()
             nickname = user_info.get("nickname", "未知用户") if user_info else "未知用户"
-            caption = (
-                f"✨来自：{nickname}的分享\n\n"
+
+            # 计算平均大小
+            avg_size = total_size / file_count if file_count > 0 else 0
+            
+            caption = (             
+                f"✨ 分享者：{nickname}\n"
                 f"📁 文件名: {clean_folder_name}\n"
-                f"📝 文件数: {len(files)}\n\n"
+                f"📝 文件数: {file_count}\n"
+                f"💾 总大小：{format_size(total_size)}\n"
+                f"📊 平均大小：{format_size(avg_size)}\n\n"
                 f"❤️ 123因您分享更完美！"
             )
             
