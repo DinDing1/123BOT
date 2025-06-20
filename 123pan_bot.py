@@ -1136,12 +1136,16 @@ class TelegramBotHandler:
         return wrapper
     
     def auto_delete_message(self, context, chat_id, message_id, delay=3):
-        """自动删除消息"""
+        """自动删除消息（支持群聊和私聊）"""
         def delete():
             try:
                 context.bot.delete_message(chat_id=chat_id, message_id=message_id)
-            except Exception:
-                pass
+            except Exception as e:
+                # 特殊处理群聊消息删除权限问题
+                if "message can't be deleted" in str(e):
+                    logger.warning(f"无权限删除消息: {chat_id}/{message_id}")
+                else:
+                    logger.warning(f"删除消息失败: {str(e)}")
         threading.Timer(delay, delete).start()
     
     def send_auto_delete_message(self, update, context, text, delay=3, chat_id=None, parse_mode=None):
@@ -1158,7 +1162,7 @@ class TelegramBotHandler:
         
         message = context.bot.send_message(chat_id=chat_id, text=text, parse_mode=parse_mode)
         self.auto_delete_message(context, chat_id, message.message_id, delay)
-        return message
+        return message  # 返回消息对象
     
     @admin_required
     def start_command(self, update: Update, context: CallbackContext):
@@ -1320,6 +1324,16 @@ class TelegramBotHandler:
         """处理/export命令"""
         user_id = update.message.from_user.id
         search_query = " ".join(context.args) if context.args else ""
+        chat_type = update.message.chat.type
+        in_group = chat_type in ['group', 'supergroup']
+
+        # 如果是群聊，先删除用户消息
+        if in_group:
+            try:
+                update.message.delete()
+            except Exception as e:
+                logger.warning(f"删除群消息失败: {str(e)}")
+
         if not search_query:
             self.send_auto_delete_message(update, context, "❌ 请指定文件夹名称！格式: /export <文件夹名称>")
             return
@@ -1351,8 +1365,19 @@ class TelegramBotHandler:
                 self.send_auto_delete_message(update, context, f"❌ 您今日的导出次数已达上限（{DAILY_EXPORT_LIMIT}次），请明天再试或联系管理员升级权限")
                 return
         
-        self.send_auto_delete_message(update, context, f"🔍 正在搜索文件夹: '{search_query}'...")
-        
+        # 修改消息发送部分
+        if in_group:
+            # 发送提示消息并保存消息ID以便撤回
+            msg = self.send_auto_delete_message(
+              update, context,
+              f"🔍 正在搜索文件夹: '{search_query}'...\n结果将通过私聊发送给您",
+              delay=5
+            )
+            context.user_data['group_temp_msg_id'] = msg.message_id
+            context.user_data['group_chat_id'] = update.message.chat_id  # 保存群聊ID
+        else:
+            self.send_auto_delete_message(update, context, f"🔍 正在搜索文件夹: '{search_query}'...")
+
         try:
             results = self.search_database_by_name(search_query)
             if not results:
@@ -1491,7 +1516,7 @@ class TelegramBotHandler:
     
     def cleanup_export_context(self, user_data: dict):
         """清理导出相关的上下文数据"""
-        keys_to_remove = ['export_search_results', 'export_selected_indices', 'export_message_id']
+        keys_to_remove = ['export_search_results', 'export_selected_indices', 'export_message_id', 'group_temp_msg_id']
         for key in keys_to_remove:
             if key in user_data:
                 del user_data[key]
@@ -1525,11 +1550,29 @@ class TelegramBotHandler:
             if export_count + folder_count > DAILY_EXPORT_LIMIT:
                 query.edit_message_text(f"❌ 您今日的导出次数已达上限（{DAILY_EXPORT_LIMIT}次），已使用: {export_count}次，本次请求: {folder_count}次")
                 return
+            
+        # 判断是否群聊环境
+        in_group = 'group_temp_msg_id' in context.user_data
+
+        # 发送临时消息
+        if in_group:
+            # 撤回之前的临时消息
+            try:
+                context.bot.delete_message(
+                    chat_id=context.user_data['group_chat_id'],
+                    message_id=context.user_data['group_temp_msg_id']
+                )
+            except Exception as e:
+                logger.warning(f"撤回群消息失败: {str(e)}")
+
         
-        # 发送临时消息并设置自动删除
-        query.edit_message_text(f"⏳ 开始导出 {folder_count} 个文件夹...")
-        self.auto_delete_message(context, query.message.chat_id, query.message.message_id, 3)
-        
+        # # 发送新提示
+            query.edit_message_text(f"⏳ 开始导出 {folder_count} 个文件夹到私聊...")
+            self.auto_delete_message(context, query.message.chat_id, query.message.message_id, 3)
+        else:
+            query.edit_message_text(f"⏳ 开始导出 {folder_count} 个文件夹...")
+            self.auto_delete_message(context, query.message.chat_id, query.message.message_id, 3)
+         
         if 'export_message_id' in context.user_data:
             message_id = context.user_data['export_message_id']
             job_name = f"export_timeout_{message_id}"
@@ -1614,14 +1657,34 @@ class TelegramBotHandler:
                 f"📊 平均大小：{format_size(avg_size)}\n\n"
                 f"❤️ 123因您分享更完美！"
             )
-            
-            with open(file_name, "rb") as f:
-                context.bot.send_document(
+
+            # 在发送文件处修改为私聊发送
+            if in_group:
+                # 通过私聊发送文件
+                try:
+                    with open(file_name, "rb") as f:
+                        context.bot.send_document(
+                            chat_id=user_id,  # 直接发送给用户ID（私聊）
+                            document=f,
+                            filename=file_name,
+                            caption=caption
+                        )
+                except Exception as e:
+                    logger.error(f"私聊发送失败: {str(e)}")
+                    # 在群聊中提示用户
+                    context.bot.send_message(
+                        chat_id=context.user_data['group_chat_id'],
+                        text=f"❌ 无法发送私聊消息，请先私聊我 @{context.bot.username} 并点击'开始'"
+                    )
+            else:
+                # 私聊环境正常发送
+                with open(file_name, "rb") as f:
+                    context.bot.send_document(
                     chat_id=query.message.chat_id,
                     document=f,
                     filename=file_name,
                     caption=caption
-                )
+                )               
             
             os.remove(file_name)
             logger.info(f"已发送导出文件: {file_name}")
