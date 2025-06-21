@@ -1583,6 +1583,13 @@ class TelegramBotHandler:
             if not files:
                 logger.warning(f"文件夹为空: {folder_name}")
                 continue
+                
+            # 清理文件夹名称（移除非法字符）
+            clean_folder_name = re.sub(r'[\\/*?:"<>|]', "", folder_name)
+            # 在文件夹名称后添加斜杠
+            common_path = f"{clean_folder_name}/"
+            # 文件名保持原始格式（不带斜杠）
+            file_name = f"{clean_folder_name}.json"
             
             # 每处理3个文件夹更新一次进度
             if i % 3 == 0:
@@ -1601,7 +1608,7 @@ class TelegramBotHandler:
             
             json_data = {
                 "usesBase62EtagsInExport": False,
-                "commonPath": folder_name,
+                "commonPath": common_path,
                 "totalFilesCount": file_count,
                 "totalSize": total_size,
                 "formattedTotalSize": format_size(total_size),
@@ -1610,9 +1617,6 @@ class TelegramBotHandler:
                     for file_info in files
                 ]
             }
-            
-            clean_folder_name = re.sub(r'[\\/*?:"<>|]', "", folder_name)
-            file_name = f"{clean_folder_name}.json"
             
             with open(file_name, "w", encoding="utf-8") as f:
                 json.dump(json_data, f, ensure_ascii=False, indent=2)
