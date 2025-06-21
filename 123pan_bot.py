@@ -151,9 +151,31 @@ def init_db():
                 
             conn.commit()
     except Exception as e:
-        logger.error(f"数据库初始化失败: {str(e)}")
+        logger.error(f"数据库初始化失败: {e}")
 
 init_db()
+
+# ====================== 工具函数 ======================
+def format_size(size_bytes):
+    """格式化文件大小"""
+    if size_bytes >= 1024 ** 4:
+        return f"{size_bytes / (1024 ** 4):.2f} TB"
+    elif size_bytes >= 1024 ** 3:
+        return f"{size_bytes / (1024 ** 3):.2f} GB"
+    elif size_bytes >= 1024 ** 2:
+        return f"{size_bytes / (1024 ** 2):.2f} MB"
+    elif size_bytes >= 1024:
+        return f"{size_bytes / 1024:.2f} KB"
+    else:
+        return f"{size_bytes} bytes"
+
+def generate_usage_bar(percent, length=20):
+    """生成使用率进度条"""
+    filled = int(round(length * percent / 100))
+    empty = length - filled
+    return "[" + "█" * filled + "░" * empty + "]"
+
+# =====================================================
 
 class TokenManager:
     """管理API token的获取和缓存"""
@@ -204,8 +226,8 @@ class TokenManager:
                         logger.info("使用缓存Token")
                     
                         return True
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error(f"加载Token缓存失败: {e}")
         return False
     
     def save_token_to_cache(self, access_token, expired_at):
@@ -220,7 +242,8 @@ class TokenManager:
                            (access_token, self.client_id, self.client_secret, expired_at.isoformat()))
                 conn.commit()
                 return True
-        except Exception:
+        except Exception as e:
+            logger.error(f"保存Token到缓存失败: {e}")
             return False
     
     def get_new_token(self):
@@ -241,7 +264,7 @@ class TokenManager:
             response = self.session.post(url, json=payload, headers=headers, timeout=20)
             
             if response.status_code != 200:
-                logger.error(f"认证失败: {response.status_code}")
+                logger.error(f"认证失败: HTTP {response.status_code}")
                 return False
             
             data = response.json()
@@ -263,7 +286,7 @@ class TokenManager:
                 return True
             return False
         except Exception as e:
-            logger.error(f"获取Token失败: {str(e)}")
+            logger.error(f"获取Token失败: {e}")
             return False
     
     def ensure_token_valid(self):
@@ -388,7 +411,7 @@ class Pan123Client:
                         "filename": item["filename"]
                     }
         except Exception as e:
-            logger.error(f"搜索目录出错: {str(e)}")
+            logger.error(f"搜索目录出错: {e}")
         return None
 
     def _call_api(self, method, url, **kwargs):
@@ -431,10 +454,10 @@ class Pan123Client:
                     requests.exceptions.ChunkedEncodingError,
                     requests.exceptions.HTTPError) as e:
                 retry_count += 1
-                logger.error(f"网络连接错误: {str(e)}，重试 {retry_count}/{max_retries}")
+                logger.error(f"网络连接错误: {e}，重试 {retry_count}/{max_retries}")
                 time.sleep(2 ** retry_count)
             except Exception as e:
-                logger.error(f"API调用出错: {str(e)}")
+                logger.error(f"API调用出错: {e}")
                 retry_count += 1
                 time.sleep(2 ** retry_count)
         
@@ -471,12 +494,11 @@ class Pan123Client:
                 
             return data.get("data")
         except Exception as e:
-            logger.error(f"获取用户信息出错: {str(e)}")
+            logger.error(f"获取用户信息出错: {e}")
             return None
     
     def create_folder(self, parent_id, folder_name, retry_count=3):
         """创建文件夹"""
-        logger.info(f"创建文件夹: '{folder_name}' (父ID: {parent_id})")
         for attempt in range(retry_count):
             try:
                 url = f"{PAN_HOST}{API_PATHS['UPLOAD_REQUEST']}"
@@ -505,17 +527,15 @@ class Pan123Client:
                     error_msg = data.get("message", "未知错误")
                     logger.error(f"创建文件夹失败: {error_msg}")
             except Exception as e:
-                logger.error(f"创建文件夹过程中出错: {str(e)}")
+                logger.error(f"创建文件夹过程中出错: {e}")
             time.sleep(1)
         return None
     
     def rapid_upload(self, etag, size, file_name, parent_id, max_retries=8):
         """秒传文件"""
-        logger.info(f"尝试秒传文件: '{file_name}' (大小: {size} bytes, 父ID: {parent_id})")
         original_etag = etag
         
         if len(etag) != 32 or not all(c in '0123456789abcdef' for c in etag.lower()):
-            logger.info(f"转换Etag格式: {etag}")
             etag = FastLinkProcessor.optimized_etag_to_hex(etag, True)
         
         base_delay = 2.0
@@ -525,7 +545,6 @@ class Pan123Client:
             try:
                 delay = min(max_delay, base_delay * (2 ** attempt))
                 if attempt > 0:
-                    logger.warning(f"秒传失败，等待 {delay:.1f} 秒后重试 (尝试 {attempt+1}/{max_retries})...")
                     time.sleep(delay)
                 
                 url = f"{PAN_HOST}{API_PATHS['UPLOAD_REQUEST']}"
@@ -561,7 +580,6 @@ class Pan123Client:
                     error_msg = data.get("message", "未知错误")
                     logger.error(f"文件秒传失败: {error_msg}")
                     if "etag" in error_msg.lower() and etag != original_etag:
-                        logger.info(f"尝试使用原始Etag: {original_etag}")
                         etag = original_etag
                         continue
                     if "操作频繁" in error_msg or "限流" in error_msg or "频繁" in error_msg:
@@ -570,7 +588,7 @@ class Pan123Client:
                         logger.warning(f"触发限流，降低全局速率至 {self.api_rate_limit:.2f} 请求/秒")
                         continue
             except Exception as e:
-                logger.error(f"秒传过程中出错: {str(e)}")
+                logger.error(f"秒传过程中出错: {e}")
         logger.error(f"秒传失败，已达到最大重试次数 {max_retries}")
         return None
     
@@ -594,7 +612,7 @@ class Pan123Client:
                     self.directory_cache[file_id] = dict(row)
                 logger.info(f"已加载 {len(rows)} 个目录缓存")
         except Exception as e:
-            logger.error(f"加载目录缓存失败: {str(e)}")
+            logger.error(f"加载目录缓存失败: {e}")
     
     def update_directory_cache(self, file_id, filename, parent_id, full_path, base_dir_id):
         """更新目录缓存"""
@@ -626,7 +644,7 @@ class Pan123Client:
             logger.info(f"更新目录缓存: {filename} (ID: {file_id}, 路径: {full_path})")
             return True
         except Exception as e:
-            logger.error(f"更新目录缓存失败: {str(e)}")
+            logger.error(f"更新目录缓存失败: {e}")
             return False
     
     def full_sync_directory_cache(self):
@@ -641,7 +659,6 @@ class Pan123Client:
                 logger.info("已清空旧缓存数据表")
 
             self.directory_cache = {}
-            logger.info("已清空内存缓存")
             update_count = 0
             
             for base_dir_id in self.export_base_dir_ids:
@@ -651,14 +668,13 @@ class Pan123Client:
             logger.info(f"全量同步完成，更新 {update_count} 个目录")
             return update_count
         except Exception as e:
-            logger.error(f"全量同步失败: {str(e)}")
+            logger.error(f"全量同步失败: {e}")
             return 0
     
     def sync_directory(self, directory_id, current_path, base_dir_id, current_depth=0):
         """同步指定目录及其子目录"""
-        logger.info(f"开始同步目录: '{current_path}' (ID: {directory_id}, 深度: {current_depth})")
-        update_count = 0
         last_file_id = 0
+        update_count = 0
         
         while True:
             url = f"{OPEN_API_HOST}{API_PATHS['LIST_FILES_V2']}"
@@ -708,15 +724,13 @@ class Pan123Client:
                 if last_file_id == -1:
                     break
             except Exception as e:
-                logger.error(f"同步目录出错: {str(e)}")
+                logger.error(f"同步目录出错: {e}")
                 break
         
-        logger.info(f"同步完成: '{current_path}' (ID: {directory_id}), 更新 {update_count} 个目录")
         return update_count
     
     def get_directory_files(self, directory_id=0, base_path="", current_path=""):
         """获取目录下的所有文件"""
-        logger.info(f"获取目录内容 (ID: {directory_id}, 基础路径: '{base_path}', 当前路径: '{current_path}')")
         all_files = []
         
         if not self.token_manager.ensure_token_valid():
@@ -772,15 +786,13 @@ class Pan123Client:
                 if last_file_id == -1:
                     break
             except Exception as e:
-                logger.error(f"获取目录列表出错: {str(e)}")
+                logger.error(f"获取目录列表出错: {e}")
                 return all_files
         
-        logger.info(f"找到 {len(all_files)} 个文件 (ID: {directory_id})")
         return all_files
 
     def clear_trash(self):
         """清空回收站"""
-        logger.info("清空回收站中...")
         try:
             url = f"{PAN_HOST}{API_PATHS['CLEAR_TRASH']}"
             headers = self._get_auth_headers()
@@ -794,7 +806,7 @@ class Pan123Client:
                 return True
             return False
         except Exception as e:
-            logger.error(f"清空回收站出错: {str(e)}")
+            logger.error(f"清空回收站出错: {e}")
             return False
    
     def extract_share_info(self, share_url):
@@ -814,7 +826,6 @@ class Pan123Client:
         try:
             # 提取分享信息
             share_key, password = self.extract_share_info(share_url)
-            logger.info(f"开始转存分享: key={share_key}, password={password}")
             
             # 递归获取所有文件
             files = self._get_share_files_recursive(share_key, password, "0", "")
@@ -853,10 +864,8 @@ class Pan123Client:
                     folder = self.create_folder(parent_id, part)
                     if folder:
                         dir_map[current_path] = folder["FileId"]
-                        logger.info(f"创建目录: {current_path} (ID: {folder['FileId']})")
                         parent_id = folder["FileId"]
                     else:
-                        logger.warning(f"创建目录失败: {current_path}")
                         break
             
             # 转存文件
@@ -887,7 +896,6 @@ class Pan123Client:
                             "file_name": file_path,
                             "size": file_info["size"]
                         })
-                        logger.info(f"文件转存成功: {file_path}")
                     else:
                         failure_count += 1
                         results.append({
@@ -896,7 +904,6 @@ class Pan123Client:
                             "size": file_info["size"],
                             "error": "秒传失败"
                         })
-                        logger.warning(f"文件秒传失败: {file_path}")
                 except Exception as e:
                     failure_count += 1
                     results.append({
@@ -905,11 +912,10 @@ class Pan123Client:
                         "size": file_info["size"],
                         "error": str(e)
                     })
-                    logger.error(f"文件转存出错: {file_path} - {str(e)}")
             
             return success_count, failure_count, results, total_size
         except Exception as e:
-            logger.error(f"保存分享文件失败: {str(e)}")
+            logger.error(f"保存分享文件失败: {e}")
             return 0, 0, [], 0
     
     def _get_share_files_recursive(self, share_key, password, fid, current_path):
@@ -983,17 +989,15 @@ class Pan123Client:
                 page += 1
                 
             except Exception as e:
-                logger.error(f"获取分享文件时出错: {str(e)}")
+                logger.error(f"获取分享文件时出错: {e}")
                 break
         
-        logger.info(f"获取到 {len(items)} 个分享项目 (fid={fid})")
         return items
 
 class FastLinkProcessor:
     @staticmethod
     def parse_share_link(share_link):
         """解析秒传链接"""
-        logger.info("解析秒传链接...")
         common_base_path = ""
         is_common_path_format = False
         is_v2_etag_format = False
@@ -1041,7 +1045,6 @@ class FastLinkProcessor:
                 "is_v2_etag": is_v2_etag_format
             })
         
-        logger.info(f"解析到 {len(files)} 个文件")
         return files
     
     @staticmethod
@@ -1070,7 +1073,7 @@ class FastLinkProcessor:
             
             return hex_str
         except Exception as e:
-            logger.error(f"ETag转换失败: {str(e)}")
+            logger.error(f"ETag转换失败: {e}")
             return optimized_etag
 
 class TelegramBotHandler:
@@ -1111,19 +1114,18 @@ class TelegramBotHandler:
         
         try:
             self.updater.bot.set_my_commands(commands)
-            logger.info("已设置Telegram Bot菜单命令")
         except Exception as e:
-            logger.error(f"设置菜单命令失败: {str(e)}")
+            logger.error(f"设置菜单命令失败: {e}")
     
     def start(self):
         """启动机器人"""
         try:
-            self.updater.start_polling()
+            # 启动轮询并清除历史消息
+            self.updater.start_polling(drop_pending_updates=True)
             logger.info("🤖 机器人已启动，等待消息...")
-            logger.info(f"管理员用户ID: {self.allowed_user_ids}")
             self.updater.idle()
         except Exception as e:
-            logger.error(f"启动机器人失败: {str(e)}")
+            logger.error(f"启动机器人失败: {e}")
     
     # 管理员权限检查装饰器
     def admin_required(func):
@@ -1140,10 +1142,8 @@ class TelegramBotHandler:
         def delete():
             try:
                 context.bot.delete_message(chat_id=chat_id, message_id=message_id)
-            except Exception as e:
-                # 特殊处理群聊消息删除权限问题
-                if "message can't be deleted" in str(e):
-                    logger.warning(f"无权限删除消息: {chat_id}/{message_id}")
+            except Exception:
+                pass
         threading.Timer(delay, delete).start()
     
     def send_auto_delete_message(self, update, context, text, delay=3, chat_id=None, parse_mode=None):
@@ -1187,16 +1187,6 @@ class TelegramBotHandler:
                 uid = uid[:3] + "*" * (len(uid) - 6) + uid[-3:]
             
             # 格式化存储空间
-            def format_size(size_bytes):
-                if size_bytes >= 1024 ** 4:
-                    return f"{size_bytes / (1024 ** 4):.2f} TB"
-                elif size_bytes >= 1024 ** 3:
-                    return f"{size_bytes / (1024 ** 3):.2f} GB"
-                elif size_bytes >= 1024 ** 2:
-                    return f"{size_bytes / (1024 ** 2):.2f} MB"
-                else:
-                    return f"{size_bytes / 1024:.2f} KB"
-            
             space_permanent = format_size(user_info.get("spacePermanent", 0))
             space_used = format_size(user_info.get("spaceUsed", 0))
             direct_traffic = format_size(user_info.get("directTraffic", 0))
@@ -1204,7 +1194,7 @@ class TelegramBotHandler:
             # 计算存储空间使用率
             if user_info.get("spacePermanent", 0) > 0:
                 usage_percent = (user_info.get("spaceUsed", 0) / user_info.get("spacePermanent", 1)) * 100
-                usage_bar = self.generate_usage_bar(usage_percent)
+                usage_bar = generate_usage_bar(usage_percent)
             else:
                 usage_percent = 0
                 usage_bar = ""
@@ -1244,16 +1234,9 @@ class TelegramBotHandler:
                 parse_mode="HTML",
                 disable_web_page_preview=True
             )
-            logger.info("已发送用户信息")
         except Exception as e:
-            logger.error(f"处理/start命令出错: {str(e)}")
+            logger.error(f"处理/start命令出错: {e}")
             self.send_auto_delete_message(update, context, "❌ 获取用户信息失败")
-
-    def generate_usage_bar(self, percent, length=20):
-        """生成使用率进度条"""
-        filled = int(round(length * percent / 100))
-        empty = length - filled
-        return "[" + "█" * filled + "░" * empty + "]"
 
     def search_database_by_name(self, name_pattern):
         """在数据库中进行模糊搜索"""
@@ -1263,10 +1246,9 @@ class TelegramBotHandler:
                 c = conn.cursor()
                 c.execute("SELECT * FROM directory_cache WHERE filename LIKE ? ORDER BY filename", (f'%{name_pattern}%',))
                 rows = c.fetchall()
-                logger.info(f"数据库中找到 {len(rows)} 个匹配项: '{name_pattern}'")
                 return [dict(row) for row in rows]
         except Exception as e:
-            logger.error(f"数据库搜索失败: {str(e)}")
+            logger.error(f"数据库搜索失败: {e}")
             return []
     
     def get_user_privilege(self, user_id):
@@ -1280,7 +1262,7 @@ class TelegramBotHandler:
                 if row:
                     return dict(row)
         except Exception as e:
-            logger.error(f"查询用户权限失败: {str(e)}")
+            logger.error(f"查询用户权限失败: {e}")
         return None
     
     def update_user_export_count(self, user_id, folder_count):
@@ -1315,7 +1297,7 @@ class TelegramBotHandler:
                 conn.commit()
             return True
         except Exception as e:
-            logger.error(f"更新用户导出次数失败: {str(e)}")
+            logger.error(f"更新用户导出次数失败: {e}")
             return False
 
     def export_command(self, update: Update, context: CallbackContext):
@@ -1329,11 +1311,8 @@ class TelegramBotHandler:
         if in_group:
             try:
                 update.message.delete()
-            except Exception as e:
-                if "Message to delete not found" in str(e):
-                    logger.info(f"用户消息已被自动删除或不存在")
-                else:
-                    logger.warning(f"删除群消息失败: {str(e)}")
+            except Exception:
+                pass
 
         if not search_query:
             self.send_auto_delete_message(update, context, "❌ 请指定文件夹名称！格式: /export <文件夹名称>")
@@ -1398,9 +1377,9 @@ class TelegramBotHandler:
             
             action_buttons = [
                 InlineKeyboardButton("✅ 全选", callback_data="export_select_all"),
-                InlineKeyboardButton("❌ 取消全选", callback_data="export_deselect_all"),
-                InlineKeyboardButton("🚀 开始导出", callback_data="export_confirm"),
-                InlineKeyboardButton("❌ 取消操作", callback_data="export_cancel")
+                InlineKeyboardButton("🔄 反选", callback_data="export_deselect_all"),
+                InlineKeyboardButton("🚀 导出", callback_data="export_confirm"),
+                InlineKeyboardButton("❌ 退出", callback_data="export_cancel")
             ]
             
             keyboard.append(action_buttons[:2])
@@ -1432,8 +1411,8 @@ class TelegramBotHandler:
                 name=f"export_timeout_{message.message_id}"
             )
         except Exception as e:
-            logger.error(f"搜索文件夹失败: {str(e)}")
-            self.send_auto_delete_message(update, context, f"❌ 搜索失败: {str(e)}")
+            logger.error(f"搜索文件夹失败: {e}")
+            self.send_auto_delete_message(update, context, f"❌ 搜索失败: {e}")
 
     def export_choice_callback(self, update: Update, context: CallbackContext):
         """处理导出选择的回调"""
@@ -1489,7 +1468,7 @@ class TelegramBotHandler:
         
         action_buttons = [
             InlineKeyboardButton("✅ 全选", callback_data="export_select_all"),
-            InlineKeyboardButton("❌ 取消全选", callback_data="export_deselect_all"),
+            InlineKeyboardButton("🔄 反选", callback_data="export_deselect_all"),
             InlineKeyboardButton(f"🚀 导出({selected_count})", callback_data="export_confirm"),
             InlineKeyboardButton("❌ 取消", callback_data="export_cancel")
         ]
@@ -1574,17 +1553,11 @@ class TelegramBotHandler:
                     chat_id=context.user_data['group_chat_id'],
                     message_id=context.user_data['group_temp_msg_id']
                 )
-                logger.info("已成功撤回临时消息")
-            except Exception as e:
-                if "Message to delete not found" in str(e):
-                    logger.info("临时消息已被自动删除或不存在")
-                elif "message can't be deleted" in str(e):
-                    logger.info("无权限删除消息，可能是群组设置限制")
-                else:
-                    logger.warning(f"撤回群消息失败: {str(e)}")
-
+            except Exception:
+                pass
         
-        # # 发送新提示
+        # 发送新提示
+        if in_group:
             query.edit_message_text(f"⏳ 开始导出 {folder_count} 个文件夹到私聊...")
             self.auto_delete_message(context, query.message.chat_id, query.message.message_id, 3)
         else:
@@ -1606,7 +1579,10 @@ class TelegramBotHandler:
             folder_name = selected_folder["filename"]
             folder_path = selected_folder["full_path"]
             
-            logger.info(f"处理文件夹 [{i+1}/{total}]: {folder_name} (ID: {folder_id})")
+            files = self.pan_client.get_directory_files(folder_id, folder_name)
+            if not files:
+                logger.warning(f"文件夹为空: {folder_name}")
+                continue
             
             # 每处理3个文件夹更新一次进度
             if i % 3 == 0:
@@ -1616,31 +1592,12 @@ class TelegramBotHandler:
                         text=f"⏳ 正在处理文件夹 [{i+1}/{total}]:\n├ 名称: {folder_name}\n└ 路径: {folder_path}"
                     )
                     progress_messages.append(msg.message_id)
-                except Exception as e:
-                    logger.warning(f"发送进度消息失败: {str(e)}")
+                except Exception:
+                    pass
             
-            files = self.pan_client.get_directory_files(folder_id, folder_name)
-            if not files:
-                logger.warning(f"文件夹为空: {folder_name}")
-                continue
-            
-            logger.info(f"文件夹 '{folder_name}' 中找到 {len(files)} 个文件")
-
             # 计算文件统计信息
             total_size = sum(file_info["size"] for file_info in files)
             file_count = len(files)
-            # 格式化总大小
-            def format_size(size_bytes):
-                if size_bytes >= 1024 ** 4:
-                    return f"{size_bytes / (1024 ** 4):.2f} TB"
-                elif size_bytes >= 1024 ** 3:
-                    return f"{size_bytes / (1024 ** 3):.2f} GB"
-                elif size_bytes >= 1024 ** 2:
-                    return f"{size_bytes / (1024 ** 2):.2f} MB"
-                elif size_bytes >= 1024:
-                    return f"{size_bytes / 1024:.2f} KB"
-                else:
-                    return f"{size_bytes} bytes"
             
             json_data = {
                 "usesBase62EtagsInExport": False,
@@ -1655,7 +1612,6 @@ class TelegramBotHandler:
             }
             
             clean_folder_name = re.sub(r'[\\/*?:"<>|]', "", folder_name)
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             file_name = f"{clean_folder_name}.json"
             
             with open(file_name, "w", encoding="utf-8") as f:
@@ -1688,7 +1644,7 @@ class TelegramBotHandler:
                             caption=caption
                         )
                 except Exception as e:
-                    logger.error(f"私聊发送失败: {str(e)}")
+                    logger.error(f"私聊发送失败: {e}")
                     # 在群聊中提示用户
                     context.bot.send_message(
                         chat_id=context.user_data['group_chat_id'],
@@ -1705,7 +1661,6 @@ class TelegramBotHandler:
                 )               
             
             os.remove(file_name)
-            logger.info(f"已发送导出文件: {file_name}")
         
         # 更新用户导出次数
         self.update_user_export_count(user_id, folder_count)
@@ -1715,9 +1670,8 @@ class TelegramBotHandler:
         for msg_id in progress_messages:
             try:
                 context.bot.delete_message(chat_id=chat_id, message_id=msg_id)
-            except Exception as e:
-                if "Message to delete not found" not in str(e):
-                    logger.warning(f"删除进度消息失败: {str(e)}")
+            except Exception:
+                pass
         
         self.cleanup_export_context(context.user_data)
  
@@ -1731,7 +1685,6 @@ class TelegramBotHandler:
             self.send_auto_delete_message(update, context, "❌ 请发送JSON格式的文件！")
             return
         
-        logger.info(f"收到JSON文件: {file_name}")
         self.send_auto_delete_message(update, context, "📥 收到JSON文件，开始下载并解析...")
         
         file = context.bot.get_file(document.file_id)
@@ -1742,30 +1695,27 @@ class TelegramBotHandler:
             with open(file_path, "r", encoding="utf-8") as f:
                 json_data = json.load(f)
             os.remove(file_path)
-            logger.info(f"解析JSON文件: {file_name}")
             self.process_json_file(update, context, json_data)
         except Exception as e:
-            logger.error(f"处理JSON文件出错: {str(e)}")
-            self.send_auto_delete_message(update, context, f"❌ 处理JSON文件时出错: {str(e)}")
+            logger.error(f"处理JSON文件出错: {e}")
+            self.send_auto_delete_message(update, context, f"❌ 处理JSON文件时出错: {e}")
     
     @admin_required
     def process_fast_link(self, update: Update, context: CallbackContext, share_link):
         """处理秒传链接转存"""
         try:
-            logger.info(f"处理秒传链接: {share_link[:50]}...")
             files = FastLinkProcessor.parse_share_link(share_link)
             if not files:
                 logger.warning("无法解析秒传链接或链接中无有效文件信息")
                 self.send_auto_delete_message(update, context, "❌ 无法解析秒传链接")
                 return
             
-            logger.info(f"开始转存 {len(files)} 个文件...")
             self.send_auto_delete_message(update, context, f"✅ 解析成功！找到 {len(files)} 个文件，开始转存...")
             results, filtered_count, elapsed_time, original_total_count, original_total_size = self.transfer_files(update, context, files)
             self.send_transfer_results(update, context, results, filtered_count, elapsed_time, original_total_count, original_total_size)
         except Exception as e:
-            logger.error(f"处理秒传链接出错: {str(e)}")
-            self.send_auto_delete_message(update, context, f"❌ 处理秒传链接时出错: {str(e)}")
+            logger.error(f"处理秒传链接出错: {e}")
+            self.send_auto_delete_message(update, context, f"❌ 处理秒传链接时出错: {e}")
     
     @admin_required
     def process_json_file(self, update: Update, context: CallbackContext, json_data):
@@ -1794,13 +1744,12 @@ class TelegramBotHandler:
                     "is_v2_etag": json_data.get("usesBase62EtagsInExport", False)
                 })
             
-            logger.info(f"开始转存 {len(files)} 个文件...")
             self.send_auto_delete_message(update, context, f"✅ 解析成功！找到 {len(files)} 个文件，开始转存...")
             results, filtered_count, elapsed_time, original_total_count, original_total_size = self.transfer_files(update, context, files)
             self.send_transfer_results(update, context, results, filtered_count, elapsed_time, original_total_count, original_total_size)
         except Exception as e:
-            logger.error(f"处理JSON文件出错: {str(e)}")
-            self.send_auto_delete_message(update, context, f"❌ 处理JSON文件时出错: {str(e)}")
+            logger.error(f"处理JSON文件出错: {e}")
+            self.send_auto_delete_message(update, context, f"❌ 处理JSON文件时出错: {e}")
     
     def transfer_files(self, update: Update, context: CallbackContext, files):
         """转存文件列表"""
@@ -1813,20 +1762,16 @@ class TelegramBotHandler:
         RATE_LIMIT = TRANSFER_RATE_LIMIT
         last_request_time = time.time()
         
-        logger.info(f"开始转存 {original_total_count} 个文件...")
-        
         for i, file_info in enumerate(files):
             file_path = file_info["file_name"]
             file_size = file_info["size"]
             
             if not is_allowed_file(file_path):
-                logger.info(f"跳过非视频/字幕文件: {file_path}")
                 filtered_count += 1
                 continue
                 
             # 每处理10个文件显示一次进度
             if i % 10 == 0:
-                logger.info(f"处理文件 [{i+1}/{original_total_count}]: {file_path}")
                 self.send_auto_delete_message(
                     update, context, 
                     f"⏳ 正在处理文件 [{i+1}/{original_total_count}]\n文件名: {os.path.basename(file_path)}",
@@ -1888,7 +1833,7 @@ class TelegramBotHandler:
                     "success": False,
                     "file_name": file_path,
                     "size": file_size,
-                    "error": f"网络错误: {str(e)}"
+                    "error": f"网络错误: {e}"
                 })
                 time.sleep(3.0)
             except Exception as e:
@@ -1901,7 +1846,6 @@ class TelegramBotHandler:
                 time.sleep(2.0)
         
         elapsed_time = time.time() - start_time
-        logger.info(f"文件转存完成，成功: {sum(1 for r in results if r['success'])}, 失败: {len(results) - sum(1 for r in results if r['success'])}")
         return results, filtered_count, elapsed_time, original_total_count, original_total_size
     
     def send_transfer_results(self, update: Update, context: CallbackContext, 
@@ -1924,8 +1868,8 @@ class TelegramBotHandler:
         result_text = (
             f"📊 转存完成！\n"
             f"├ 文件数量: {original_total_count}\n"
-            f"├ 文件大小: {original_total_size_gb:.2f} GB\n"
-            f"├ 成功数量: {success_count} (大小: {success_size_gb:.2f} GB)\n"
+            f"├ 文件大小: {format_size(original_total_size)}\n"
+            f"├ 成功数量: {success_count} (大小: {format_size(success_size)})\n"
             f"├ 失败数量: {failed_count}\n"
             f"├ 保存目录: {DEFAULT_SAVE_DIR or '根目录'}\n"
             f"└ 耗时: {time_str}\n"
@@ -1943,7 +1887,6 @@ class TelegramBotHandler:
                 result_text += f"\n...及其他 {failed_count - 10} 个失败文件"
         
         context.bot.send_message(chat_id=update.message.chat_id, text=result_text)
-        logger.info("已发送转存结果")
     
     @admin_required
     def sync_full_command(self, update: Update, context: CallbackContext):
@@ -1958,7 +1901,6 @@ class TelegramBotHandler:
             reply_markup=reply_markup
         )
         context.user_data['confirmation_message_id'] = message.message_id
-        logger.info("收到/sync_full命令")
 
     def button_callback(self, update: Update, context: CallbackContext):
         """处理按钮回调"""
@@ -1980,13 +1922,11 @@ class TelegramBotHandler:
                 self.execute_full_sync(update, context)
             else:
                 context.bot.send_message(chat_id=chat_id, text="❌ 全量同步已取消")
-                logger.info("全量同步已取消")
 
     def execute_full_sync(self, update: Update, context: CallbackContext):
         """执行全量同步"""
         chat_id = getattr(context, '_chat_id', None)
         self.send_auto_delete_message(update, context, "🔄 正在执行全量同步...", chat_id=chat_id)
-        logger.info("开始执行全量同步")
         
         try:
             start_time = time.time()
@@ -1997,9 +1937,8 @@ class TelegramBotHandler:
                 f"✅ 全量同步完成！\n├ 更新目录: {update_count} 个\n└ 耗时: {elapsed:.2f}秒",
                 chat_id=chat_id
             )
-            logger.info(f"全量同步完成，耗时: {elapsed:.2f}秒")
         except Exception as e:
-            logger.error(f"全量同步失败: {str(e)}")
+            logger.error(f"全量同步失败: {e}")
             self.send_auto_delete_message(update, context, "❌ 全量同步失败", chat_id=chat_id)
             
         if hasattr(context, '_chat_id'):
@@ -2008,26 +1947,20 @@ class TelegramBotHandler:
     @admin_required
     def clear_trash_command(self, update: Update, context: CallbackContext):
         """处理/clear_trash命令"""
-        logger.info("收到/clear_trash命令")
         self.send_auto_delete_message(update, context, "🔄 正在清空回收站...")
         try:
             if self.pan_client.clear_trash():
                 self.send_auto_delete_message(update, context, "✅ 回收站已成功清空", delay=5)
-                logger.info("回收站已清空")
             else:
                 self.send_auto_delete_message(update, context, "❌ 清空回收站失败", delay=5)
-                logger.warning("清空回收站失败")
         except Exception as e:
-            logger.error(f"清空回收站出错: {str(e)}")
+            logger.error(f"清空回收站出错: {e}")
             self.send_auto_delete_message(update, context, "❌ 清空回收站时出错", delay=5)
 
     @admin_required
     def process_share_link(self, update: Update, context: CallbackContext, share_url):
         """处理123云盘分享链接（保留目录结构）"""
         try:
-            logger.info(f"处理分享链接: {share_url}")
-            self.send_auto_delete_message(update, context, "🔗 正在解析分享链接...")
-            
             # 在后台线程中处理转存
             def do_share_transfer():
                 try:
@@ -2038,15 +1971,12 @@ class TelegramBotHandler:
                     )
                     elapsed = time.time() - start_time
                     
-                    # 计算总大小（GB）
-                    total_size_gb = total_size / (1024 ** 3)
-                    
                     # 构建结果消息
                     message = (
                         f"📦 分享链接转存完成！\n"
                         f"├ 成功: {success} 文件\n"
                         f"├ 失败: {failure} 文件\n"
-                        f"├ 总大小: {total_size_gb:.2f} GB\n"
+                        f"├ 总大小: {format_size(total_size)}\n"
                         f"├ 保存到: {DEFAULT_SAVE_DIR}\n"
                         f"└ 耗时: {elapsed:.1f}秒"
                     )
@@ -2072,10 +2002,10 @@ class TelegramBotHandler:
                         )
                     
                 except Exception as e:
-                    logger.error(f"处理分享链接出错: {str(e)}")
+                    logger.error(f"处理分享链接出错: {e}")
                     self.send_auto_delete_message(
                         update, context, 
-                        f"❌ 处理分享链接时出错: {str(e)}",
+                        f"❌ 处理分享链接时出错: {e}",
                         chat_id=update.message.chat_id
                     )
             
@@ -2088,8 +2018,8 @@ class TelegramBotHandler:
             )
             
         except Exception as e:
-            logger.error(f"处理分享链接出错: {str(e)}")
-            self.send_auto_delete_message(update, context, f"❌ 处理分享链接时出错: {str(e)}")
+            logger.error(f"处理分享链接出错: {e}")
+            self.send_auto_delete_message(update, context, f"❌ 处理分享链接时出错: {e}")
 
     @admin_required
     def handle_text(self, update: Update, context: CallbackContext):
@@ -2113,8 +2043,59 @@ class TelegramBotHandler:
     def add_command(self, update: Update, context: CallbackContext):
         """处理/add命令"""
         args = context.args
+        reply_to = update.message.reply_to_message
+        chat_id = update.message.chat_id
+        message_id = update.message.message_id
+
+        # 情况1：回复消息模式
+        if reply_to:
+            try:
+                # 获取被回复用户的信息
+                target_user = reply_to.from_user
+                # 确定权限级别
+                privilege_level = "user"
+                if args and args[0].lower() == "svip":
+                    privilege_level = "svip"
+                # 添加用户到数据库
+                with closing(sqlite3.connect(DB_PATH)) as conn:
+                    c = conn.cursor()
+                    c.execute('''INSERT OR REPLACE INTO user_privileges 
+                              (user_id, privilege_level) 
+                              VALUES (?, ?)''', 
+                              (target_user.id, privilege_level))
+                    conn.commit()
+
+                # 构建响应消息
+                name = target_user.first_name or target_user.username or str(target_user.id)
+                response = (
+                    f"✅ 已添加用户: {name}\n"
+                    f"├ ID: `{target_user.id}`\n"
+                    f"└ 权限: {privilege_level}"
+                )
+                # 发送回复消息并安排自动删除
+                msg = update.message.reply_text(response, parse_mode="Markdown")
+                self.auto_delete_message(context, chat_id, msg.message_id, 5)
+                # 删除管理员发送的命令消息
+                try:
+                    context.bot.delete_message(chat_id=chat_id, message_id=message_id)
+                except Exception as e:
+                    logger.warning(f"无法删除命令消息: {e}")
+                return
+            except Exception as e:
+                logger.error(f"通过回复添加用户失败: {e}")
+                msg = update.message.reply_text(f"❌ 添加失败: {e}")
+                self.auto_delete_message(context, chat_id, msg.message_id, 5)
+                return
+            
+        # 情况2：传统参数模式
         if not args or len(args) < 1:
-            update.message.reply_text("❌ 用法: /add [svip] <用户ID>")
+            usage = (
+                "❌ 用法:\n"
+                "1. 回复用户消息: `/add [svip]`\n"
+                "2. 直接添加: `/add [svip] <用户ID>`"
+            )
+            msg = update.message.reply_text(usage, parse_mode="Markdown")
+            self.auto_delete_message(context, chat_id, msg.message_id, 5)
             return
         
         try:
@@ -2122,6 +2103,7 @@ class TelegramBotHandler:
             if args[0].lower() == "svip":
                 if len(args) < 2:
                     update.message.reply_text("❌ 请提供用户ID")
+                    self.auto_delete_message(context, chat_id, msg.message_id, 5)
                     return
                 user_id = int(args[1])
                 privilege_level = "svip"
@@ -2137,24 +2119,81 @@ class TelegramBotHandler:
                             VALUES (?, ?)''', 
                           (user_id, privilege_level))
                 conn.commit()
-
-            self.send_auto_delete_message(update, context, f"✅ 成功添加用户: {user_id} ({privilege_level}权限)")
-
-            logger.info(f"添加用户: {user_id} ({privilege_level})")
+            response = (
+                f"✅ 已添加用户\n"
+                f"├ ID: `{user_id}`\n"
+                f"└ 权限: {privilege_level}"
+            )
+            # 发送回复消息并安排自动删除
+            msg = update.message.reply_text(response, parse_mode="Markdown")
+            self.auto_delete_message(context, chat_id, msg.message_id, 5)
+            # 删除管理员发送的命令消息
+            try:
+                context.bot.delete_message(chat_id=chat_id, message_id=message_id)
+            except Exception as e:
+                logger.warning(f"无法删除命令消息: {e}")
+              
         except (ValueError, IndexError):
-            update.message.reply_text("❌ 无效的用户ID格式")
+            msg = update.message.reply_text("❌ 无效的用户ID格式")
+            self.auto_delete_message(context, chat_id, msg.message_id, 5)
         except Exception as e:
-            logger.error(f"添加用户失败: {str(e)}")
-            self.send_auto_delete_message(update, context, f"❌ 添加用户失败: {str(e)}")
+            logger.error(f"添加用户失败: {e}")
+            msg = update.message.reply_text(f"❌ 添加失败: {e}")
+            self.auto_delete_message(context, chat_id, msg.message_id, 5)
     
     @admin_required
     def delete_command(self, update: Update, context: CallbackContext):
         """处理/delete命令"""
         args = context.args
+        reply_to = update.message.reply_to_message
+        chat_id = update.message.chat_id
+        message_id = update.message.message_id
+
+        # 情况1：回复消息模式
+        if reply_to:
+            try:
+                # 获取被回复用户的信息
+                target_user = reply_to.from_user
+                # 删除用户
+                with closing(sqlite3.connect(DB_PATH)) as conn:
+                    c = conn.cursor()
+                    c.execute("DELETE FROM user_privileges WHERE user_id = ?", (target_user.id,))
+                    conn.commit()
+                    if c.rowcount > 0:
+                        # 构建响应消息
+                        name = target_user.first_name or target_user.username or str(target_user.id)
+                        response = (
+                            f"✅ 已删除用户: {name}\n"
+                            f"└ ID: `{target_user.id}`"
+                        )
+                        # 发送回复消息并安排自动删除
+                        msg = update.message.reply_text(response, parse_mode="Markdown")
+                        self.auto_delete_message(context, chat_id, msg.message_id, 5)
+                        # 删除管理员发送的命令消息
+                        try:
+                            context.bot.delete_message(chat_id=chat_id, message_id=message_id)
+                        except Exception as e:
+                            logger.warning(f"无法删除命令消息: {e}")
+                    else:
+                        msg = update.message.reply_text(f"❌ 用户不存在: {target_user.id}")
+                        self.auto_delete_message(context, chat_id, msg.message_id, 5)
+                return
+            except Exception as e:
+                logger.error(f"通过回复删除用户失败: {e}")
+                msg = update.message.reply_text(f"❌ 删除失败: {e}")
+                self.auto_delete_message(context, chat_id, msg.message_id, 5)
+                return
+            
+        # 情况2：传统参数模式
         if not args or len(args) < 1:
-            update.message.reply_text("❌ 用法: /delete <用户ID>")
-            return
-        
+            usage = (
+                "❌ 用法:\n"
+                "1. 回复用户消息: `/delete`\n"
+                "2. 直接删除: `/delete <用户ID>`"
+            )
+            msg = update.message.reply_text(usage, parse_mode="Markdown")
+            self.auto_delete_message(context, chat_id, msg.message_id, 5)
+            return       
         try:
             user_id = int(args[0])
             
@@ -2165,15 +2204,29 @@ class TelegramBotHandler:
                 conn.commit()
                 
                 if c.rowcount > 0:
-                    update.message.reply_text(f"✅ 成功删除用户: {user_id}")
-                    logger.info(f"删除用户: {user_id}")
+                    response = (
+                        f"✅ 已删除用户\n"
+                        f"└ ID: `{user_id}`"
+                    )
+                    # 发送回复消息并安排自动删除
+                    msg = update.message.reply_text(response, parse_mode="Markdown")
+                    self.auto_delete_message(context, chat_id, msg.message_id, 5)
+                    # 删除管理员发送的命令消息
+                    try:
+                        context.bot.delete_message(chat_id=chat_id, message_id=message_id)
+                    except Exception as e:
+                        logger.warning(f"无法删除命令消息: {e}")
                 else:
-                    update.message.reply_text(f"❌ 用户不存在: {user_id}")
+                    msg = update.message.reply_text(f"❌ 用户不存在: {user_id}")
+                    self.auto_delete_message(context, chat_id, msg.message_id, 5)
+
         except ValueError:
-            update.message.reply_text("❌ 无效的用户ID格式")
+            msg = update.message.reply_text("❌ 无效的用户ID格式")
+            self.auto_delete_message(context, chat_id, msg.message_id, 5)
         except Exception as e:
-            logger.error(f"删除用户失败: {str(e)}")
-            update.message.reply_text(f"❌ 删除用户失败: {str(e)}")
+            logger.error(f"删除用户失败: {e}")
+            msg = update.message.reply_text(f"❌ 删除失败: {e}")
+            self.auto_delete_message(context, chat_id, msg.message_id, 5)
     
     def info_command(self, update: Update, context: CallbackContext):
         """处理/info命令 - 优化版用户信息"""
@@ -2186,14 +2239,8 @@ class TelegramBotHandler:
         if chat_type in ['group', 'supergroup']:
             try:
                 context.bot.delete_message(chat_id=chat_id, message_id=update.message.message_id)
-                logger.info(f"已删除群聊中的/info消息 (用户: {user_id})")
-            except Exception as e:
-                if "Message to delete not found" in str(e):
-                    logger.info(f"消息已被自动删除或不存在 (用户: {user_id})")
-                elif "message can't be deleted" in str(e):
-                    logger.info(f"无权限删除消息 (用户: {user_id})")
-                else:
-                    logger.warning(f"删除群消息失败: {str(e)} (用户: {user_id})")
+            except Exception:
+                pass
 
         # 获取用户权限信息
         user_info = self.get_user_privilege(user_id)
@@ -2234,7 +2281,7 @@ class TelegramBotHandler:
                     join_date_row = c.fetchone()
                     join_date = join_date_row[0] if join_date_row[0] else None                     
         except Exception as e:
-            logger.error(f"查询导出历史失败: {str(e)}")
+            logger.error(f"查询导出历史失败: {e}")
             today_export = 0
             total_export = 0
             last_export = None
@@ -2313,7 +2360,6 @@ class TelegramBotHandler:
         # 组合所有消息部分
         message = "\n".join(message_parts)
         self.send_auto_delete_message(update, context, message, delay=10, parse_mode="HTML")
-        logger.info(f"发送用户信息: {user_id}")
 
 def main():
     # 从环境变量读取配置
@@ -2343,7 +2389,6 @@ def main():
     
     logger.info("初始化Telegram机器人...")
     bot_handler = TelegramBotHandler(BOT_TOKEN, pan_client, ADMIN_USER_IDS)
-    logger.info("机器人启动中...")
     bot_handler.start()
 
 if __name__ == "__main__":
