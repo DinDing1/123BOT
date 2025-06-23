@@ -1093,6 +1093,7 @@ class TelegramBotHandler:
         self.dispatcher.add_handler(CommandHandler("add", self.add_command))
         self.dispatcher.add_handler(CommandHandler("delete", self.delete_command))
         self.dispatcher.add_handler(CommandHandler("info", self.info_command))
+        self.dispatcher.add_handler(CommandHandler("refresh_token", self.refresh_token_command))
         self.dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, self.handle_text))
         self.dispatcher.add_handler(MessageHandler(Filters.document, self.handle_document))
         self.dispatcher.add_handler(CallbackQueryHandler(self.button_callback))
@@ -1110,6 +1111,7 @@ class TelegramBotHandler:
             BotCommand("add", "添加用户"),
             BotCommand("delete", "删除用户"),            
             BotCommand("clear_trash", "清空回收站"),
+            BotCommand("refresh_token", "强制刷新Token"),
         ]
         
         try:
@@ -2364,6 +2366,41 @@ class TelegramBotHandler:
         # 组合所有消息部分
         message = "\n".join(message_parts)
         self.send_auto_delete_message(update, context, message, delay=10, parse_mode="HTML")
+
+    @admin_required
+    def refresh_token_command(self, update: Update, context: CallbackContext):
+        """处理/refresh_token命令 - 强制刷新Token"""
+        try:
+            # 强制获取新Token
+            if self.pan_client.token_manager.get_new_token():
+                # 获取新的Token信息
+                new_token = self.pan_client.token_manager.access_token
+                new_expiry = self.pan_client.token_manager.token_expiry
+                
+                # 构建响应消息
+                message = (
+                    "✅ Token 强制刷新成功！\n"
+                    f"├ 新Token: `{new_token[:12]}...{new_token[-12:]}`\n"
+                    f"└ 有效期至: {new_expiry.strftime('%Y-%m-%d %H:%M:%S UTC')}"
+                )
+            else:
+                message = "❌ Token 刷新失败，请检查日志"
+                
+            update.message.reply_text(message, parse_mode="Markdown")
+            
+            # 删除用户消息（如果是群聊）
+            if update.message.chat.type in ['group', 'supergroup']:
+                try:
+                    context.bot.delete_message(
+                        chat_id=update.message.chat_id,
+                        message_id=update.message.message_id
+                    )
+                except Exception:
+                    pass
+                    
+        except Exception as e:
+            logger.error(f"刷新Token失败: {e}")
+            self.send_auto_delete_message(update, context, f"❌ 刷新Token失败: {e}")
 
 def main():
     # 从环境变量读取配置
