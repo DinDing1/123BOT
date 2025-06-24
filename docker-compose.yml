@@ -19,6 +19,13 @@ services:
       - EXPORT_BASE_DIR=媒体库
       #迭代深度，不填就不限制深度，建议填写，比如我云盘结构是：媒体库/电视剧/国产剧/琅琊榜（2021）/S01/琅琊榜.2025.S01E01.mkv;我填写2，就是迭代的时候只迭代到琅琊榜（2021）截至。
       - SEARCH_MAX_DEPTH=2     
-      - TG_PROXY=http://10.10.10.12:7890
+      #导出黑名单
+      - BANNED_EXPORT_NAMES=电视剧;电影   
+      #115CK
+      - COOKIES_115=
+      #115转移目录
+      - TARGET_PATH_115=中转站
+      #115转移目录
+      - CUSTOM_DIRECT_LINK_SERVICE=115公网直链服务
     volumes:
       - /vol2/1000/docker/123bot/data:/data
