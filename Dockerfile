@@ -1,5 +1,5 @@
 # 第一阶段：构建依赖和编译
-FROM python:3.12-slim AS builder
+FROM python:3.11-slim AS builder
 
 # 设置时区
 ENV TZ=Asia/Shanghai
@@ -7,7 +7,7 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 WORKDIR /app
 
-# 安装构建依赖
+# 安装构建依赖（移除了 upx）
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     python3-dev \
@@ -20,7 +20,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libreadline-dev \
     libffi-dev \
     wget \
-    upx \
     && rm -rf /var/lib/apt/lists/*
 
 # 安装依赖
@@ -34,10 +33,13 @@ COPY . .
 # 添加安全检测代码到脚本开头
 RUN echo "import sys, os" > security.py && \
     echo "def security_check():" >> security.py && \
+    echo "    # 检测调试器" >> security.py && \
     echo "    if sys.gettrace() is not None:" >> security.py && \
     echo "        sys.exit('Debugger detected! Exiting for security.')" >> security.py && \
+    echo "    # 检测调试环境变量" >> security.py && \
     echo "    if os.environ.get('PYTHON_DEBUG'):" >> security.py && \
     echo "        sys.exit('Debug environment detected! Exiting for security.')" >> security.py && \
+    echo "    # 检测容器逃逸" >> security.py && \
     echo "    if os.path.exists('/.dockerenv') and not all([" >> security.py && \
     echo "        os.path.exists('/proc/self/cgroup')," >> security.py && \
     echo "        'docker' in open('/proc/self/cgroup').read()" >> security.py && \
@@ -59,12 +61,8 @@ RUN pyinstaller --onefile --name pan_bot \
     --noconfirm \
     protected_bot.py
 
-# 使用UPX压缩可执行文件（可选但推荐）
-RUN upx --best --lzma -q -v dist/pan_bot -o dist/pan_bot_compressed && \
-    mv dist/pan_bot_compressed dist/pan_bot
-
 # 第二阶段：最小化运行时环境
-FROM python:3.12-slim
+FROM python:3.11-slim
 
 # 设置时区
 ENV TZ=Asia/Shanghai
