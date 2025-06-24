@@ -1,5 +1,5 @@
 # 第一阶段：构建依赖和编译
-FROM python:3.11-slim AS builder
+FROM python:3.12-slim AS builder
 
 # 设置时区
 ENV TZ=Asia/Shanghai
@@ -7,7 +7,7 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 WORKDIR /app
 
-# 安装构建依赖（移除了 upx）
+# 安装构建依赖
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     python3-dev \
@@ -22,9 +22,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
     && rm -rf /var/lib/apt/lists/*
 
-# 安装依赖
+# 安装依赖（修复 p115client 安装问题）
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -U pip && \
+    pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir p115client
 RUN pip install --no-cache-dir pyinstaller==6.2.0
 
 # 复制源码
@@ -62,7 +64,7 @@ RUN pyinstaller --onefile --name pan_bot \
     protected_bot.py
 
 # 第二阶段：最小化运行时环境
-FROM python:3.11-slim
+FROM python:3.12-slim
 
 # 设置时区
 ENV TZ=Asia/Shanghai
