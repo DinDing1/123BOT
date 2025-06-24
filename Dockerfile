@@ -25,22 +25,37 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # 安装依赖
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-RUN pip install --no-cache-dir pyinstaller==6.2.0
+RUN pip install --no-cache-dir pyinstaller==6.2.0 pyarmor==8.3.0
 
-# 添加安全头文件
-RUN echo "import sys, os" > security.py && \
-    echo "if sys.gettrace() or os.environ.get('PYTHON_DEBUG'):" >> security.py && \
-    echo "    sys.exit('Debugging not allowed!')" >> security.py
-
-# 复制源码并在开头添加安全检测
+# 复制源码
 COPY . .
+
+# 创建安全检测脚本
+RUN echo "import sys, os" > security.py && \
+    echo "def security_check():" >> security.py && \
+    echo "    if sys.gettrace() is not None:" >> security.py && \
+    echo "        sys.exit('Debugger detected! Exiting for security.')" >> security.py && \
+    echo "    if os.environ.get('PYTHON_DEBUG'):" >> security.py && \
+    echo "        sys.exit('Debug environment detected! Exiting for security.')" >> security.py && \
+    echo "security_check()" >> security.py
+
+# 在脚本开头插入安全检测
 RUN cat security.py 123pan_bot.py > protected_bot.py
 
-# 编译脚本
+# 使用PyArmor加密脚本
+RUN pyarmor gen --output /app/encrypted --platform linux.x86_64 protected_bot.py
+
+# 编译加密后的脚本
 RUN pyinstaller --onefile --name pan_bot \
-    --hidden-import=sqlite3 --hidden-import=telegram.ext \
-    --hidden-import=requests --hidden-import=urllib3 \
-    --key=${BUILD_KEY:-MyDefaultSecret123!} protected_bot.py
+    --add-data "encrypted:encrypted" \
+    --hidden-import=sqlite3 \
+    --hidden-import=telegram.ext \
+    --hidden-import=requests \
+    --hidden-import=urllib3 \
+    --clean \
+    --strip \
+    --noconfirm \
+    encrypted/protected_bot.py
 
 # 第二阶段：最小化运行时环境
 FROM python:3.12-slim
