@@ -3175,6 +3175,12 @@ class TelegramBotHandler:
             self.send_auto_delete_message(update, context, f"❌ 刷新Token失败: {e}")
 
 def main():
+    # 添加授权信息提示
+    logger.info("=============================================")
+    logger.info("123云盘机器人 - 专业版")
+    logger.info(f"版本: {VERSION}")
+    logger.info("授权验证通过，正在启动服务...")
+    logger.info("=============================================")
     # 从环境变量读取配置
     BOT_TOKEN = os.getenv("TG_BOT_TOKEN","")
     CLIENT_ID = os.getenv("PAN_CLIENT_ID","")
