@@ -1,9 +1,17 @@
 # 第一阶段：构建依赖和编译
-FROM python:3.11-slim as builder
+FROM python:3.12-slim AS builder
+
+# 设置时区
+ENV TZ=Asia/Shanghai
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+
+# 使用国内APT镜像源加速
+RUN sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list && \
+    sed -i 's/security.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list
 
 WORKDIR /app
 
-# 安装构建依赖
+# 安装构建依赖 (移除upx)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     python3-dev \
@@ -13,16 +21,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libncurses5-dev \
     libgdbm-dev \
     libnss3-dev \
-    libssl-dev \
     libreadline-dev \
     libffi-dev \
-    wget \
-    upx
+    wget && \
+    rm -rf /var/lib/apt/lists/*
 
 # 安装依赖
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-RUN pip install --no-cache-dir pyinstaller==6.2.0 pyarmor==8.3.0
+RUN pip install --no-cache-dir -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+RUN pip install --no-cache-dir pyinstaller==6.2.0 pyarmor==8.3.0 -i https://pypi.tuna.tsinghua.edu.cn/simple
 
 # 复制源码并加密
 COPY . .
@@ -30,10 +37,14 @@ RUN pyarmor gen --output /app/encrypted --platform linux.x86_64 --exact 123pan_b
 RUN pyinstaller --onefile --name pan_bot --add-data "encrypted:encrypted" \
     --hidden-import=sqlite3 --hidden-import=telegram.ext \
     --hidden-import=requests --hidden-import=urllib3 \
-    --key=MySecretKey123! encrypted/123pan_bot.py
+    --key=${BUILD_KEY:-MyDefaultSecret123!} encrypted/123pan_bot.py
 
 # 第二阶段：最小化运行时环境
-FROM python:3.11-slim
+FROM python:3.12-slim
+
+# 设置时区
+ENV TZ=Asia/Shanghai
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 WORKDIR /app
 
@@ -47,19 +58,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# 设置环境变量和路径
-ENV DB_PATH="/data/bot123.db"
+# 设置数据卷
 VOLUME /data
 
-# 设置默认环境变量
-ENV TG_PROXY=""
-ENV TG_BOT_TOKEN=""
-ENV PAN_CLIENT_ID=""
-ENV PAN_CLIENT_SECRET=""
-ENV TG_ADMIN_USER_IDS=""
-ENV DEFAULT_SAVE_DIR=""
-ENV EXPORT_BASE_DIR=""
-ENV SEARCH_MAX_DEPTH=""
-
 # 设置入口点
-CMD ["/app/pan_bot"]
+ENTRYPOINT ["/app/pan_bot"]
