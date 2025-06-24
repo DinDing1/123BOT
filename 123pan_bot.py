@@ -1,23 +1,3 @@
-import sys, os
-
-def security_check():
-    # 检测调试器
-    if sys.gettrace() is not None:
-        sys.exit("Debugger detected! Exiting for security.")
-    
-    # 检测调试环境变量
-    if os.environ.get('PYTHON_DEBUG'):
-        sys.exit("Debug environment detected! Exiting for security.")
-    
-    # 检测容器逃逸
-    if os.path.exists('/.dockerenv') and not all([
-        os.path.exists('/proc/self/cgroup'),
-        'docker' in open('/proc/self/cgroup').read()
-    ]):
-        sys.exit("Container escape detected! Exiting for security.")
-
-security_check()
-
 import warnings
 warnings.filterwarnings("ignore", message="python-telegram-bot is using upstream urllib3.*")
 warnings.filterwarnings("ignore", message=".*pkg_resources is deprecated.*", category=UserWarning)
