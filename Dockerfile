@@ -25,14 +25,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # 安装依赖（修复 p115client 安装问题）
 COPY requirements.txt .
 RUN pip install --no-cache-dir -U pip && \
-    pip install --no-cache-dir -r requirements.txt && \
-    pip install --no-cache-dir p115client
+    pip install --no-cache-dir -r requirements.txt
 RUN pip install --no-cache-dir pyinstaller==6.2.0
 
 # 复制源码
 COPY . .
 
-# 添加安全检测代码到脚本开头
+# 添加安全检测代码到脚本开头（已移除容器逃逸检测）
 RUN echo "import sys, os" > security.py && \
     echo "def security_check():" >> security.py && \
     echo "    # 检测调试器" >> security.py && \
@@ -41,12 +40,6 @@ RUN echo "import sys, os" > security.py && \
     echo "    # 检测调试环境变量" >> security.py && \
     echo "    if os.environ.get('PYTHON_DEBUG'):" >> security.py && \
     echo "        sys.exit('Debug environment detected! Exiting for security.')" >> security.py && \
-    echo "    # 检测容器逃逸" >> security.py && \
-    echo "    if os.path.exists('/.dockerenv') and not all([" >> security.py && \
-    echo "        os.path.exists('/proc/self/cgroup')," >> security.py && \
-    echo "        'docker' in open('/proc/self/cgroup').read()" >> security.py && \
-    echo "    ]):" >> security.py && \
-    echo "        sys.exit('Container escape detected! Exiting for security.')" >> security.py && \
     echo "security_check()" >> security.py
 
 # 将安全检测代码和主脚本合并
@@ -83,9 +76,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # 设置数据卷
 VOLUME /data
-
-# 禁用交互式shell（增强安全性）
-RUN rm -f /bin/sh /bin/bash
 
 # 设置入口点
 ENTRYPOINT ["/app/pan_bot"]
