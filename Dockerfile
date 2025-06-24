@@ -5,13 +5,9 @@ FROM python:3.12-slim AS builder
 ENV TZ=Asia/Shanghai
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
-# 使用国内APT镜像源加速
-RUN sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list && \
-    sed -i 's/security.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list
-
 WORKDIR /app
 
-# 安装构建依赖 (移除upx)
+# 安装构建依赖
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     python3-dev \
@@ -23,13 +19,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libnss3-dev \
     libreadline-dev \
     libffi-dev \
-    wget && \
-    rm -rf /var/lib/apt/lists/*
+    wget \
+    && rm -rf /var/lib/apt/lists/*
 
 # 安装依赖
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
-RUN pip install --no-cache-dir pyinstaller==6.2.0 pyarmor==8.3.0 -i https://pypi.tuna.tsinghua.edu.cn/simple
+RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir pyinstaller==6.2.0 pyarmor==8.3.0
 
 # 复制源码并加密
 COPY . .
@@ -55,7 +51,6 @@ COPY --from=builder /app/VERSION /app/
 # 安装运行时最小依赖
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libsqlite3-0 \
-    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 # 设置数据卷
