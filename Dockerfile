@@ -1,5 +1,5 @@
 # 第一阶段：构建依赖和编译
-FROM python:3.11-slim AS builder
+FROM python:3.12-slim AS builder
 
 # 设置时区
 ENV TZ=Asia/Shanghai
@@ -64,7 +64,7 @@ RUN upx --best --lzma -q -v dist/pan_bot -o dist/pan_bot_compressed && \
     mv dist/pan_bot_compressed dist/pan_bot
 
 # 第二阶段：最小化运行时环境
-FROM python:3.11-slim
+FROM python:3.12-slim
 
 # 设置时区
 ENV TZ=Asia/Shanghai
