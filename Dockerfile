@@ -44,7 +44,6 @@ RUN echo "import sys, os, hashlib" > security.py && \
     echo "    def verify_license(license_key):" >> security.py && \
     echo "        valid_hashes = [" >> security.py && \
     echo "            'f871cab818025f1f4781483ea21ccf5d',  # BY123_666ZTJ" >> security.py && \
-    echo "            '4faf43b1fc0a553c6696fcd3210ceedc',  # BY123_147ZDC" >> security.py && \
     echo "            '6d30a34ca9ec1bd5308618a24e40d5bf',  # BY123_269VBR" >> security.py && \
     echo "            'ef3b6917603fb32bbb0bffbb9f9336e7',  # BY123_135HDC" >> security.py && \
     echo "            '13546b91d0543ea599969ce501e6278d'   # BY123_690CDF" >> security.py && \
