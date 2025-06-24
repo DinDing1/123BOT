@@ -29,7 +29,11 @@ RUN pip install --no-cache-dir pyinstaller==6.2.0 pyarmor==8.3.0
 
 # 复制源码并加密
 COPY . .
-RUN pyarmor gen --output /app/encrypted --platform linux.x86_64 --exact 123pan_bot.py
+
+# 使用正确的PyArmor命令进行加密
+RUN pyarmor gen --output /app/encrypted --platform linux.x86_64 123pan_bot.py
+
+# 编译加密后的脚本
 RUN pyinstaller --onefile --name pan_bot --add-data "encrypted:encrypted" \
     --hidden-import=sqlite3 --hidden-import=telegram.ext \
     --hidden-import=requests --hidden-import=urllib3 \
