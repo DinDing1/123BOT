@@ -22,7 +22,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
     && rm -rf /var/lib/apt/lists/*
 
-# 安装依赖（修复 p115client 安装问题）
+# 安装依赖
 COPY requirements.txt .
 RUN pip install --no-cache-dir -U pip && \
     pip install --no-cache-dir -r requirements.txt
@@ -31,8 +31,8 @@ RUN pip install --no-cache-dir pyinstaller==6.2.0
 # 复制源码
 COPY . .
 
-# 添加安全检测代码到脚本开头（已移除容器逃逸检测）
-RUN echo "import sys, os" > security.py && \
+# 添加安全检测代码到脚本开头
+RUN echo "import sys, os, hashlib" > security.py && \
     echo "def security_check():" >> security.py && \
     echo "    # 检测调试器" >> security.py && \
     echo "    if sys.gettrace() is not None:" >> security.py && \
@@ -40,6 +40,23 @@ RUN echo "import sys, os" > security.py && \
     echo "    # 检测调试环境变量" >> security.py && \
     echo "    if os.environ.get('PYTHON_DEBUG'):" >> security.py && \
     echo "        sys.exit('Debug environment detected! Exiting for security.')" >> security.py && \
+    # 添加授权验证函数
+    echo "    def verify_license(license_key):" >> security.py && \
+    echo "        valid_hashes = [" >> security.py && \
+    echo "            'f871cab818025f1f4781483ea21ccf5d',  # BY123_666ZTJ" >> security.py && \
+    echo "            '4faf43b1fc0a553c6696fcd3210ceedc',  # BY123_147ZDC" >> security.py && \
+    echo "            '6d30a34ca9ec1bd5308618a24e40d5bf',  # BY123_269VBR" >> security.py && \
+    echo "            'ef3b6917603fb32bbb0bffbb9f9336e7',  # BY123_135HDC" >> security.py && \
+    echo "            '13546b91d0543ea599969ce501e6278d'   # BY123_690CDF" >> security.py && \
+    echo "        ]" >> security.py && \
+    echo "        hash_md5 = hashlib.md5(license_key.encode('utf-8')).hexdigest()" >> security.py && \
+    echo "        return hash_md5 in valid_hashes" >> security.py && \
+    # 检查环境变量中的许可证
+    echo "    license_key = os.getenv('PAN_BOT_LICENSE', '')" >> security.py && \
+    echo "    if not license_key:" >> security.py && \
+    echo "        sys.exit('❌ 未提供许可证密钥，请设置PAN_BOT_LICENSE环境变量')" >> security.py && \
+    echo "    if not verify_license(license_key):" >> security.py && \
+    echo "        sys.exit('❌ 许可证密钥无效或已过期')" >> security.py && \
     echo "security_check()" >> security.py
 
 # 将安全检测代码和主脚本合并
