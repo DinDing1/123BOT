@@ -25,19 +25,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # 安装依赖
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-RUN pip install --no-cache-dir pyinstaller==6.2.0 pyarmor==8.3.0
+RUN pip install --no-cache-dir pyinstaller==6.2.0
 
-# 复制源码并加密
+# 添加安全头文件
+RUN echo "import sys, os" > security.py && \
+    echo "if sys.gettrace() or os.environ.get('PYTHON_DEBUG'):" >> security.py && \
+    echo "    sys.exit('Debugging not allowed!')" >> security.py
+
+# 复制源码并在开头添加安全检测
 COPY . .
+RUN cat security.py 123pan_bot.py > protected_bot.py
 
-# 使用正确的PyArmor命令进行加密
-RUN pyarmor gen --output /app/encrypted --platform linux.x86_64 123pan_bot.py
-
-# 编译加密后的脚本
-RUN pyinstaller --onefile --name pan_bot --add-data "encrypted:encrypted" \
+# 编译脚本
+RUN pyinstaller --onefile --name pan_bot \
     --hidden-import=sqlite3 --hidden-import=telegram.ext \
     --hidden-import=requests --hidden-import=urllib3 \
-    --key=${BUILD_KEY:-MyDefaultSecret123!} encrypted/123pan_bot.py
+    --key=${BUILD_KEY:-MyDefaultSecret123!} protected_bot.py
 
 # 第二阶段：最小化运行时环境
 FROM python:3.12-slim
