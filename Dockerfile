@@ -16,20 +16,23 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libssl-dev \
     libreadline-dev \
     libffi-dev \
-    wget
+    wget \
+    upx
 
-# 安装依赖到系统目录而不是用户目录
+# 安装依赖
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-RUN pip install --no-cache-dir pyinstaller==6.2.0
+RUN pip install --no-cache-dir pyinstaller==6.2.0 pyarmor==8.3.0
 
-# 复制源码
+# 复制源码并加密
 COPY . .
+RUN pyarmor gen --output /app/encrypted --platform linux.x86_64 --exact 123pan_bot.py
+RUN pyinstaller --onefile --name pan_bot --add-data "encrypted:encrypted" \
+    --hidden-import=sqlite3 --hidden-import=telegram.ext \
+    --hidden-import=requests --hidden-import=urllib3 \
+    --key=MySecretKey123! encrypted/123pan_bot.py
 
-# 编译Python脚本为可执行文件
-RUN pyinstaller --onefile --name pan_bot 123pan_bot.py
-
-# 第二阶段：最终镜像
+# 第二阶段：最小化运行时环境
 FROM python:3.11-slim
 
 WORKDIR /app
@@ -37,10 +40,12 @@ WORKDIR /app
 # 从构建阶段复制编译后的程序
 COPY --from=builder /app/dist/pan_bot /app/
 COPY --from=builder /app/VERSION /app/
-# 安装运行时依赖（直接安装到系统目录）
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
 
+# 安装运行时最小依赖
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libsqlite3-0 \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
 # 设置环境变量和路径
 ENV DB_PATH="/data/bot123.db"
