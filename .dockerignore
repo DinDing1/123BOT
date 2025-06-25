@@ -3,5 +3,3 @@
 **/.git
 **/.vscode
 **/*.md
-Dockerfile
-docker-compose.yml
