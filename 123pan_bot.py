@@ -27,7 +27,7 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from urllib.parse import urlparse, parse_qs
 from p115client import P115Client
-from p115 import P115ShareFileSystem
+from p115 import P115Client, P115ShareFileSystem, P115FileSystem
 from p115client.tool.iterdir import iter_files, get_id_to_path
 from p115client.tool.download import iter_url_batches
 
