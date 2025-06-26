@@ -850,7 +850,7 @@ class Pan123Client:
         # 初始化目录缓存
         self.directory_cache = {}
         self.load_directory_cache()
-        logger.info(f"已加载 {len(self.directory_cache)} 个目录缓存")
+        #logger.info(f"已加载 {len(self.directory_cache)} 个目录缓存")
     
     def _create_session(self):
         """创建带重试机制的Session"""
@@ -1116,7 +1116,7 @@ class Pan123Client:
                 for row in rows:
                     file_id = row["file_id"]
                     self.directory_cache[file_id] = dict(row)
-                logger.info(f"已加载 {len(rows)} 个目录缓存")
+                #logger.info(f"已加载 {len(rows)} 个目录缓存")
         except Exception as e:
             logger.error(f"加载目录缓存失败: {e}")
     
