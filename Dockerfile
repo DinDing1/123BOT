@@ -43,7 +43,7 @@ RUN echo "import sys, os, hashlib" > security.py && \
     # 添加授权验证函数
     echo "    def verify_license(license_key):" >> security.py && \
     echo "        valid_hashes = [" >> security.py && \
-    # 添加50组安全许可证密钥
+    # 添加50组安全许可证密钥前三已用
     echo "            '7f5b1a7c7d7b1e3e1f1b3a5d1e3f5a7d',  # BY123_5G8H2K9M" >> security.py && \
     echo "            'a3d5f7c9e1b3a5d7f9c1e3f5a7b9d1f3',  # BY123_7J3F9K2L" >> security.py && \
     echo "            '5b9d1f3a7c9e1b3d5f7a9c1e3f5b7d9f',  # BY123_R4T6Y8U1" >> security.py && \
