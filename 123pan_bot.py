@@ -9,8 +9,7 @@ import logging
 import requests
 import sqlite3
 import threading
-import traceback
-import urllib.parse
+import concurrent.futures
 from contextlib import closing
 from datetime import datetime, timedelta, timezone
 from telegram import Update, BotCommand, InlineKeyboardButton, InlineKeyboardMarkup
@@ -26,8 +25,11 @@ from functools import wraps
 import urllib3
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
-from collections import defaultdict, deque
-from typing import Dict, Optional, List, Tuple
+from urllib.parse import urlparse, parse_qs
+from p115client import P115Client
+from p115 import P115ShareFileSystem
+from p115client.tool.iterdir import iter_files, get_id_to_path
+from p115client.tool.download import iter_url_batches
 
 # 禁用SSL警告
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -56,9 +58,8 @@ logger = logging.getLogger(__name__)
 logging.getLogger("telegram").setLevel(logging.WARNING)
 logging.getLogger("apscheduler").setLevel(logging.WARNING)
 logging.getLogger("urllib3").setLevel(logging.WARNING)
-logging.getLogger("p115").setLevel(logging.WARNING)
 logging.getLogger("p115client").setLevel(logging.WARNING)
-
+logging.getLogger("requests").setLevel(logging.ERROR)
 # ====================== 配置区域 ======================
 # 数据库文件路径
 DB_PATH = os.getenv("DB_PATH", "bot123.db")
@@ -73,8 +74,7 @@ API_PATHS = {
     "CLEAR_TRASH": "/api/file/trash_delete_all",
     "GET_SHARE": "/b/api/share/get",
     "OFFLINE_DOWNLOAD": "/api/v1/offline/download",
-    "DIRECTORY_CREATE": "/upload/v1/file/mkdir",
-    "DOWNLOAD_PROGRESS": "/api/v1/offline/download/process"
+    "DIRECTORY_CREATE": "/upload/v1/file/mkdir"
 }
 
 # 开放平台地址
@@ -104,22 +104,17 @@ TRANSFER_RATE_LIMIT = float(os.getenv("TRANSFER_RATE_LIMIT", "3"))
 # 允许的文件类型配置
 ALLOWED_VIDEO_EXTENSIONS = [ext.strip().lower() for ext in os.getenv("ALLOWED_VIDEO_EXT", ".mp4,.mkv,.avi,.mov,.flv,.wmv,.webm,.ts,.m2ts,.iso,.mp3,.flac,.wav").split(',') if ext.strip()]
 ALLOWED_SUB_EXTENSIONS = [ext.strip().lower() for ext in os.getenv("ALLOWED_SUB_EXT", ".srt,.ass,.ssa,.sub,.idx,.vtt,.sup").split(',') if ext.strip()]
-# 合并所有允许的文件类型
-ALLOWED_EXTENSIONS = ALLOWED_VIDEO_EXTENSIONS + ALLOWED_SUB_EXTENSIONS
 
 # 115网盘配置
-COOKIES_115 = os.getenv("COOKIES_115", "")
-CUSTOM_DIRECT_LINK_SERVICE = os.getenv("CUSTOM_DIRECT_LINK_SERVICE", "")
-TARGET_PATH_115 = os.getenv("TARGET_PATH_115", "")
-DELETE_AFTER_TRANSFER = os.getenv("DELETE_AFTER_TRANSFER", "true").lower() == "true"
-
-# 任务状态映射
-TASK_STATUS_MAP = {
-    0: "进行中",
-    1: "下载失败",
-    2: "下载成功",
-    3: "重试中"
-}
+DEFAULT_SOURCE_PATH = os.getenv("DEFAULT_SOURCE_PATH", "我的接收")
+P115_COOKIE = os.getenv("P115_COOKIE", "")
+MOBILE_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+SHARE_LINK_PATTERN = re.compile(
+    r'(https?://(?:115\.com|115cdn\.com)/s/\w+)(?:\?password=\w{4})?[^\s]*',
+    re.IGNORECASE
+)
+MAX_SUBMIT_RETRIES = 5  # 115任务提交最大重试次数
+RETRY_DELAY = 10       # 115重试延迟时间(秒)
 # =====================================================
 
 def init_db():
@@ -198,6 +193,12 @@ def generate_usage_bar(percent, length=20):
     filled = int(round(length * percent / 100))
     empty = length - filled
     return "[" + "█" * filled + "░" * empty + "]"
+
+def format_duration(seconds):
+    """格式化时间间隔"""
+    hours, remainder = divmod(seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    return f"{int(hours):02d}:{int(minutes):02d}:{int(seconds):02d}"
 
 # =====================================================
 
@@ -335,6 +336,495 @@ def is_allowed_file(filename):
     """检查文件是否为允许的类型"""
     ext = os.path.splitext(filename)[1].lower()
     return ext in ALLOWED_VIDEO_EXTENSIONS or ext in ALLOWED_SUB_EXTENSIONS
+
+
+class Pan115Transfer:
+    """115网盘转存迁移类"""
+    def __init__(self, pan_client, access_token):
+        self.pan_client = pan_client
+        self.access_token = access_token
+        self.created_dirs = {}
+        self.target_root_id = self.create_123_directory(DEFAULT_SAVE_DIR)
+        self.transfer_stats = {
+            "total_files": 0,
+            "filtered_files": 0,
+            "submitted_files": 0,
+            "success_files": 0,
+            "failed_files": 0,
+            "start_time": time.time(),
+            "total_size": 0,
+            "filtered_size": 0
+        }
+        
+        # 初始化115客户端
+        self.client_115 = self.init_115_client()
+        self.default_source_dir_id = self.find_115_directory_id(DEFAULT_SOURCE_PATH)
+    
+    def init_115_client(self):
+        """初始化115网盘客户端"""
+        logger.info("初始化115网盘客户端...")
+        if not P115_COOKIE:
+            raise ValueError("未设置P115_COOKIE环境变量")
+
+        client = P115Client(cookies=P115_COOKIE)
+        try:
+            user_info = client.user_info(headers={"User-Agent": MOBILE_UA})
+            logger.info(f"115登录成功!")
+            return client
+        except Exception as e:
+            logger.error(f"115登录失败: {str(e)}")
+            raise
+    
+    def find_115_directory_id(self, path):
+        """查找115目录ID"""
+        if not path or path == "/":
+            return 0
+            
+        try:
+            dir_id = get_id_to_path(
+                client=self.client_115,
+                path=path,
+                parent_id=0,
+                ensure_file=False,
+                app='web',
+            )
+            return dir_id
+        except Exception as e:
+            logger.error(f"获取目录ID失败: {path} - {str(e)}")
+            return None
+    
+    def extract_share_info(self, text):
+        """从文本中提取115分享链接和密码"""
+        matches = re.finditer(SHARE_LINK_PATTERN, text)
+        share_links = []
+        
+        for match in matches:
+            url = match.group(0)
+            parsed = urlparse(url)
+            password = parse_qs(parsed.query).get('password', [''])[0]
+            
+            if password and len(password) == 4:
+                share_links.append((url, password))
+            else:
+                share_links.append((url, ''))
+        
+        return share_links
+    
+    def save_share_to_115(self, text, target_path=DEFAULT_SOURCE_PATH):
+        """将分享链接中的文件保存到115网盘的中转站"""
+        target_dir_id = self.find_115_directory_id(target_path)
+        if target_dir_id is None:
+            logger.error(f"目标目录不存在: {target_path}")
+            return False
+        
+        share_links = self.extract_share_info(text)
+        if not share_links:
+            logger.error("无法解析分享链接")
+            return False
+        
+        results = []
+        for url, password in share_links:
+            logger.info(f"处理分享链接: {url}")
+            if password:
+                logger.info(f"使用提取码: {password}")
+            
+            try:
+                parsed = urlparse(url)
+                path_parts = parsed.path.split('/')
+                if len(path_parts) < 3 or path_parts[1] != 's':
+                    logger.error(f"❌ 无效的分享链接格式: {url}")
+                    results.append(False)
+                    continue
+                
+                share_code = path_parts[2]
+                
+                share_fs = P115ShareFileSystem(
+                    client=self.client_115, 
+                    share_code=share_code,
+                    receive_code=password,
+                )
+                
+                resp = share_fs.receive(0, target_dir_id)
+                
+                if resp.get("state") is True:
+                    logger.info("✅ 分享内容转存成功!")
+                    results.append(True)
+                else:
+                    error_msg = resp.get("error", "未知错误")
+                    logger.error(f"❌ 转存失败: {error_msg}")
+                    results.append(False)
+                    
+            except Exception as e:
+                logger.error(f"❌ 保存分享文件失败: {str(e)}")
+                results.append(False)
+        
+        return all(results)
+    
+    def scan_115_directory(self, path):
+        """扫描115目录获取文件列表"""
+        logger.info(f"扫描目录: {path}...")
+        files = []
+        dir_id = self.find_115_directory_id(path)
+        if dir_id is None:
+            logger.error(f"目录ID未找到: {path}")
+            return []
+            
+        try:
+            for item in iter_files(
+                client=self.client_115,
+                cid=dir_id,
+                type=99,  # 仅文件
+                cur=0,    # 递归子目录
+                with_path=True,
+                escape=False,
+            ):
+                try:
+                    if "name" not in item or "path" not in item:
+                        continue
+                    
+                    # 记录扫描到的文件
+                    self.transfer_stats["total_files"] += 1
+                    self.transfer_stats["total_size"] += item.get("size", 0)
+                    
+                    # 检查文件扩展名
+                    file_ext = os.path.splitext(item["name"])[1].lower()
+                    if file_ext not in ALLOWED_VIDEO_EXTENSIONS + ALLOWED_SUB_EXTENSIONS:
+                        self.transfer_stats["filtered_files"] += 1
+                        self.transfer_stats["filtered_size"] += item.get("size", 0)
+                        continue
+                        
+                    # 规范化路径比较
+                    norm_path = os.path.normpath(path)
+                    item_path = os.path.normpath(item["path"].lstrip('/'))
+                    
+                    # 处理相对路径
+                    if item_path == norm_path:
+                        rel_path = ""
+                    elif item_path.startswith(norm_path + os.sep):
+                        rel_path = item_path[len(norm_path)+1:]
+                    else:
+                        rel_path = item_path
+                    
+                    parent_id = item.get("cid", dir_id)
+                    
+                    files.append({
+                        "name": item["name"],
+                        "path": os.path.dirname(rel_path) if rel_path else "",
+                        "size": item["size"],
+                        "pickcode": item["pickcode"],
+                        "url": None,
+                        "parent_id": parent_id
+                    })
+                except Exception:
+                    continue
+        except Exception as e:
+            logger.error(f"扫描目录失败: {str(e)}")
+            return files
+            
+        # 批量获取下载链接
+        pickcodes = [f["pickcode"] for f in files]
+        url_map = {}
+        
+        logger.info(f"获取 {len(pickcodes)} 个文件的下载链接...")
+        try:
+            for url_info in iter_url_batches(
+                client=self.client_115,
+                pickcodes=pickcodes,
+                user_agent=MOBILE_UA,
+                batch_size=50,
+                headers={"User-Agent": MOBILE_UA}
+            ):
+                if url_info.url:
+                    url_map[url_info.pickcode] = url_info.url
+        except Exception as e:
+            logger.error(f"获取下载链接失败: {str(e)}")
+            
+        # 合并下载链接
+        for file in files:
+            file["url"] = url_map.get(file["pickcode"])
+            
+        valid_files = [f for f in files if f["url"]]
+        logger.info(f"找到 {len(valid_files)} 个有效文件")
+        return valid_files
+    
+    def create_123_directory(self, full_path):
+        """创建123云盘目录（已存在时直接使用）"""
+        if not full_path:
+            return 0
+            
+        if full_path in self.created_dirs:
+            return self.created_dirs[full_path]
+            
+        parts = [p for p in full_path.split('/') if p]
+        current_id = 0
+        
+        for i, part in enumerate(parts):
+            current_path = '/'.join(parts[:i+1])
+            
+            if current_path in self.created_dirs:
+                current_id = self.created_dirs[current_path]
+                continue
+                
+            # 检查目录是否已存在
+            existing_id = self.get_123_directory_id(current_id, part)
+            if existing_id:
+                self.created_dirs[current_path] = existing_id
+                current_id = existing_id
+                continue
+                
+            headers = {
+                "Authorization": f"Bearer {self.access_token}",
+                "Platform": "open_platform",
+                "Content-Type": "application/json"
+            }
+            
+            try:
+                response = requests.post(
+                    f"{OPEN_API_HOST}{API_PATHS['DIRECTORY_CREATE']}",
+                    headers=headers,
+                    json={"name": part, "parentID": current_id}
+                )
+                data = response.json()
+                
+                if data.get("code") == 0:
+                    new_id = data["data"]["dirID"]
+                    self.created_dirs[current_path] = new_id
+                    current_id = new_id
+                else:
+                    # 等待后重试获取目录ID
+                    time.sleep(1)
+                    existing_id = self.get_123_directory_id(current_id, part)
+                    if existing_id:
+                        self.created_dirs[current_path] = existing_id
+                        current_id = existing_id
+                    else:
+                        # 最终尝试创建
+                        response = requests.post(
+                            f"{OPEN_API_HOST}{API_PATHS['DIRECTORY_CREATE']}",
+                            headers=headers,
+                            json={"name": part, "parentID": current_id}
+                        )
+                        data = response.json()
+                        
+                        if data.get("code") == 0:
+                            new_id = data["data"]["dirID"]
+                            self.created_dirs[current_path] = new_id
+                            current_id = new_id
+                        else:
+                            existing_id = self.get_123_directory_id(current_id, part)
+                            if existing_id:
+                                self.created_dirs[current_path] = existing_id
+                                current_id = existing_id
+                            else:
+                                raise Exception(f"创建目录失败: {data.get('message', '未知错误')}")
+            except Exception as e:
+                existing_id = self.get_123_directory_id(current_id, part)
+                if existing_id:
+                    self.created_dirs[current_path] = existing_id
+                    current_id = existing_id
+                else:
+                    logger.error(f"创建目录失败: {str(e)}")
+                    raise
+                
+        return current_id
+
+    def get_123_directory_id(self, parent_id, dir_name):
+        """检查目录是否存在"""
+        headers = {
+            "Authorization": f"Bearer {self.access_token}",
+            "Platform": "open_platform"
+        }
+        
+        try:
+            response = requests.get(
+                f"{OPEN_API_HOST}{API_PATHS['LIST_FILES_V2']}",
+                headers=headers,
+                params={"parentFileId": parent_id, "limit": 100}
+            )
+            data = response.json()
+            
+            if data.get("code") == 0:
+                for item in data["data"]["fileList"]:
+                    if item["type"] == 1 and item["filename"] == dir_name:
+                        return item["fileId"]
+            return None
+        except Exception as e:
+            logger.error(f"获取目录列表失败: {str(e)}")
+            return None
+
+    def submit_to_123pan(self, file_url, file_name, dir_id):
+        """提交下载任务到123云盘（带重试机制）"""
+        headers = {
+            "Authorization": f"Bearer {self.access_token}",
+            "Platform": "open_platform",
+            "Content-Type": "application/json"
+        }
+        
+        payload = {"url": file_url, "dirID": dir_id, "fileName": file_name}
+        
+        for attempt in range(MAX_SUBMIT_RETRIES):
+            try:
+                response = requests.post(
+                    f"{OPEN_API_HOST}{API_PATHS['OFFLINE_DOWNLOAD']}",
+                    headers=headers,
+                    json=payload
+                )
+                data = response.json()
+                
+                if data.get("code") == 0:
+                    task_id = data["data"]["taskID"]
+                    return task_id
+                else:
+                    error_msg = data.get("message", "未知错误")
+                    # 如果是频率限制错误，等待后重试
+                    if "频繁" in error_msg or "稍后" in error_msg:
+                        time.sleep(RETRY_DELAY)
+                    else:
+                        return None
+            except Exception:
+                time.sleep(RETRY_DELAY)
+        
+        return None
+
+    def delete_115_directory(self, path=DEFAULT_SOURCE_PATH):
+        """彻底删除整个中转站目录（移动到回收站）"""
+        dir_id = self.find_115_directory_id(path)
+        if not dir_id:
+            logger.warning(f"无法找到目录ID: {path}，跳过删除")
+            return False
+            
+        try:
+            result = self.client_115.fs_delete([dir_id])
+            
+            if result.get("state"):
+                logger.info(f"✅ 目录删除成功! 已移动到回收站: {path}")
+                return True
+            else:
+                error_msg = result.get("error", "未知错误")
+                if "文件已删除" in error_msg or "请勿重复操作" in error_msg:
+                    return True
+                else:
+                    logger.error(f"❌ 目录删除失败: {error_msg}")
+                    return False
+        except Exception as e:
+            logger.error(f"删除目录异常: {str(e)}")
+            return False
+
+    def recreate_115_directory(self, path=DEFAULT_SOURCE_PATH):
+        """重新创建中转站目录"""
+        try:
+            result = self.client_115.fs_mkdir(path)
+            
+            if result.get("state"):
+                logger.info(f"✅ 目录创建成功: {path}")
+                return result["cid"]
+            else:
+                logger.error(f"❌ 目录创建失败: {result.get('error', '未知错误')}")
+                return None
+        except Exception as e:
+            logger.error(f"创建目录异常: {str(e)}")
+            return None
+            
+    def clear_115_directory(self, path=DEFAULT_SOURCE_PATH):
+        """清空目录（删除后重新创建）"""
+        logger.info(f"清空目录: {path}...")
+        if self.delete_115_directory(path):
+            new_dir_id = self.recreate_115_directory(path)
+            if new_dir_id:
+                logger.info(f"✅ 目录已清空并重新创建: {path}")
+                return True
+        return False
+
+    def get_transfer_report(self):
+        """生成迁移统计报告"""
+        elapsed = time.time() - self.transfer_stats["start_time"]
+        
+        report = (
+            "📊 迁移统计报告\n"
+            "══════════════════════\n"
+            f"📂 扫描文件总数: {self.transfer_stats['total_files']} (大小: {format_size(self.transfer_stats['total_size'])})\n"
+            f"🚫 过滤文件数: {self.transfer_stats['filtered_files']} (大小: {format_size(self.transfer_stats['filtered_size'])})\n"
+            f"📤 提交迁移文件数: {self.transfer_stats['submitted_files']} (大小: {format_size(self.transfer_stats['total_size'] - self.transfer_stats['filtered_size'])})\n"
+            f"✅ 成功提交文件数: {self.transfer_stats['success_files']}\n"
+            f"❌ 提交失败文件数: {self.transfer_stats['failed_files']}\n"
+            f"⏱️ 总耗时: {format_duration(elapsed)}\n"
+            "══════════════════════"
+        )
+        
+        return report
+
+    def transfer_files(self, source_path):
+        """执行迁移（不再监控进度）"""
+        # 重置统计信息
+        self.transfer_stats = {
+            "total_files": 0,
+            "filtered_files": 0,
+            "submitted_files": 0,
+            "success_files": 0,
+            "failed_files": 0,
+            "start_time": time.time(),
+            "total_size": 0,
+            "filtered_size": 0
+        }
+        
+        files = self.scan_115_directory(source_path)
+        if not files:
+            logger.warning(f"没有可迁移的文件: {source_path}")
+            return False, "没有可迁移的文件"
+            
+        logger.info(f"准备迁移 {len(files)} 个文件...")
+        self.transfer_stats["submitted_files"] = len(files)
+        
+        # 预处理目录 - 提前创建所有需要的目录
+        dir_id_map = {}
+        for file in files:
+            dir_path = file["path"]
+            full_dir_path = f"{DEFAULT_SAVE_DIR}/{dir_path}" if dir_path else DEFAULT_SAVE_DIR
+            
+            if full_dir_path not in dir_id_map:
+                try:
+                    dir_id = self.create_123_directory(full_dir_path)
+                    dir_id_map[full_dir_path] = dir_id
+                except Exception as e:
+                    logger.error(f"目录创建失败: {str(e)}")
+                    parent_path = os.path.dirname(full_dir_path)
+                    if parent_path in dir_id_map:
+                        dir_id = dir_id_map[parent_path]
+                        dir_id_map[full_dir_path] = dir_id
+                    else:
+                        dir_id_map[full_dir_path] = 0
+        
+        # 批量提交任务
+        success_count = 0
+        failed_files = []
+        
+        for file in files:
+            dir_path = file["path"]
+            full_dir_path = f"{DEFAULT_SAVE_DIR}/{dir_path}" if dir_path else DEFAULT_SAVE_DIR
+            dir_id = dir_id_map.get(full_dir_path, 0)
+            
+            task_id = self.submit_to_123pan(
+                file["url"],
+                file["name"],
+                dir_id
+            )
+            
+            if task_id:
+                success_count += 1
+            else:
+                failed_files.append(file["name"])
+        
+        # 更新统计信息
+        self.transfer_stats["success_files"] = success_count
+        self.transfer_stats["failed_files"] = len(failed_files)
+        
+        logger.info(f"成功提交任务: {success_count}/{len(files)}")
+        if failed_files:
+            logger.warning(f"提交失败的文件: {', '.join(failed_files[:3])}{'...' if len(failed_files) > 3 else ''}")
+        
+        # 生成统计报告
+        report = self.get_transfer_report()
+        return True, report
 
 class Pan123Client:
     def __init__(self, client_id, client_secret):
@@ -1017,129 +1507,6 @@ class Pan123Client:
                 break
         
         return items
-    
-    # ====================== 115网盘功能 ======================
-    def create_directory(self, parent_id, name):
-        """在123云盘上创建目录"""
-        headers = self.token_manager.get_auth_header()
-        payload = {
-            "parentID": parent_id,
-            "name": name
-        }
-        
-        try:
-            url = f"{OPEN_API_HOST}{API_PATHS['DIRECTORY_CREATE']}"
-            response = self._call_api("POST", url, json=payload, headers=headers)
-            if not response or response.status_code != 200:
-                return None
-                
-            data = response.json()
-            if data.get("code") == 0:
-                return data["data"]["dirID"]
-            else:
-                logger.error(f"创建目录失败: {data.get('message', '未知错误')}")
-                return None
-        except Exception as e:
-            logger.error(f"创建目录异常: {e}")
-            return None
-    
-    def list_directory(self, parent_id):
-        """获取123云盘目录下的子目录列表"""
-        headers = self.token_manager.get_auth_header()
-        dirs = []
-        last_file_id = 0
-        
-        while True:
-            params = {
-                "parentFileId": parent_id,
-                "trashed": 0,
-                "limit": 100,
-                "lastFileId": last_file_id
-            }
-            
-            try:
-                url = f"{OPEN_API_HOST}{API_PATHS['LIST_FILES_V2']}"
-                response = self._call_api("GET", url, params=params, headers=headers)
-                if not response or response.status_code != 200:
-                    break
-                
-                data = response.json()
-                if data.get("code") != 0:
-                    logger.error(f"获取目录列表失败: {data.get('message', '未知错误')}")
-                    break
-                
-                for item in data["data"].get("fileList", []):
-                    if item["type"] == 1 and item.get("trashed", 0) == 0:
-                        dirs.append({
-                            "id": item["fileId"],
-                            "name": item["filename"]
-                        })
-                
-                last_file_id = data["data"].get("lastFileId", -1)
-                if last_file_id == -1:
-                    break
-            except Exception as e:
-                logger.error(f"获取目录列表异常: {e}")
-                break
-        
-        return dirs
-    
-    def ensure_directory(self, parent_id, dir_name):
-        """确保目录存在，如果已存在则返回现有目录ID"""
-        existing_dirs = self.list_directory(parent_id)
-        for d in existing_dirs:
-            if d["name"] == dir_name:
-                return d["id"]
-        
-        return self.create_directory(parent_id, dir_name)
-    
-    def offline_download(self, url, parent_id, filename, retry_count=0):
-        """提交离线下载任务"""
-        headers = self.token_manager.get_auth_header()
-        payload = {
-            "url": url,
-            "dirID": parent_id,
-            "fileName": filename
-        }
-        
-        for attempt in range(retry_count + 1):
-            try:
-                download_url = f"{OPEN_API_HOST}{API_PATHS['OFFLINE_DOWNLOAD']}"
-                response = self._call_api("POST", download_url, json=payload, headers=headers)
-                if not response or response.status_code != 200:
-                    continue
-                
-                data = response.json()
-                if data.get("code") == 0:
-                    return data["data"]["taskID"]
-            except Exception as e:
-                logger.error(f"提交离线下载任务失败: {e}")
-            time.sleep(1)
-        return None
-    
-    def get_offline_task_progress(self, task_id):
-        """获取离线下载任务进度"""
-        headers = self.token_manager.get_auth_header()
-        params = {"taskID": task_id}
-        
-        try:
-            progress_url = f"{OPEN_API_HOST}{API_PATHS['DOWNLOAD_PROGRESS']}"
-            response = self._call_api("GET", progress_url, params=params, headers=headers)
-            if not response or response.status_code != 200:
-                return 0, -1, "查询失败"
-            
-            data = response.json()
-            if data.get("code") == 0:
-                progress_data = data["data"]
-                progress = progress_data.get("process", 0)
-                status = progress_data.get("status", -1)
-                status_text = TASK_STATUS_MAP.get(status, "未知状态")
-                return progress, status, status_text
-            else:
-                return 0, -1, "查询失败"
-        except Exception as e:
-            logger.error(f"获取离线任务进度失败: {e}")
-            return 0, -1, "查询异常"
 
 class FastLinkProcessor:
     @staticmethod
@@ -1222,370 +1589,6 @@ class FastLinkProcessor:
         except Exception as e:
             logger.error(f"ETag转换失败: {e}")
             return optimized_etag
-        
-
-# ====================== 115网盘工具类 ======================
-class ShareTransferTool:
-    """115分享链接转存工具"""
-    
-    def __init__(self, cookies: str):
-        self.cookies = cookies
-        self.user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        
-        try:
-            from p115 import P115ShareFileSystem
-            from p115client import P115Client
-            from p115client.tool.util import share_extract_payload
-            
-            logger.info("🛠️ 正在初始化115客户端...")
-            self.client = P115Client(cookies)
-            logger.info("✅ 115客户端初始化成功")
-        except ImportError:
-            logger.error("❌ 缺少p115client库，无法使用115功能")
-            raise
-        except Exception as e:
-            logger.error(f"❌ 115客户端初始化失败: {str(e)}")
-            raise
-    
-    def get_target_directory_id(self, target_path: str) -> int:
-        """获取目标目录ID，如果不存在则创建"""
-        root_id = 0
-        path_parts = [part for part in target_path.split("/") if part]
-        current_id = root_id
-        
-        for part in path_parts:
-            found = False
-            offset = 0
-            limit = 1000
-            
-            while True:
-                resp = self.client.fs_files({"cid": current_id, "offset": offset, "limit": limit})
-                
-                if not resp["state"]:
-                    raise Exception(f"获取目录列表失败: {resp.get('error', '未知错误')}")
-                
-                data_list = resp["data"]
-                count = len(data_list)
-                
-                for item in data_list:
-                    if item.get("n") == part and "cid" in item:
-                        current_id = int(item["cid"])
-                        found = True
-                        break
-                
-                if found:
-                    break
-                
-                total_count = resp.get("count", count)
-                if (offset + count) >= total_count:
-                    break
-                
-                offset += count
-            
-            if not found:
-                resp = self.client.fs_mkdir({"pid": current_id, "cname": part})
-                
-                if resp["state"]:
-                    current_id = int(resp["cid"])
-                else:
-                    error_msg = resp.get("error", "未知错误")
-                    if "已存在" in error_msg or "重名" in error_msg:
-                        resp = self.client.fs_files({"cid": current_id, "offset": 0, "limit": 1000})
-                        if resp["state"]:
-                            for item in resp["data"]:
-                                if item.get("n") == part and "cid" in item:
-                                    current_id = int(item["cid"])
-                                    found = True
-                                    break
-                        if not found:
-                            raise Exception(f"创建目录失败: {part} - {error_msg}")
-                    else:
-                        raise Exception(f"创建目录失败: {part} - {error_msg}")
-        
-        return current_id
-    
-    def transfer_share(self, share_url: str, receive_code: Optional[str], target_path: str) -> int:
-        """转存分享内容到指定目录，返回目标目录ID"""
-        from p115client.tool.util import share_extract_payload
-        from p115 import P115ShareFileSystem
-        
-        data = share_extract_payload(share_url)
-        
-        share_code = data["share_code"]
-        if not receive_code:
-            receive_code = data.get("receive_code", "")
-        
-        # 获取目标目录ID
-        target_dir_id = self.get_target_directory_id(target_path)
-        
-        # 创建分享文件系统实例
-        share_fs = P115ShareFileSystem(
-            client=self.client, 
-            share_code=share_code, 
-            receive_code=receive_code
-        )
-        
-        # 发送转存请求
-        resp = share_fs.receive(0, target_dir_id)
-        
-        if resp["state"]:
-            logger.info("✅ 转存成功！")
-            return target_dir_id
-        else:
-            error_msg = resp.get("error", "未知错误")
-            raise Exception(f"转存失败: {error_msg}")
-
-class PanTransfer:
-    """115网盘到123云盘迁移工具"""
-    
-    def __init__(self, pan_client: Pan123Client, cookies: str):
-        self.pan_client = pan_client
-        
-        # 初始化115客户端
-        try:
-            from p115client import P115Client
-            from p115client.tool.iterdir import iterdir
-            
-            logger.info("正在初始化115网盘客户端...")
-            self.client_115 = P115Client(cookies=cookies)
-            logger.info("115网盘登录成功")
-        except ImportError:
-            logger.error("❌ 缺少p115client库，无法使用115功能")
-            raise
-        except Exception as e:
-            logger.error(f"115网盘登录验证失败: {str(e)}")
-            raise
-    
-    def get_115_directory_id_by_path(self, path: str) -> int:
-        """根据路径获取115网盘目录ID"""
-        current_id = 0
-        path_parts = [part for part in path.split("/") if part]
-        
-        for part in path_parts:
-            found = False
-            offset = 0
-            limit = 1000
-            
-            while True:
-                resp = self.client_115.fs_files({"cid": current_id, "offset": offset, "limit": limit})
-                
-                if not resp["state"]:
-                    raise Exception(f"获取目录列表失败: {resp.get('error', '未知错误')}")
-                
-                data_list = resp["data"]
-                count = len(data_list)
-                
-                for item in data_list:
-                    if item.get("n") == part and "cid" in item:
-                        current_id = int(item["cid"])
-                        found = True
-                        break
-                
-                if found:
-                    break
-                
-                total_count = resp.get("count", count)
-                if (offset + count) >= total_count:
-                    break
-                
-                offset += count
-            
-            if not found:
-                raise Exception(f"在115网盘中找不到目录: {part}")
-        
-        return current_id
-    
-    def filter_allowed_files(self, file_list: list) -> tuple:
-        """过滤掉不允许的文件类型"""
-        allowed_files = []
-        filtered_files = []
-        
-        for file_info in file_list:
-            _, ext = os.path.splitext(file_info["name"].lower())
-            if ext in ALLOWED_EXTENSIONS:
-                allowed_files.append(file_info)
-            else:
-                filtered_files.append(file_info)
-        
-        return allowed_files, filtered_files
-    
-    def get_115_structure(self, dir_id: int) -> tuple:
-        """获取115网盘指定目录下的完整结构"""
-        dir_list = []
-        file_list = []
-        
-        try:
-            from p115client.tool.iterdir import iterdir
-            
-            queue = deque([dir_id])
-            visited = set([dir_id])
-            
-            while queue:
-                current_dir_id = queue.popleft()
-                
-                for item in iterdir(
-                    client=self.client_115,
-                    cid=current_dir_id,
-                    recursive=False,
-                    include_dir=True
-                ):
-                    if item.get("is_dir", False) or item.get("is_directory", False):
-                        dir_info = {
-                            "id": item["id"],
-                            "parent_id": current_dir_id,
-                            "name": item["name"]
-                        }
-                        dir_list.append(dir_info)
-                        
-                        if item["id"] not in visited:
-                            visited.add(item["id"])
-                            queue.append(item["id"])
-                    else:
-                        file_info = {
-                            "name": item["name"],
-                            "pickcode": item["pickcode"],
-                            "size": item["size"],
-                            "parent_id": current_dir_id
-                        }
-                        file_list.append(file_info)
-                
-                time.sleep(0.2)
-        
-        except Exception as e:
-            logger.error(f"获取目录结构失败: {str(e)}")
-        
-        return dir_list, file_list
-    
-    def transfer_files(self, source_dir_id: int, target_dir_id_123: int) -> dict:
-        """从115网盘迁移文件到123云盘，返回统计信息"""
-        start_time = time.time()
-        stats = {
-            "start_time": start_time,
-            "end_time": None,
-            "total_files": 0,
-            "filtered_files": 0,
-            "submitted_files": 0,
-            "success_files": 0,
-            "failed_files": 0,
-            "total_size": 0,
-            "filtered_size": 0,
-            "submitted_size": 0
-        }
-        
-        # 建立目录映射
-        dir_mapping = {source_dir_id: target_dir_id_123}
-        
-        # 获取115文件信息
-        dir_list, file_list = self.get_115_structure(source_dir_id)
-        
-        if not dir_list and not file_list:
-            logger.warning("没有找到可迁移的文件或目录")
-            return stats
-        
-        # 构建目录树结构
-        dir_tree = defaultdict(list)
-        for dir_info in dir_list:
-            dir_tree[dir_info["parent_id"]].append(dir_info)
-        
-        # 使用BFS创建目录结构
-        queue = deque(dir_tree.get(source_dir_id, []))
-        created_dirs = 0
-        
-        logger.info("开始在123云盘上创建目录结构...")
-        while queue:
-            dir_info = queue.popleft()
-            parent_115_id = dir_info["parent_id"]
-            dir_name = dir_info["name"]
-            
-            parent_123_id = dir_mapping.get(parent_115_id)
-            if parent_123_id is None:
-                continue
-            
-            new_dir_id = self.pan_client.ensure_directory(parent_123_id, dir_name)
-            if new_dir_id:
-                dir_mapping[dir_info["id"]] = new_dir_id
-                created_dirs += 1
-                
-                if dir_info["id"] in dir_tree:
-                    queue.extend(dir_tree[dir_info["id"]])
-            
-            time.sleep(0.2)
-        
-        logger.info(f"目录创建完成! 成功创建 {created_dirs} 个目录")
-        
-        # 文件过滤
-        allowed_files, filtered_files = self.filter_allowed_files(file_list)
-        stats["total_files"] = len(file_list)
-        stats["filtered_files"] = len(filtered_files)
-        stats["total_size"] = sum(f["size"] for f in file_list)
-        stats["filtered_size"] = sum(f["size"] for f in filtered_files)
-        
-        # 迁移文件
-        submitted_files = allowed_files
-        stats["submitted_files"] = len(submitted_files)
-        stats["submitted_size"] = sum(f["size"] for f in submitted_files)
-        
-        logger.info(f"开始迁移 {len(submitted_files)} 个文件到123云盘 (总大小: {self.format_size(stats['submitted_size'])})...")
-        
-        success_count = 0
-        failed_files = []
-        task_list = []
-        
-        for i, file_info in enumerate(submitted_files, 1):
-            file_name = file_info["name"]
-            target_dir_id = dir_mapping.get(file_info["parent_id"], target_dir_id_123)
-            direct_link = f"{CUSTOM_DIRECT_LINK_SERVICE}{file_info['pickcode']}"
-            
-            task_id = self.pan_client.offline_download(direct_link, target_dir_id, file_name, retry_count=2)
-            if task_id:
-                success_count += 1
-                task_list.append({
-                    "task_id": task_id,
-                    "file_name": file_name
-                })
-            else:
-                failed_files.append(file_info)
-            
-            # 每10个文件显示一次进度
-            if i % 10 == 0 or i == len(submitted_files):
-                logger.info(f"已提交: {i}/{len(submitted_files)}")
-            
-            time.sleep(0.5)
-        
-        # 最终统计
-        end_time = time.time()
-        stats["end_time"] = end_time
-        stats["success_files"] = success_count
-        stats["failed_files"] = len(failed_files)
-        
-        elapsed_time = end_time - start_time
-        hours, rem = divmod(elapsed_time, 3600)
-        minutes, seconds = divmod(rem, 60)
-        time_str = f"{int(hours):02d}:{int(minutes):02d}:{int(seconds):02d}"
-        
-        logger.info(f"迁移完成! 成功提交 {success_count}/{len(submitted_files)} 个文件")
-        logger.info(f"总耗时: {time_str}")
-        
-        return stats
-    
-    def delete_115_directory(self, dir_id: int):
-        """删除115网盘目录（移动到回收站）"""
-        try:
-            resp = self.client_115.fs_delete([dir_id])
-            if not resp["state"]:
-                logger.error(f"删除失败: {resp.get('error', '未知错误')}")
-        except Exception as e:
-            logger.error(f"删除目录时出错: {str(e)}")
-    
-    @staticmethod
-    def format_size(size_bytes: int) -> str:
-        """格式化文件大小"""
-        for unit in ["B", "KB", "MB", "GB", "TB"]:
-            if size_bytes < 1024.0:
-                return f"{size_bytes:.2f} {unit}"
-            size_bytes /= 1024.0
-        return f"{size_bytes:.2f} TB"
-
 
 class TelegramBotHandler:
     def __init__(self, token, pan_client, allowed_user_ids):
@@ -1595,15 +1598,6 @@ class TelegramBotHandler:
         self.updater = Updater(token, use_context=True)
         self.dispatcher = self.updater.dispatcher
         self.start_time = pan_client.token_manager.start_time
-        self.active_tasks = {}
-
-        # 初始化115工具
-        self.share_transfer = None
-        if COOKIES_115:
-            try:
-                self.share_transfer = ShareTransferTool(COOKIES_115)
-            except Exception as e:
-                logger.error(f"115工具初始化失败: {e}")
         
         # 注册处理程序
         self.dispatcher.add_handler(CommandHandler("start", self.start_command))
@@ -1614,7 +1608,8 @@ class TelegramBotHandler:
         self.dispatcher.add_handler(CommandHandler("delete", self.delete_command))
         self.dispatcher.add_handler(CommandHandler("info", self.info_command))
         self.dispatcher.add_handler(CommandHandler("refresh_token", self.refresh_token_command))
-        self.dispatcher.add_handler(CommandHandler("migrate", self.migrate_command))
+        self.dispatcher.add_handler(CommandHandler("transport", self.transport_command))  # 新增迁移命令
+        self.dispatcher.add_handler(CommandHandler("clear", self.clear_command))  # 新增清空中转站命令
         self.dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, self.handle_text))
         self.dispatcher.add_handler(MessageHandler(Filters.document, self.handle_document))
         self.dispatcher.add_handler(CallbackQueryHandler(self.button_callback))
@@ -1626,14 +1621,15 @@ class TelegramBotHandler:
         """设置Telegram Bot菜单命令"""
         commands = [
             BotCommand("start", "个人信息"),
-            BotCommand("export", "导出JSON"),
+            BotCommand("export", "导出秒传文件"),
             BotCommand("sync_full", "全量同步"),
             BotCommand("info", "用户信息"),
             BotCommand("add", "添加用户"),
-            BotCommand("delete", "删除用户"),
-            BotCommand("migrate", "115搬运"),            
-            BotCommand("clear_trash", "清空回收站"),
-            BotCommand("refresh_token", "刷新Token"),
+            BotCommand("delete", "删除用户"),            
+            BotCommand("clear_trash", "清空123回收站"),
+            BotCommand("clear", "清空115中转站"),
+            BotCommand("transport", "迁移115文件"),  # 新增命令
+            BotCommand("refresh_token", "强制刷新Token"),
         ]
         
         try:
@@ -1748,8 +1744,9 @@ class TelegramBotHandler:
                 f"▫️ /info - 查询用户信息\n"
                 f"▫️ /add - 添加用户\n"    
                 f"▫️ /delete - 删除用户\n"                                             
-                f"▫️ /clear_trash - 清空回收站\n"
-                f"▫️ /migrate - 115搬运\n\n"
+                f"▫️ /clear_trash - 清空123回收站\n"
+                f"▫️ /clear - 清空115中转站\n"      # 新增命令
+                f"▫️ /transport - 迁移115文件\n\n"  # 新增命令
                 f"📦 <b>Version:</b> <code>{VERSION}</code>\n"
                 f"⏱️ <b>已运行:</b> {days}天{hours}小时{minutes}分{seconds}秒"
             )
@@ -2550,13 +2547,6 @@ class TelegramBotHandler:
             logger.error(f"处理分享链接出错: {e}")
             self.send_auto_delete_message(update, context, f"❌ 处理分享链接时出错: {e}")
 
-    # ====================== 115转存功能 ======================
-    @admin_required
-    def extract_115_links(self, text: str) -> List[str]:
-        """从文本中提取115分享链接（改进版）"""
-        pattern = r'(https?://(?:115\.com|115cdn\.com)/s/[a-zA-Z0-9]+(?:\?password=[a-zA-Z0-9]+)?)'
-        return re.findall(pattern, text)
-
     @admin_required
     def handle_text(self, update: Update, context: CallbackContext):
         """处理文本消息 - 仅保留秒传链接处理"""
@@ -2574,248 +2564,10 @@ class TelegramBotHandler:
         elif re.search(r'https?://(?:[a-zA-Z0-9-]+\.)*123[a-zA-Z0-9-]*\.[a-z]{2,6}/s/[a-zA-Z0-9\-_]+', text):
             self.send_auto_delete_message(update, context, "🔗 检测到123云盘分享链接，开始解析...")
             self.process_share_link(update, context, text)
-
-        # 115分享链接处理
-        share_links = self.extract_115_links(text)
-        if share_links:
-            for share_url in share_links:
-                # 在后台线程中处理转存任务
-                thread = threading.Thread(
-                    target=self.process_115_share_link,
-                    args=(update, context, share_url),
-                    daemon=True
-                )
-                thread.start()
-                self.active_tasks[share_url] = thread
-                self.send_auto_delete_message(update, context, "🔗 检测到115分享链接，开始处理: {share_url}")
-            return
-        
-    @admin_required
-    def migrate_command(self, update: Update, context: CallbackContext):
-        """处理/migrate命令"""
-        user_id = update.effective_user.id
-        chat_id = update.message.chat_id
-        
-        # 检查用户权限
-        if user_id not in self.allowed_user_ids:
-            self.send_auto_delete_message(update, context, "❌ 抱歉，您没有使用此命令的权限")
-            return
-        
-        # 获取用户输入的自定义路径
-        custom_path = " ".join(context.args).strip() if context.args else TARGET_PATH_115
-        
-        # 验证路径
-        if not custom_path or len(custom_path) > 100:
-            self.send_auto_delete_message(update, context, "❌ 路径无效：路径不能为空且长度不能超过100字符")
-            return
-        
-        self.send_auto_delete_message(update, context, "🔄 收到迁移命令，目标路径: {custom_path}\n开始处理...")
-        
-        # 在后台线程中执行迁移
-        thread = threading.Thread(
-            target=self.process_manual_migration,
-            args=(update, context, custom_path),
-            daemon=True
-        )
-        thread.start()
-        self.active_tasks[f"manual_migration_{custom_path}"] = thread
-    
-    def format_stats_message(self, stats: Dict) -> str:
-        """格式化统计信息为消息"""
-        elapsed = stats["end_time"] - stats["start_time"]
-        hours, rem = divmod(elapsed, 3600)
-        minutes, seconds = divmod(rem, 60)
-        time_str = f"{int(hours):02d}:{int(minutes):02d}:{int(seconds):02d}"
-        
-        message = (
-            "📊 迁移统计报告\n"
-            "══════════════════════\n"
-            f"📂 扫描文件总数: {stats['total_files']}\n"
-            f"🚫 过滤文件数: {stats['filtered_files']} (大小: {PanTransfer.format_size(stats['filtered_size'])})\n"
-            f"📤 提交迁移文件数: {stats['submitted_files']} (大小: {PanTransfer.format_size(stats['submitted_size'])})\n"
-            f"✅ 成功迁移文件数: {stats['success_files']}\n"
-            f"❌ 迁移失败文件数: {stats['failed_files']}\n"
-            f"⏱️ 总耗时: {time_str}\n"
-            "══════════════════════"
-        )
-        
-        return message
-    
-    def process_manual_migration(self, update: Update, context: CallbackContext, custom_path: str) -> None:
-        """执行手动迁移流程"""
-        bot = self.updater.bot
-        chat_id = update.message.chat_id
-        
-        try:
-            # 第一步：获取115目录ID
-            msg = bot.send_message(
-                chat_id=chat_id,
-                text=f"🔍 第一步：获取115网盘目录ID...\n路径: {custom_path}"
-            )
-            self.auto_delete_message(context, chat_id, msg.message_id, 5)
-        
-            
-            pan_transfer = PanTransfer(pan_client=self.pan_client, cookies=COOKIES_115)
-            source_dir_id = pan_transfer.get_115_directory_id_by_path(custom_path)
-            msg = bot.send_message(
-                chat_id=chat_id,
-                text=f"✅ 115网盘目录ID: {source_dir_id}\n"
-                     f"路径: {custom_path}"
-            )
-            self.auto_delete_message(context, chat_id, msg.message_id, 5)
-            
-            # 第二步：获取123目标目录ID
-            msg = bot.send_message(
-                chat_id=chat_id,
-                text="🔍 第二步：获取123云盘目录ID..."
-            )
-            self.auto_delete_message(context, chat_id, msg.message_id, 5)
-            target_dir_id_123 = self.pan_client.get_or_create_directory(DEFAULT_SAVE_DIR)
-            msg = bot.send_message(
-                chat_id=chat_id,
-                text=f"✅ 123云盘目录ID: {target_dir_id_123}\n"
-                     f"路径: {DEFAULT_SAVE_DIR}"
-            )
-            self.auto_delete_message(context, chat_id, msg.message_id, 5)
-            # 第三步：执行迁移
-            msg = bot.send_message(
-                chat_id=chat_id,
-                text="🚀 第三步：开始迁移文件..."
-            )
-            self.auto_delete_message(context, chat_id, msg.message_id, 5)
-            stats = pan_transfer.transfer_files(
-                source_dir_id=source_dir_id,
-                target_dir_id_123=target_dir_id_123
-            )
-            
-            # 发送统计信息
-            stats_message = self.format_stats_message(stats)
-            bot.send_message(chat_id=chat_id, text=stats_message)
-            
-            # 第四步：清理源文件
-            if DELETE_AFTER_TRANSFER and stats["failed_files"] == 0:
-                msg = bot.send_message(
-                    chat_id=chat_id,
-                    text="🧹 清理115网盘源文件..."
-                )
-                self.auto_delete_message(context, chat_id, msg.message_id, 5)
-                pan_transfer.delete_115_directory(source_dir_id)
-                msg = bot.send_message(chat_id=chat_id, text="✅ 源文件已成功删除")
-                self.auto_delete_message(context, chat_id, msg.message_id, 5)
-            elif DELETE_AFTER_TRANSFER and stats["failed_files"] > 0:
-                msg = bot.send_message(
-                    chat_id=chat_id,
-                    text=f"⚠️ 由于存在 {stats['failed_files']} 个迁移失败的文件，已跳过删除115源文件"
-                )
-                self.auto_delete_message(context, chat_id, msg.message_id, 5)
-            else:
-                msg = bot.send_message(
-                    chat_id=chat_id,
-                    text="ℹ️ 已跳过删除115源文件（配置选项）"
-                )
-                self.auto_delete_message(context, chat_id, msg.message_id, 5)
-            
-        except Exception as e:
-            self.send_auto_delete_message(update, context, "❌ 手动迁移过程中出错: {str(e)}")
-            traceback.print_exc()
-        
-        finally:
-            # 清理任务
-            task_key = f"manual_migration_{custom_path}"
-            if task_key in self.active_tasks:
-                del self.active_tasks[task_key]
-    
-    def process_115_share_link(self, update: Update, context: CallbackContext, share_url: str) -> None:
-        """处理单个115分享链接的转存和迁移"""
-        bot = self.updater.bot
-        chat_id = update.message.chat_id
-        
-        try:
-            if not self.share_transfer:
-                self.send_auto_delete_message(update, context, "❌ 115功能未初始化，请检查配置")
-                return
-            
-            # 第一步：转存分享链接到115网盘
-            msg = bot.send_message(
-                chat_id=chat_id,
-                text=f"🔗 第一步：转存分享链接到115网盘...\n链接: {share_url}"
-            )
-            self.auto_delete_message(context, chat_id, msg.message_id, 5)
-           
-            target_dir_id = self.share_transfer.transfer_share(
-                share_url=share_url,
-                receive_code=None,
-                target_path=TARGET_PATH_115
-            )
-            
-            msg = bot.send_message(
-                chat_id=chat_id,
-                text=f"✅ 转存成功! 目标目录ID: {target_dir_id}\n"
-                     f"⏳ 等待5秒确保转存完成..."
-            )
-            self.auto_delete_message(context, chat_id, msg.message_id, 5)
-            time.sleep(5)
-            
-            # 第二步：迁移到123云盘
-            msg = bot.send_message(
-                chat_id=chat_id,
-                text="🌐 第二步：迁移到123云盘..."
-            )
-            self.auto_delete_message(context, chat_id, msg.message_id, 5)
-            
-            pan_transfer = PanTransfer(pan_client=self.pan_client, cookies=COOKIES_115)
-            # 获取或创建123目标目录
-            target_dir_id_123 = self.pan_client.get_or_create_directory(DEFAULT_SAVE_DIR)
-            msg = bot.send_message(
-                chat_id=chat_id,
-                text=f"✅ 123云盘目标目录ID: {target_dir_id_123}"
-            )
-            self.auto_delete_message(context, chat_id, msg.message_id, 5)
-            
-            stats = pan_transfer.transfer_files(
-                source_dir_id=target_dir_id,
-                target_dir_id_123=target_dir_id_123
-            )
-            
-            # 发送统计信息
-            stats_message = self.format_stats_message(stats)
-            bot.send_message(chat_id=chat_id, text=stats_message)
-            
-            # 第三步：清理源文件
-            if DELETE_AFTER_TRANSFER and stats["failed_files"] == 0:
-                msg = bot.send_message(
-                    chat_id=chat_id,
-                    text="🧹 清理115网盘源文件..."
-                )
-                self.auto_delete_message(context, chat_id, msg.message_id, 5)
-                pan_transfer.delete_115_directory(target_dir_id)
-                msg = bot.send_message(
-                    chat_id=chat_id,
-                    text="✅ 源文件已成功删除"
-                )
-                self.auto_delete_message(context, chat_id, msg.message_id, 5)
-            elif DELETE_AFTER_TRANSFER and stats["failed_files"] > 0:
-                msg = bot.send_message(
-                    chat_id=chat_id,
-                    text=f"⚠️ 由于存在 {stats['failed_files']} 个迁移失败的文件，已跳过删除115源文件"
-                )
-                self.auto_delete_message(context, chat_id, msg.message_id, 5)
-            else:
-                msg = bot.send_message(
-                    chat_id=chat_id,
-                    text="ℹ️ 已跳过删除115源文件（配置选项）"
-                )
-                self.auto_delete_message(context, chat_id, msg.message_id, 5)
-            
-        except Exception as e:
-            self.send_auto_delete_message(update, context, "❌ 手动迁移过程中出错: {str(e)}")
-            traceback.print_exc()
-        
-        finally:
-            # 清理任务
-            if share_url in self.active_tasks:
-                del self.active_tasks[share_url]
-    # ====================== END 115转存功能 ======================
+        # 115网盘分享链接处理
+        elif re.search(SHARE_LINK_PATTERN, text):
+            self.send_auto_delete_message(update, context, "🔗 检测到115分享链接，开始处理...")
+            self.handle_115_share_link(update, context, text)
     
     @admin_required
     def add_command(self, update: Update, context: CallbackContext):
@@ -3174,6 +2926,86 @@ class TelegramBotHandler:
             logger.error(f"刷新Token失败: {e}")
             self.send_auto_delete_message(update, context, f"❌ 刷新Token失败: {e}")
 
+    @admin_required
+    def transport_command(self, update: Update, context: CallbackContext):
+        """处理/transport命令 - 迁移115文件到123云盘"""
+        args = context.args
+        source_path = DEFAULT_SOURCE_PATH
+        
+        # 解析参数
+        if args and args[0] != "默认":
+            source_path = ' '.join(args).strip()
+        
+        self.send_auto_delete_message(update, context, f"🚀 开始迁移任务...\n源路径: {source_path}")
+        
+        try:
+            # 初始化迁移工具
+            transfer = Pan115Transfer(
+                self.pan_client, 
+                self.pan_client.token_manager.access_token
+            )
+            
+            # 执行迁移
+            success, report = transfer.transfer_files(source_path)
+            
+            # 发送结果（不自动删除）
+            context.bot.send_message(chat_id=update.message.chat_id, text=report)
+        except Exception as e:
+            error_msg = f"迁移过程中出错: {str(e)}"
+            logger.error(error_msg)
+            self.send_auto_delete_message(update, context, f"❌ 迁移失败!\n{error_msg}")
+
+    @admin_required
+    def clear_command(self, update: Update, context: CallbackContext):
+        """处理/clear命令 - 清空中转站"""
+        self.send_auto_delete_message(update, context, f"🧹 正在清空中转站目录: {DEFAULT_SOURCE_PATH}...")
+        try:
+            transfer = Pan115Transfer(
+                self.pan_client, 
+                self.pan_client.token_manager.access_token
+            )
+            if transfer.clear_115_directory():
+                self.send_auto_delete_message(update, context, f"✅ 中转站目录已清空并重新创建！", delay=5)
+            else:
+                self.send_auto_delete_message(update, context, "❌ 清空中转站失败，请检查日志", delay=5)
+        except Exception as e:
+            error_msg = f"清空中转站时出错: {str(e)}"
+            logger.error(error_msg)
+            self.send_auto_delete_message(update, context, f"❌ {error_msg}", delay=5)
+
+    @admin_required
+    def handle_115_share_link(self, update: Update, context: CallbackContext, text):
+        """处理115分享链接"""
+        self.send_auto_delete_message(update, context, f"🔗 收到115分享链接，正在处理...")
+        
+        try:
+            # 初始化迁移工具
+            transfer = Pan115Transfer(
+                self.pan_client, 
+                self.pan_client.token_manager.access_token
+            )
+            
+            # 保存分享到115
+            success = transfer.save_share_to_115(text)
+            
+            if success:
+                # 等待文件处理 - 减少等待时间
+                self.send_auto_delete_message(update, context, "✅ 分享内容已保存到中转站!\n等待5秒让文件处理完成...", delay=5)
+                time.sleep(5)
+                
+                # 迁移中转站内容
+                self.send_auto_delete_message(update, context, "🚀 开始迁移中转站内容...", delay=5)
+                success, report = transfer.transfer_files(DEFAULT_SOURCE_PATH)
+                
+                # 发送结果（不自动删除）
+                context.bot.send_message(chat_id=update.message.chat_id, text=report)
+            else:
+                self.send_auto_delete_message(update, context, "❌ 保存分享内容失败，请检查链接和密码是否正确", delay=5)
+        except Exception as e:
+            error_msg = f"处理分享链接时出错: {str(e)}"
+            logger.error(error_msg)
+            self.send_auto_delete_message(update, context, f"❌ 处理分享链接失败!\n{error_msg}", delay=5)
+
 def main():
     # 添加授权信息提示
     logger.info("=============================================")
@@ -3198,16 +3030,6 @@ def main():
     if not CLIENT_SECRET:
         logger.error("❌ 环境变量 PAN_CLIENT_SECRET 未设置")
         return
-
-    # ========== 添加方案四：禁用 SSL 验证 ==========
-    try:
-        import ssl
-        # 禁用 SSL 验证（解决 UNEXPECTED_EOF_WHILE_READING 错误）
-        ssl._create_default_https_context = ssl._create_unverified_context
-        #logger.warning("⚠️ 已全局禁用 SSL 证书验证（注意安全风险）")
-    except Exception as e:
-        logger.error(f"禁用 SSL 验证失败: {e}")
-    # ========== 结束添加 ==========
     
     logger.info("初始化123云盘客户端...")
     pan_client = Pan123Client(CLIENT_ID, CLIENT_SECRET)
