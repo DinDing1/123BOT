@@ -685,55 +685,47 @@ class Pan115Transfer:
                 time.sleep(RETRY_DELAY)
         
         return None
-
-    def delete_115_directory(self, path=DEFAULT_SOURCE_PATH):
-        """彻底删除整个中转站目录（移动到回收站）"""
+    def clear_115_directory(self, path=DEFAULT_SOURCE_PATH):
+        """清空目录（删除目录下的所有内容但不删除目录本身）"""
+        print(f"清空目录: {path}...")
         dir_id = self.find_115_directory_id(path)
         if not dir_id:
-            logger.warning(f"无法找到目录ID: {path}，跳过删除")
+            print(f"目录ID未找到: {path}")
             return False
-            
+        
         try:
-            result = self.client_115.fs_delete([dir_id])
+            # 创建文件系统对象
+            fs = P115FileSystem(self.client_115)
             
+            # 切换到目标目录
+            fs.chdir(dir_id)
+            
+            # 获取目录下的所有文件和子目录
+            items = fs.listdir_attr()
+            
+            # 收集所有要删除的ID
+            ids_to_delete = []
+            for item in items:
+                # 只处理当前目录下的直接子项
+                if item['parent_id'] == dir_id:
+                    ids_to_delete.append(item['id'])
+            
+            if not ids_to_delete:
+                print(f"目录 {path} 已经是空的")
+                return True
+            
+            # 批量删除
+            result = self.client_115.fs_delete(ids_to_delete)
             if result.get("state"):
-                logger.info(f"✅ 目录删除成功! 已移动到回收站: {path}")
+                print(f"✅ 目录内容删除成功! 已移动到回收站: {path}")
                 return True
             else:
                 error_msg = result.get("error", "未知错误")
-                if "文件已删除" in error_msg or "请勿重复操作" in error_msg:
-                    return True
-                else:
-                    logger.error(f"❌ 目录删除失败: {error_msg}")
-                    return False
+                print(f"❌ 目录内容删除失败: {error_msg}")
+                return False
         except Exception as e:
-            logger.error(f"删除目录异常: {str(e)}")
+            print(f"清空目录异常: {str(e)}")
             return False
-
-    def recreate_115_directory(self, path=DEFAULT_SOURCE_PATH):
-        """重新创建中转站目录"""
-        try:
-            result = self.client_115.fs_mkdir(path)
-            
-            if result.get("state"):
-                logger.info(f"✅ 目录创建成功: {path}")
-                return result["cid"]
-            else:
-                logger.error(f"❌ 目录创建失败: {result.get('error', '未知错误')}")
-                return None
-        except Exception as e:
-            logger.error(f"创建目录异常: {str(e)}")
-            return None
-            
-    def clear_115_directory(self, path=DEFAULT_SOURCE_PATH):
-        """清空目录（删除后重新创建）"""
-        logger.info(f"清空目录: {path}...")
-        if self.delete_115_directory(path):
-            new_dir_id = self.recreate_115_directory(path)
-            if new_dir_id:
-                logger.info(f"✅ 目录已清空并重新创建: {path}")
-                return True
-        return False
 
     def get_transfer_report(self):
         """生成迁移统计报告"""
@@ -2958,16 +2950,16 @@ class TelegramBotHandler:
     @admin_required
     def clear_command(self, update: Update, context: CallbackContext):
         """处理/clear命令 - 清空中转站"""
-        self.send_auto_delete_message(update, context, f"🧹 正在清空中转站目录: {DEFAULT_SOURCE_PATH}...")
+        self.send_auto_delete_message(update, context, f"🧹 正在清空我的接收目录: {DEFAULT_SOURCE_PATH}...")
         try:
             transfer = Pan115Transfer(
                 self.pan_client, 
                 self.pan_client.token_manager.access_token
             )
             if transfer.clear_115_directory():
-                self.send_auto_delete_message(update, context, f"✅ 中转站目录已清空并重新创建！", delay=5)
+                self.send_auto_delete_message(update, context, f"✅ 我的接收目录已清空！", delay=5)
             else:
-                self.send_auto_delete_message(update, context, "❌ 清空中转站失败，请检查日志", delay=5)
+                self.send_auto_delete_message(update, context, "❌ 清空失败，请检查日志", delay=5)
         except Exception as e:
             error_msg = f"清空中转站时出错: {str(e)}"
             logger.error(error_msg)
@@ -2990,11 +2982,11 @@ class TelegramBotHandler:
             
             if success:
                 # 等待文件处理 - 减少等待时间
-                self.send_auto_delete_message(update, context, "✅ 分享内容已保存到中转站!\n等待5秒让文件处理完成...", delay=5)
+                self.send_auto_delete_message(update, context, "✅ 分享内容已保存到我的接收!\n等待5秒让文件处理完成...", delay=5)
                 time.sleep(5)
                 
                 # 迁移中转站内容
-                self.send_auto_delete_message(update, context, "🚀 开始迁移中转站内容...", delay=5)
+                self.send_auto_delete_message(update, context, "🚀 开始迁移...", delay=5)
                 success, report = transfer.transfer_files(DEFAULT_SOURCE_PATH)
                 
                 # 发送结果（不自动删除）
