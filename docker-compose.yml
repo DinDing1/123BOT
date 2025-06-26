@@ -13,7 +13,7 @@ services:
       #123云盘申请的开发者API
       - PAN_CLIENT_ID=123API
       - PAN_CLIENT_SECRET=123API
-      #秒传文件存放位置，不填就根目录，如下：存放在根目录/待整理目录下
+      #秒传文件和115搬运文件存放位置，不填就默认目录
       - DEFAULT_SAVE_DIR=待整理
       #生成JSON文件位置，不填就一整个123网盘，如下：只在根目录/媒体库目录里面内容可分享
       - EXPORT_BASE_DIR=媒体库
@@ -22,10 +22,8 @@ services:
       #导出黑名单
       - BANNED_EXPORT_NAMES=电视剧;电影   
       #115CK
-      - COOKIES_115=
+      - P115_COOKIE=UID*****
       #115转移目录
-      - TARGET_PATH_115=中转站
-      #115转移目录
-      - CUSTOM_DIRECT_LINK_SERVICE=115公网直链服务
+      - PAN_BOT_LICENSE=授权码
     volumes:
       - /vol2/1000/docker/123bot/data:/data
