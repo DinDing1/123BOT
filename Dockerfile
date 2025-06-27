@@ -48,7 +48,6 @@ RUN echo "import sys, os, hashlib" > security.py && \
     echo "            '6d30a34ca9ec1bd5308618a24e40d5bf',  # BY123_269VBR" >> security.py && \
     echo "            'ef3b6917603fb32bbb0bffbb9f9336e7',  # BY123_135HDC" >> security.py && \
     echo "            '13546b91d0543ea599969ce501e6278d'   # BY123_690CDF" >> security.py && \   
-    echo "            '0f47294cfbc15e6b800b3044ffedf742',  # BY123_5G8H2K9M" >> security.py && \
     echo "            '8d27b87d1e7f3f99fd6f00cbe65fe610',  # BY123_7J3F9K2L" >> security.py && \
     echo "            'dd3dea2a4f89d3b7db9df6b5a38dc44f',  # BY123_R4T6Y8U1" >> security.py && \
     echo "            '9f4b1a191ca427d5109b5690d47b1b69',  # BY123_Q9W2E4R6" >> security.py && \
