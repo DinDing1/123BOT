@@ -3,8 +3,6 @@ FROM python:3.12-slim AS builder
 
 # 设置构建时的时间戳（作为镜像有效期起始点）
 ARG BUILD_TIMESTAMP
-# 默认设置为当前时间（如果构建时未传入）
-ENV BUILD_TIMESTAMP=${BUILD_TIMESTAMP:-$(date +%s)}
 
 # 设置时区
 ENV TZ=Asia/Shanghai
