@@ -27,6 +27,15 @@ jobs:
         run: |
           VERSION=$(cat VERSION | tr -d '[:space:]')  # 读取 VERSION 文件内容
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          
+      # 新增步骤：生成构建时间戳
+      - name: Generate build timestamp
+        id: timestamp
+        run: |
+          # 获取当前时间戳（秒级）
+          CURRENT_TIMESTAMP=$(date +%s)
+          echo "timestamp=${CURRENT_TIMESTAMP}" >> $GITHUB_OUTPUT
+          echo "Build timestamp: ${CURRENT_TIMESTAMP}"
 
       - name: Build and Push Docker Image (Multi-Arch)
         uses: docker/build-push-action@v5
@@ -37,4 +46,6 @@ jobs:
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/123bot:latest
             ${{ secrets.DOCKERHUB_USERNAME }}/123bot:${{ steps.version.outputs.version }}
-
+          # 新增构建参数：传递时间戳
+          build-args: |
+            BUILD_TIMESTAMP=${{ steps.timestamp.outputs.timestamp }}
