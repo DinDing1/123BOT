@@ -1,16 +1,13 @@
 # 第一阶段：构建依赖和编译
 FROM python:3.12-slim AS builder
 
-# 设置构建时的时间戳（作为镜像有效期起始点）
-ARG BUILD_TIMESTAMP
-
 # 设置时区
 ENV TZ=Asia/Shanghai
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 WORKDIR /app
 
-# 安装构建依赖 - 增加必要的网络工具
+# 安装构建依赖
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     python3-dev \
@@ -23,10 +20,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libreadline-dev \
     libffi-dev \
     wget \
-    curl \
-    net-tools \
-    dnsutils \
-    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 # 安装依赖
@@ -39,30 +32,22 @@ RUN pip install --no-cache-dir pyinstaller==6.2.0
 COPY . .
 
 # 添加安全检测代码到脚本开头
-RUN echo "import sys, os, hashlib, time" > security.py && \
+RUN echo "import sys, os, hashlib" > security.py && \
     echo "def security_check():" >> security.py && \
-    # 检测调试器
+    echo "    # 检测调试器" >> security.py && \
     echo "    if sys.gettrace() is not None:" >> security.py && \
     echo "        sys.exit('Debugger detected! Exiting for security.')" >> security.py && \
-    # 检测调试环境变量
+    echo "    # 检测调试环境变量" >> security.py && \
     echo "    if os.environ.get('PYTHON_DEBUG'):" >> security.py && \
     echo "        sys.exit('Debug environment detected! Exiting for security.')" >> security.py && \
-    # ==== 时间验证逻辑 ====
-    echo "    # 镜像有效期检查 (30天)" >> security.py && \
-    echo "    build_timestamp = $BUILD_TIMESTAMP  # 构建时间戳" >> security.py && \
-    echo "    current_time = time.time()" >> security.py && \
-    echo "    expiry_seconds = 30 * 24 * 3600  # 30天有效期" >> security.py && \
-    echo "    if current_time < build_timestamp:" >> security.py && \
-    echo "        sys.exit('❌ 系统时间异常！检测到时间回溯')" >> security.py && \
-    echo "    if current_time - build_timestamp > expiry_seconds:" >> security.py && \
-    echo "        sys.exit('❌ 镜像已过期！请重新构建镜像获取更新。有效期: 30天')" >> security.py && \
-    # ==== 许可证验证 ====
+    # 添加授权验证函数
     echo "    def verify_license(license_key):" >> security.py && \
     echo "        valid_hashes = [" >> security.py && \
-    # 许可证密钥哈希列表（保持您指定的格式）
+    # 添加50组安全许可证密钥前三已用
     echo "            'f871cab818025f1f4781483ea21ccf5d',  # BY123_666ZTJ" >> security.py && \
     echo "            '6d30a34ca9ec1bd5308618a24e40d5bf',  # BY123_269VBR" >> security.py && \
     echo "            'ef3b6917603fb32bbb0bffbb9f9336e7',  # BY123_135HDC" >> security.py && \
+    echo "            '13546b91d0543ea599969ce501e6278d'   # BY123_690CDF" >> security.py && \   
     echo "            '8d27b87d1e7f3f99fd6f00cbe65fe610',  # BY123_7J3F9K2L" >> security.py && \
     echo "            'dd3dea2a4f89d3b7db9df6b5a38dc44f',  # BY123_R4T6Y8U1" >> security.py && \
     echo "            '9f4b1a191ca427d5109b5690d47b1b69',  # BY123_Q9W2E4R6" >> security.py && \
@@ -81,56 +66,16 @@ RUN echo "import sys, os, hashlib, time" > security.py && \
 # 将安全检测代码和主脚本合并
 RUN cat security.py 123pan_bot.py > protected_bot.py
 
-# 查找p115client包的实际位置
-RUN python -c "import p115client; print(p115client.__file__)" > p115client_path.txt
-
-# 使用PyInstaller编译（添加必要的隐藏导入）
-RUN PYINSTALLER_OPTS="--onefile --name pan_bot \
+# 使用PyInstaller编译
+RUN pyinstaller --onefile --name pan_bot \
     --hidden-import=sqlite3 \
     --hidden-import=telegram.ext \
-    --hidden-import=telegram \
-    --hidden-import=telegram._updater \
-    --hidden-import=telegram.ext._application \
     --hidden-import=requests \
     --hidden-import=urllib3 \
-    --hidden-import=hashlib \
-    --hidden-import=time \
-    --hidden-import=os \
-    --hidden-import=sys \
-    --hidden-import=json \
-    --hidden-import=re \
-    --hidden-import=logging \
-    --hidden-import=threading \
-    --hidden-import=datetime \
-    --hidden-import=warnings \
-    --hidden-import=httpx \
-    --hidden-import=p115 \
-    --hidden-import=p115client.tool.iterdir \
-    --hidden-import=p115client.tool.download \
-    --hidden-import=urllib3.util.retry \
-    --hidden-import=requests.adapters \
-    --hidden-import=contextlib \
-    --hidden-import=functools \
-    --hidden-import=ssl \
-    --hidden-import=idna \
-    --hidden-import=OpenSSL \
-    --hidden-import=httpx._transports.default \
-    --hidden-import=httpx._content \
-    --hidden-import=asyncio \
-    --hidden-import=charset_normalizer \
-    --hidden-import=multiprocessing \
-    --hidden-import=multiprocessing.util \
-    --hidden-import=multiprocessing.synchronize \
     --clean \
     --strip \
-    --noconfirm" && \
-    # 如果找到p115client路径，则添加--add-data参数
-    if [ -f p115client_path.txt ]; then \
-        P115_PATH=$(dirname $(cat p115client_path.txt)) && \
-        PYINSTALLER_OPTS="$PYINSTALLER_OPTS --add-data '$P115_PATH:./p115client'"; \
-    fi && \
-    echo "使用PyInstaller选项: $PYINSTALLER_OPTS" && \
-    pyinstaller $PYINSTALLER_OPTS protected_bot.py
+    --noconfirm \
+    protected_bot.py
 
 # 第二阶段：最小化运行时环境
 FROM python:3.12-slim
@@ -138,15 +83,6 @@ FROM python:3.12-slim
 # 设置时区
 ENV TZ=Asia/Shanghai
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
-
-# 添加必要的CA证书
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
-
-# 设置SSL证书环境变量
-ENV SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
-ENV REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
 
 WORKDIR /app
 
