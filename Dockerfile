@@ -77,13 +77,6 @@ RUN echo "import sys, os, hashlib, time" > security.py && \
 # 将安全检测代码和主脚本合并
 RUN cat security.py 123pan_bot.py > protected_bot.py
 
-# 调试：检查合并后的文件
-RUN head -n 50 protected_bot.py && \
-    tail -n 20 protected_bot.py
-
-# 调试：尝试运行主脚本
-RUN python -c "import protected_bot" || echo "Import test failed, continuing..."
-
 # 使用PyInstaller编译（添加必要的隐藏导入）
 RUN pyinstaller --onefile --name pan_bot \
     --hidden-import=sqlite3 \
@@ -97,6 +90,20 @@ RUN pyinstaller --onefile --name pan_bot \
     --hidden-import=time \
     --hidden-import=os \
     --hidden-import=sys \
+    --hidden-import=json \
+    --hidden-import=re \
+    --hidden-import=logging \
+    --hidden-import=threading \
+    --hidden-import=datetime \
+    --hidden-import=warnings \
+    --hidden-import=httpx \
+    --hidden-import=p115 \
+    --hidden-import=p115client.tool.iterdir \
+    --hidden-import=p115client.tool.download \
+    --hidden-import=urllib3.util.retry \
+    --hidden-import=requests.adapters \
+    --hidden-import=contextlib \
+    --hidden-import=functools \
     --clean \
     --strip \
     --noconfirm \
