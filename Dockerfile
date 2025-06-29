@@ -55,11 +55,11 @@ RUN echo "import sys, os, hashlib, time" > security.py && \
     # ==== 许可证验证 ====
     echo "    def verify_license(license_key):" >> security.py && \
     echo "        valid_hashes = [" >> security.py && \
-    # 许可证密钥哈希列表
+    # 许可证密钥哈希列表（保持您指定的格式）
     echo "            'f871cab818025f1f4781483ea21ccf5d',  # BY123_666ZTJ" >> security.py && \
     echo "            '6d30a34ca9ec1bd5308618a24e40d5bf',  # BY123_269VBR" >> security.py && \
     echo "            'ef3b6917603fb32bbb0bffbb9f9336e7',  # BY123_135HDC" >> security.py && \
-    echo "            '13546b91d0543ea599969ce501e6278d',  # BY123_690CDF" >> security.py && \   
+    echo "            '13546b91d0543ea599969ce501e6278d',  # BY123_690CDF" >> security.py && \
     echo "            '8d27b87d1e7f3f99fd6f00cbe65fe610',  # BY123_7J3F9K2L" >> security.py && \
     echo "            'dd3dea2a4f89d3b7db9df6b5a38dc44f',  # BY123_R4T6Y8U1" >> security.py && \
     echo "            '9f4b1a191ca427d5109b5690d47b1b69',  # BY123_Q9W2E4R6" >> security.py && \
@@ -78,12 +78,26 @@ RUN echo "import sys, os, hashlib, time" > security.py && \
 # 将安全检测代码和主脚本合并
 RUN cat security.py 123pan_bot.py > protected_bot.py
 
-# 使用PyInstaller编译
+# 调试：检查合并后的文件
+RUN head -n 50 protected_bot.py && \
+    tail -n 20 protected_bot.py
+
+# 调试：尝试运行主脚本
+RUN python -c "import protected_bot" || echo "Import test failed, continuing..."
+
+# 使用PyInstaller编译（添加必要的隐藏导入）
 RUN pyinstaller --onefile --name pan_bot \
     --hidden-import=sqlite3 \
     --hidden-import=telegram.ext \
+    --hidden-import=telegram \
+    --hidden-import=telegram._updater \
+    --hidden-import=telegram.ext._application \
     --hidden-import=requests \
     --hidden-import=urllib3 \
+    --hidden-import=hashlib \
+    --hidden-import=time \
+    --hidden-import=os \
+    --hidden-import=sys \
     --clean \
     --strip \
     --noconfirm \
