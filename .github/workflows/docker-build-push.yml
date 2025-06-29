@@ -25,15 +25,24 @@ jobs:
       - name: Read Version
         id: version
         run: |
-          VERSION=$(cat VERSION | tr -d '[:space:]')  # 读取 VERSION 文件内容
+          VERSION=$(cat VERSION | tr -d '[:space:]')
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          
+      - name: Generate build timestamp
+        id: timestamp
+        run: |
+          CURRENT_TIMESTAMP=$(date +%s)
+          echo "timestamp=${CURRENT_TIMESTAMP}" >> $GITHUB_OUTPUT
+          echo "Build timestamp: ${CURRENT_TIMESTAMP}"
 
       - name: Build and Push Docker Image (Multi-Arch)
         uses: docker/build-push-action@v5
         with:
           context: .
-          platforms: linux/amd64,linux/arm64  # 多架构支持
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/123bot:latest
             ${{ secrets.DOCKERHUB_USERNAME }}/123bot:${{ steps.version.outputs.version }}
+          build-args: |
+            BUILD_TIMESTAMP=${{ steps.timestamp.outputs.timestamp }}
