@@ -66,11 +66,23 @@ RUN echo "import sys, os, hashlib" > security.py && \
 RUN cat security.py 123pan_bot.py > protected_bot.py
 
 # 使用PyInstaller编译
-RUN pyinstaller --onefile --name pan_bot \
-    --hidden-import=sqlite3 \
-    --hidden-import=telegram.ext \
-    --hidden-import=requests \
-    --hidden-import=urllib3 \
+RUN pyinstaller \
+    --onefile \
+    --name pan_bot \
+    --hidden-import 'p115' \
+    --hidden-import 'p115client' \
+    --hidden-import 'p115client.tool.iterdir' \
+    --hidden-import 'p115client.tool.download' \
+    --hidden-import 'sqlite3' \
+    --hidden-import 'logging' \
+    --hidden-import 'json' \
+    --hidden-import 're' \
+    --hidden-import 'os' \
+    --hidden-import 'time' \
+    --hidden-import 'threading' \
+    --hidden-import 'datetime' \
+    --hidden-import 'functools' \
+    --hidden-import 'contextlib' \
     --clean \
     --strip \
     --noconfirm \
