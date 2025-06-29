@@ -1,36 +1,46 @@
-FROM python:3.12-slim AS builder
+# 使用官方 Python 基础镜像
+FROM python:3.12-slim
 
 # 设置时区
 ENV TZ=Asia/Shanghai
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
+# 设置工作目录
 WORKDIR /app
 
-# 安装构建依赖
+# 安装系统依赖
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
-    python3-dev \
-    libssl-dev \
     build-essential \
+    libssl-dev \
     zlib1g-dev \
     libncurses5-dev \
     libgdbm-dev \
     libnss3-dev \
     libreadline-dev \
     libffi-dev \
+    libsqlite3-dev \
     wget \
+    curl \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# 安装依赖
+# 设置环境变量
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PIP_NO_CACHE_DIR=on
+ENV PIP_DISABLE_PIP_VERSION_CHECK=on
+
+# 复制项目文件
 COPY requirements.txt .
-RUN pip install --no-cache-dir -U pip && \
-    pip install --no-cache-dir -r requirements.txt
-RUN pip install --no-cache-dir pyinstaller==6.2.0
+COPY VERSION .
+COPY 123pan_bot.py .
 
-# 复制源码
-COPY . .
+# 安装 Python 依赖
+RUN pip install --upgrade pip && \
+    pip install -r requirements.txt && \
+    pip install "p115client @ git+https://github.com/aooy/p115client.git@master"
 
-# 添加安全检测代码到脚本开头
+# 添加安全检测代码
 RUN echo "import sys, os, hashlib" > security.py && \
     echo "def security_check():" >> security.py && \
     echo "    # 检测调试器" >> security.py && \
@@ -39,10 +49,8 @@ RUN echo "import sys, os, hashlib" > security.py && \
     echo "    # 检测调试环境变量" >> security.py && \
     echo "    if os.environ.get('PYTHON_DEBUG'):" >> security.py && \
     echo "        sys.exit('Debug environment detected! Exiting for security.')" >> security.py && \
-    # 添加授权验证函数
     echo "    def verify_license(license_key):" >> security.py && \
     echo "        valid_hashes = [" >> security.py && \
-    # 添加50组安全许可证密钥前三已用
     echo "            'f871cab818025f1f4781483ea21ccf5d',  # BY123_666ZTJ" >> security.py && \
     echo "            '6d30a34ca9ec1bd5308618a24e40d5bf',  # BY123_269VBR" >> security.py && \
     echo "            'ef3b6917603fb32bbb0bffbb9f9336e7',  # BY123_135HDC" >> security.py && \
@@ -54,7 +62,6 @@ RUN echo "import sys, os, hashlib" > security.py && \
     echo "        ]" >> security.py && \
     echo "        hash_md5 = hashlib.md5(license_key.encode('utf-8')).hexdigest()" >> security.py && \
     echo "        return hash_md5 in valid_hashes" >> security.py && \
-    # 检查环境变量中的许可证
     echo "    license_key = os.getenv('PAN_BOT_LICENSE', '')" >> security.py && \
     echo "    if not license_key:" >> security.py && \
     echo "        sys.exit('❌ 未提供许可证密钥，请设置PAN_BOT_LICENSE环境变量')" >> security.py && \
@@ -65,49 +72,12 @@ RUN echo "import sys, os, hashlib" > security.py && \
 # 将安全检测代码和主脚本合并
 RUN cat security.py 123pan_bot.py > protected_bot.py
 
-# 使用PyInstaller编译
-RUN pyinstaller \
-    --onefile \
-    --name pan_bot \
-    --hidden-import 'p115' \
-    --hidden-import 'p115client' \
-    --hidden-import 'p115client.tool.iterdir' \
-    --hidden-import 'p115client.tool.download' \
-    --hidden-import 'sqlite3' \
-    --hidden-import 'logging' \
-    --hidden-import 'json' \
-    --hidden-import 're' \
-    --hidden-import 'os' \
-    --hidden-import 'time' \
-    --hidden-import 'threading' \
-    --hidden-import 'datetime' \
-    --hidden-import 'functools' \
-    --hidden-import 'contextlib' \
-    --clean \
-    --strip \
-    --noconfirm \
-    protected_bot.py
-
-# 第二阶段：最小化运行时环境
-FROM python:3.12-slim
-
-# 设置时区
-ENV TZ=Asia/Shanghai
-RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
-
-WORKDIR /app
-
-# 从构建阶段复制编译后的程序
-COPY --from=builder /app/dist/pan_bot /app/
-COPY --from=builder /app/VERSION /app/
-
-# 安装运行时最小依赖
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libsqlite3-0 \
-    && rm -rf /var/lib/apt/lists/*
+# 设置容器健康检查（可选）
+HEALTHCHECK --interval=5m --timeout=30s \
+  CMD curl -f http://localhost:8080/ || exit 1
 
 # 设置数据卷
 VOLUME /data
 
 # 设置入口点
-ENTRYPOINT ["/app/pan_bot"]
+ENTRYPOINT ["python", "protected_bot.py"]
