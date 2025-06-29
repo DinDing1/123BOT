@@ -89,27 +89,28 @@ COMMON_PATH_DELIMITER = "%"
 # Base62字符集
 BASE62_CHARS = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
-# 环境变量配置
-DEFAULT_SAVE_DIR = os.getenv("DEFAULT_SAVE_DIR", "").strip()
-EXPORT_BASE_DIRS = [d.strip() for d in os.getenv("EXPORT_BASE_DIR", "").split(';') if d.strip()]
-SEARCH_MAX_DEPTH = int(os.getenv("SEARCH_MAX_DEPTH", ""))
+####123配置
+CLIENT_ID = os.getenv("PAN_CLIENT_ID","") #开发者API
+CLIENT_SECRET = os.getenv("PAN_CLIENT_SECRET","")  #开发者API
+DEFAULT_SAVE_DIR = os.getenv("DEFAULT_SAVE_DIR", "").strip() #JSON和115转存存放目录
+EXPORT_BASE_DIRS = [d.strip() for d in os.getenv("EXPORT_BASE_DIR", "").split(';') if d.strip()] #媒体库目录，生成JSON目录
+SEARCH_MAX_DEPTH = int(os.getenv("SEARCH_MAX_DEPTH", "")) #扫描目录叠加深度
 DAILY_EXPORT_LIMIT = int(os.getenv("DAILY_EXPORT_LIMIT", "3")) #导出次数
-BANNED_EXPORT_NAMES = [name.strip().lower() for name in os.getenv("BANNED_EXPORT_NAMES", "电视剧;电影").split(';') if name.strip()]
-
+BANNED_EXPORT_NAMES = [name.strip().lower() for name in os.getenv("BANNED_EXPORT_NAMES", "电视剧;电影").split(';') if name.strip()] #导出黑名单
+####TGBOT配置
+BOT_TOKEN = os.getenv("TG_BOT_TOKEN","")
+ADMIN_USER_IDS = [int(id.strip()) for id in os.getenv("TG_ADMIN_USER_IDS", "").split(",") if id.strip()]
+####115配置
+P115_COOKIE = os.getenv("P115_COOKIE", "")
+TARGET_CID = int(os.getenv("TARGET_CID", ""))  # 目标目录ID
+USER_AGENT = os.getenv("USER_AGENT", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
 # API速率控制配置
 API_RATE_LIMIT = float(os.getenv("API_RATE_LIMIT", "2.0"))
 TRANSFER_RATE_LIMIT = float(os.getenv("TRANSFER_RATE_LIMIT", "3"))
-
 # 允许的文件类型配置
 ALLOWED_VIDEO_EXTENSIONS = [ext.strip().lower() for ext in os.getenv("ALLOWED_VIDEO_EXT", ".mp4,.mkv,.avi,.mov,.flv,.wmv,.webm,.ts,.m2ts,.iso,.mp3,.flac,.wav").split(',') if ext.strip()]
 ALLOWED_SUB_EXTENSIONS = [ext.strip().lower() for ext in os.getenv("ALLOWED_SUB_EXT", ".srt,.ass,.ssa,.sub,.idx,.vtt,.sup").split(',') if ext.strip()]
 ALLOWED_EXTENSIONS = ALLOWED_VIDEO_EXTENSIONS + ALLOWED_SUB_EXTENSIONS  # 合并扩展名
-
-# 115设置
-P115_COOKIE = os.getenv("P115_COOKIE", "")
-TARGET_CID = int(os.getenv("TARGET_CID", ""))  # 目标目录ID
-USER_AGENT = os.getenv("USER_AGENT", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
-
 # =====================================================
 
 def init_db():
@@ -406,7 +407,6 @@ def is_allowed_file(filename):
     """检查文件是否为允许的类型"""
     ext = os.path.splitext(filename)[1].lower()
     return ext in ALLOWED_VIDEO_EXTENSIONS or ext in ALLOWED_SUB_EXTENSIONS
-
 
 class Pan123API:
     """123云盘API客户端"""
@@ -800,21 +800,21 @@ class Pan123Client:
         
         if DEFAULT_SAVE_DIR:
             self.default_save_dir_id = self.get_or_create_directory(DEFAULT_SAVE_DIR)
-            logger.info(f"默认保存目录已设置: '{DEFAULT_SAVE_DIR}' (ID: {self.default_save_dir_id})")
+            #logger.info(f"默认保存目录已设置: '{DEFAULT_SAVE_DIR}' (ID: {self.default_save_dir_id})")
         
         for base_dir in EXPORT_BASE_DIRS:
             base_dir_id = self.get_or_create_directory(base_dir)
             self.export_base_dir_ids.append(base_dir_id)
             self.export_base_dir_map[base_dir_id] = base_dir
-            logger.info(f"导出基目录已设置: '{base_dir}' (ID: {base_dir_id})")
+            #logger.info(f"导出基目录已设置: '{base_dir}' (ID: {base_dir_id})")
         
         self.search_max_depth = SEARCH_MAX_DEPTH
-        logger.info(f"搜索最大深度已设置: {self.search_max_depth} 层")
+        #logger.info(f"搜索最大深度已设置: {self.search_max_depth} 层")
         
         # 初始化目录缓存
         self.directory_cache = {}
         self.load_directory_cache()
-        logger.info(f"已加载 {len(self.directory_cache)} 个目录缓存")
+        #logger.info(f"已加载 {len(self.directory_cache)} 个目录缓存")
     
     def _create_session(self):
         """创建带重试机制的Session"""
@@ -1080,7 +1080,7 @@ class Pan123Client:
                 for row in rows:
                     file_id = row["file_id"]
                     self.directory_cache[file_id] = dict(row)
-                logger.info(f"已加载 {len(rows)} 个目录缓存")
+                #logger.info(f"已加载 {len(rows)} 个目录缓存")
         except Exception as e:
             logger.error(f"加载目录缓存失败: {e}")
     
@@ -2980,12 +2980,7 @@ def main():
     logger.info(f"版本: {VERSION}")
     logger.info("授权验证通过，正在启动服务...")
     logger.info("=============================================")
-    # 从环境变量读取配置
-    BOT_TOKEN = os.getenv("TG_BOT_TOKEN","")
-    CLIENT_ID = os.getenv("PAN_CLIENT_ID","")
-    CLIENT_SECRET = os.getenv("PAN_CLIENT_SECRET","")
-    ADMIN_USER_IDS = [int(id.strip()) for id in os.getenv("TG_ADMIN_USER_IDS", "").split(",") if id.strip()]
-      
+
     logger.info("初始化123云盘客户端...")
     pan_client = Pan123Client(CLIENT_ID, CLIENT_SECRET)
     
