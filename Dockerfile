@@ -10,7 +10,7 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 WORKDIR /app
 
-# 安装构建依赖
+# 安装构建依赖 - 增加必要的网络工具
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     python3-dev \
@@ -23,6 +23,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libreadline-dev \
     libffi-dev \
     wget \
+    curl \
+    net-tools \
+    dnsutils \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 # 安装依赖
@@ -77,7 +81,7 @@ RUN echo "import sys, os, hashlib, time" > security.py && \
 # 将安全检测代码和主脚本合并
 RUN cat security.py 123pan_bot.py > protected_bot.py
 
-# 使用PyInstaller编译（添加必要的隐藏导入）
+# 使用PyInstaller编译（添加必要的隐藏导入和数据文件）
 RUN pyinstaller --onefile --name pan_bot \
     --hidden-import=sqlite3 \
     --hidden-import=telegram.ext \
@@ -104,6 +108,17 @@ RUN pyinstaller --onefile --name pan_bot \
     --hidden-import=requests.adapters \
     --hidden-import=contextlib \
     --hidden-import=functools \
+    --hidden-import=ssl \
+    --hidden-import=idna \
+    --hidden-import=OpenSSL \
+    --hidden-import=httpx._transports.default \
+    --hidden-import=httpx._content \
+    --hidden-import=asyncio \
+    --hidden-import=charset_normalizer \
+    --hidden-import=multiprocessing \
+    --hidden-import=multiprocessing.util \
+    --hidden-import=multiprocessing.synchronize \
+    --add-data "/usr/lib/python3.12/site-packages/p115client:./p115client" \
     --clean \
     --strip \
     --noconfirm \
@@ -115,6 +130,15 @@ FROM python:3.12-slim
 # 设置时区
 ENV TZ=Asia/Shanghai
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+
+# 添加必要的CA证书
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# 设置SSL证书环境变量
+ENV SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
+ENV REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
 
 WORKDIR /app
 
