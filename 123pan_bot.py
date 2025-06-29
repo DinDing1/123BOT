@@ -26,9 +26,8 @@ from functools import wraps
 import urllib3
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
-from p115 import P115Client, P115FileSystem
+from p115 import P115Client, P115FileSystem, P115ShareFileSystem
 from p115client.tool.iterdir import iter_files_with_path
-from p115client.tool.download import iter_files_with_url
 
 # 禁用SSL警告
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -216,26 +215,6 @@ def is_allowed_file(filename):
     """检查文件扩展名是否在允许列表中"""
     _, ext = os.path.splitext(filename)
     return ext.lower() in ALLOWED_EXTENSIONS
-
-def save_share_via_api(cookie, share_code, password, cid):
-    """保存分享内容到目标目录"""
-    headers = {
-        "Cookie": cookie,
-        "User-Agent": USER_AGENT,
-        "Referer": "https://115.com/",
-        "Origin": "https://115.com"
-    }
-    payload = {"share_code": share_code, "receive_code": password, "cid": str(cid)}
-    
-    with httpx.Client() as http_client:
-        response = http_client.post(
-            "https://webapi.115.com/share/receive", 
-            data=payload, 
-            headers=headers
-        )
-        response.raise_for_status()
-        return response.json()
-
 # =====================================================
 
 class TokenManager:
@@ -558,6 +537,33 @@ class Pan115to123Transfer:
             "failed_files": []
         }
     
+    def save_share_to_115(self, share_link, target_cid):
+        """使用P115ShareFileSystem保存分享链接到指定目录"""
+        try:
+            share_code, password = parse_share_link(share_link)
+            logger.info(f"解析分享链接成功 - 分享码: {share_code}")
+            
+            # 创建分享文件系统对象
+            share_fs = P115ShareFileSystem(
+                client=self.client_115,
+                share_code=share_code,
+                receive_code=password,
+            )
+            
+            # 接收分享内容到目标目录
+            resp = share_fs.receive(0, target_cid)
+            
+            if resp.get("state") is True:
+                logger.info(f"分享内容保存成功，目录ID: {target_cid}")
+                return target_cid
+            else:
+                error = resp.get("error", "未知错误")
+                logger.error(f"分享内容保存失败: {error}")
+                return None
+        except Exception as e:
+            logger.error(f"保存分享链接失败: {str(e)}")
+            return None
+        
     def migrate(self, share_link=None):
         """执行115到123云盘的迁移任务"""
         self.reset_stats()
@@ -572,26 +578,13 @@ class Pan115to123Transfer:
         
         # 处理分享链接（如果提供）
         if share_link:
-            try:
-                share_code, password = parse_share_link(share_link)
-                logger.info(f"解析分享链接成功 - 分享码: {share_code}")
-                
-                # 保存分享链接
-                result = save_share_via_api(
-                    self.p115_cookie, share_code, password, self.target_cid
-                )
-                
-                if result.get("state") or result.get("errno") == 0:
-                    saved_cid = result.get("data", {}).get("pid", self.target_cid)
-                    logger.info(f"分享保存成功，等候15秒，目录ID: {saved_cid}")
-                    time.sleep(15)  # 等待文件处理完成
-                else:
-                    error = result.get("error", result.get("errmsg", "未知错误"))
-                    logger.error(f"分享内容保存失败: {error}")
-                    return self._build_result(False, f"分享内容保存失败: {error}")
-            except Exception as e:
-                logger.error(f"处理分享链接失败: {str(e)}")
-                return self._build_result(False, f"处理分享链接失败: {str(e)}")
+            # 使用新的保存方法
+            result_cid = self.save_share_to_115(share_link, self.target_cid)
+            if result_cid:
+                saved_cid = result_cid
+                time.sleep(5)  # 等待文件处理完成
+            else:
+                return self._build_result(False, "分享内容保存失败")
         
         # 收集文件信息
         file_paths = self._collect_files(saved_cid)
@@ -662,10 +655,12 @@ class Pan115to123Transfer:
                 file_name = file_attr.get('name')
                 if is_allowed_file(file_name):
                     file_id = file_attr.get('id')
+                    pickcode = file_attr.get('pickcode')  # 新增 pickcode 收集
                     file_path = file_attr.get('path', '').lstrip('/')
                     
                     file_paths[file_id] = {
                         "id": file_id,
+                        "pickcode": pickcode,  # 保存 pickcode
                         "path": file_path,
                         "name": file_name,
                         "size": file_size
@@ -689,23 +684,23 @@ class Pan115to123Transfer:
         logger.info("开始获取文件下载链接并提交到123云盘...")
         
         try:
-            for file_attr in iter_files_with_url(
-                self.client_115,
-                cid=cid,
-                app="android",
-                headers={"User-Agent": self.user_agent}
-            ):
-                if file_attr.get('is_directory'):
+            # 改为直接遍历收集的文件列表
+            for file_id, file_info in file_paths.items():
+                # 使用 P115Client 的 download_url 方法获取直链
+                try:
+                    # 修复：将 pickcode 作为位置参数传递
+                    file_url = self.client_115.download_url(
+                        file_info['pickcode'],  # 第一个位置参数是 pickcode
+                        app="android",
+                        headers={"User-Agent": self.user_agent}
+                    )
+                except Exception as e:
+                    logger.error(f"获取下载链接失败: {file_info['name']}, 错误: {str(e)}")
+                    self.stats["fail_count"] += 1
+                    self.stats["failed_files"].append(file_info['name'])
                     continue
                 
-                file_id = file_attr.get('id')
-                if file_id not in file_paths:
-                    continue
-                
-                file_info = file_paths[file_id]
-                file_url = file_attr.get('url', '')
-                
-                if not file_url or file_url == 'N/A':
+                if not file_url:
                     logger.warning(f"文件无有效下载链接: {file_info['name']}")
                     self.stats["fail_count"] += 1
                     self.stats["failed_files"].append(file_info['name'])
