@@ -1550,7 +1550,7 @@ class TelegramBotHandler:
             BotCommand("sync_full", "全量同步"),
             BotCommand("transport", "迁移115文件"),  # 新增
             BotCommand("clear", "清空115迁移目录"),      # 新增
-            BotCommand("clear_trash", "清空113回收站"),
+            BotCommand("clear_trash", "清空123回收站"),
             BotCommand("refresh_token", "强制刷新Token"),
             BotCommand("info", "用户信息"),
             BotCommand("add", "添加用户"),
