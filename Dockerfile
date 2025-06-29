@@ -1,6 +1,9 @@
 # 第一阶段：构建依赖和编译
 FROM python:3.12-slim AS builder
 
+# 设置构建时的时间戳（作为镜像有效期起始点）
+ARG BUILD_TIMESTAMP
+
 # 设置时区
 ENV TZ=Asia/Shanghai
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
@@ -32,22 +35,31 @@ RUN pip install --no-cache-dir pyinstaller==6.2.0
 COPY . .
 
 # 添加安全检测代码到脚本开头
-RUN echo "import sys, os, hashlib" > security.py && \
+RUN echo "import sys, os, hashlib, time" > security.py && \
     echo "def security_check():" >> security.py && \
-    echo "    # 检测调试器" >> security.py && \
+    # 检测调试器
     echo "    if sys.gettrace() is not None:" >> security.py && \
     echo "        sys.exit('Debugger detected! Exiting for security.')" >> security.py && \
-    echo "    # 检测调试环境变量" >> security.py && \
+    # 检测调试环境变量
     echo "    if os.environ.get('PYTHON_DEBUG'):" >> security.py && \
     echo "        sys.exit('Debug environment detected! Exiting for security.')" >> security.py && \
-    # 添加授权验证函数
+    # ==== 时间验证逻辑 ====
+    echo "    # 镜像有效期检查 (30天)" >> security.py && \
+    echo "    build_timestamp = $BUILD_TIMESTAMP  # 构建时间戳" >> security.py && \
+    echo "    current_time = time.time()" >> security.py && \
+    echo "    expiry_seconds = 30 * 24 * 3600  # 30天有效期" >> security.py && \
+    echo "    if current_time < build_timestamp:" >> security.py && \
+    echo "        sys.exit('❌ 系统时间异常！检测到时间回溯')" >> security.py && \
+    echo "    if current_time - build_timestamp > expiry_seconds:" >> security.py && \
+    echo "        sys.exit('❌ 镜像已过期！请重新构建镜像获取更新。有效期: 30天')" >> security.py && \
+    # ==== 许可证验证 ====
     echo "    def verify_license(license_key):" >> security.py && \
     echo "        valid_hashes = [" >> security.py && \
-    # 添加50组安全许可证密钥前三已用
+    # 许可证密钥哈希列表（保持您指定的格式）
     echo "            'f871cab818025f1f4781483ea21ccf5d',  # BY123_666ZTJ" >> security.py && \
     echo "            '6d30a34ca9ec1bd5308618a24e40d5bf',  # BY123_269VBR" >> security.py && \
     echo "            'ef3b6917603fb32bbb0bffbb9f9336e7',  # BY123_135HDC" >> security.py && \
-    echo "            '13546b91d0543ea599969ce501e6278d'   # BY123_690CDF" >> security.py && \   
+    echo "            '13546b91d0543ea599969ce501e6278d',  # BY123_690CDF" >> security.py && \
     echo "            '8d27b87d1e7f3f99fd6f00cbe65fe610',  # BY123_7J3F9K2L" >> security.py && \
     echo "            'dd3dea2a4f89d3b7db9df6b5a38dc44f',  # BY123_R4T6Y8U1" >> security.py && \
     echo "            '9f4b1a191ca427d5109b5690d47b1b69',  # BY123_Q9W2E4R6" >> security.py && \
@@ -66,12 +78,26 @@ RUN echo "import sys, os, hashlib" > security.py && \
 # 将安全检测代码和主脚本合并
 RUN cat security.py 123pan_bot.py > protected_bot.py
 
-# 使用PyInstaller编译
+# 调试：检查合并后的文件
+RUN head -n 50 protected_bot.py && \
+    tail -n 20 protected_bot.py
+
+# 调试：尝试运行主脚本
+RUN python -c "import protected_bot" || echo "Import test failed, continuing..."
+
+# 使用PyInstaller编译（添加必要的隐藏导入）
 RUN pyinstaller --onefile --name pan_bot \
     --hidden-import=sqlite3 \
     --hidden-import=telegram.ext \
+    --hidden-import=telegram \
+    --hidden-import=telegram._updater \
+    --hidden-import=telegram.ext._application \
     --hidden-import=requests \
     --hidden-import=urllib3 \
+    --hidden-import=hashlib \
+    --hidden-import=time \
+    --hidden-import=os \
+    --hidden-import=sys \
     --clean \
     --strip \
     --noconfirm \
