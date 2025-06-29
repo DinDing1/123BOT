@@ -351,47 +351,12 @@ class TokenManager:
             return False
     
     def ensure_token_valid(self):
-        """确保token有效 - 新增双重验证机制"""
+        """确保token有效"""
         current_time = datetime.now(timezone.utc)
-        
-        # 检查1: 基于过期时间验证
         if not self.access_token or not self.token_expiry or current_time >= self.token_expiry - timedelta(minutes=5):
-            logger.info("Token即将过期，尝试刷新...")
+            logger.info("Token无效或即将过期，刷新中...")
             return self.get_new_token()
-        
-        # 检查2: 实际API请求验证
-        if not self.validate_token_with_api():
-            logger.warning("Token已失效，强制刷新中...")
-            return self.get_new_token()
-            
         return True
-    
-    def validate_token_with_api(self):
-        """通过API请求验证token有效性"""
-        try:
-            url = f"{OPEN_API_HOST}{API_PATHS['USER_INFO']}"
-            headers = {
-                "Authorization": f"Bearer {self.access_token}",
-                "Platform": "open_platform"
-            }
-            response = self.session.get(url, headers=headers, timeout=10)
-            
-            if response.status_code == 200:
-                data = response.json()
-                if data.get("code") == 0:
-                    return True  # token有效
-            
-            # 处理特定错误代码
-            if response.status_code == 401 or (data and data.get("code") in [401, 403]):
-                logger.error("Token已失效: 认证失败")
-            else:
-                error_code = data.get("code") if data else "N/A"
-                logger.warning(f"Token验证异常: HTTP {response.status_code}, API {error_code}")
-                
-        except Exception as e:
-            logger.error(f"Token验证请求失败: {e}")
-        
-        return False  # token无效
     
     def get_auth_header(self):
         """获取认证头"""
