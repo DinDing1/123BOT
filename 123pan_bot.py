@@ -655,12 +655,20 @@ class Pan115to123Transfer:
                 file_name = file_attr.get('name')
                 if is_allowed_file(file_name):
                     file_id = file_attr.get('id')
-                    pickcode = file_attr.get('pickcode')  # 新增 pickcode 收集
+                    pickcode = file_attr.get('pickcode')
+                    
+                    # 检查 pickcode 是否存在
+                    if not pickcode:
+                        logger.warning(f"文件缺少pickcode: {file_name}")
+                        self.stats["filtered_files"] += 1
+                        self.stats["filtered_size"] += file_size
+                        continue
+                    
                     file_path = file_attr.get('path', '').lstrip('/')
                     
                     file_paths[file_id] = {
                         "id": file_id,
-                        "pickcode": pickcode,  # 保存 pickcode
+                        "pickcode": pickcode,
                         "path": file_path,
                         "name": file_name,
                         "size": file_size
