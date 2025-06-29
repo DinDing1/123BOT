@@ -81,8 +81,11 @@ RUN echo "import sys, os, hashlib, time" > security.py && \
 # 将安全检测代码和主脚本合并
 RUN cat security.py 123pan_bot.py > protected_bot.py
 
-# 使用PyInstaller编译（添加必要的隐藏导入和数据文件）
-RUN pyinstaller --onefile --name pan_bot \
+# 查找p115client包的实际位置
+RUN python -c "import p115client; print(p115client.__file__)" > p115client_path.txt
+
+# 使用PyInstaller编译（添加必要的隐藏导入）
+RUN PYINSTALLER_OPTS="--onefile --name pan_bot \
     --hidden-import=sqlite3 \
     --hidden-import=telegram.ext \
     --hidden-import=telegram \
@@ -118,11 +121,16 @@ RUN pyinstaller --onefile --name pan_bot \
     --hidden-import=multiprocessing \
     --hidden-import=multiprocessing.util \
     --hidden-import=multiprocessing.synchronize \
-    --add-data "/usr/lib/python3.12/site-packages/p115client:./p115client" \
     --clean \
     --strip \
-    --noconfirm \
-    protected_bot.py
+    --noconfirm" && \
+    # 如果找到p115client路径，则添加--add-data参数
+    if [ -f p115client_path.txt ]; then \
+        P115_PATH=$(dirname $(cat p115client_path.txt)) && \
+        PYINSTALLER_OPTS="$PYINSTALLER_OPTS --add-data '$P115_PATH:./p115client'"; \
+    fi && \
+    echo "使用PyInstaller选项: $PYINSTALLER_OPTS" && \
+    pyinstaller $PYINSTALLER_OPTS protected_bot.py
 
 # 第二阶段：最小化运行时环境
 FROM python:3.12-slim
