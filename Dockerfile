@@ -37,8 +37,7 @@ COPY 123pan_bot.py .
 
 # 安装 Python 依赖
 RUN pip install --upgrade pip && \
-    pip install -r requirements.txt && \
-    pip install "p115client @ git+https://github.com/aooy/p115client.git@master"
+    pip install -r requirements.txt 
 
 # 添加安全检测代码
 RUN echo "import sys, os, hashlib" > security.py && \
