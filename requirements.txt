@@ -1,7 +1,7 @@
 requests==2.31.0
 python-telegram-bot==13.15
 urllib3==1.26.18
-p115client>=0.0.5
-python-115>=0.0.9
+p115client
+python-115
 setuptools==68.2.2
 httpx==0.28.1
