@@ -204,12 +204,21 @@ def parse_share_link(share_link):
     return match.group(1), match.group(2)
 
 def get_relative_path(full_path):
-    """获取相对于根目录的路径"""
+    """获取相对于根目录的路径，正确处理根目录下的文件"""
+    # 移除开头的斜杠
     normalized_path = full_path.lstrip('/')
+    
+    # 如果路径为空，说明是根目录下的文件
+    if not normalized_path:
+        return ""
+    
+    # 如果路径中不含斜杠，说明文件在根目录下
+    if '/' not in normalized_path:
+        return ""
+    
+    # 否则返回除第一级目录外的所有路径（目录部分）
     parts = normalized_path.split('/')
-    if len(parts) > 1:
-        return '/'.join(parts[1:])
-    return normalized_path
+    return '/'.join(parts[1:-1])  # 修改这里：排除最后一部分（文件名）
 
 def is_allowed_file(filename):
     """检查文件扩展名是否在允许列表中"""
@@ -360,6 +369,10 @@ class Pan123API:
     def get_access_token(self):
         """获取访问令牌"""
         return self.token_manager.access_token
+
+    def get_base_directory(self):
+        """获取基础目录ID，如果不存在则创建"""
+        return self.find_or_create_directory(0, DEFAULT_SAVE_DIR)
     
     def find_or_create_directory(self, parent_id, dir_name):
         """查找或创建目录"""
@@ -691,14 +704,19 @@ class Pan115to123Transfer:
         """处理文件迁移到123云盘"""
         logger.info("开始获取文件下载链接并提交到123云盘...")
         
+        # 获取基础目录ID（"待整理"目录）
+        base_dir_id = self.pan123.get_base_directory()
+        if not base_dir_id:
+            logger.error("无法获取基础目录ID")
+            return
+        
         try:
             # 改为直接遍历收集的文件列表
             for file_id, file_info in file_paths.items():
                 # 使用 P115Client 的 download_url 方法获取直链
                 try:
-                    # 修复：将 pickcode 作为位置参数传递
                     file_url = self.client_115.download_url(
-                        file_info['pickcode'],  # 第一个位置参数是 pickcode
+                        file_info['pickcode'],
                         app="android",
                         headers={"User-Agent": self.user_agent}
                     )
@@ -714,21 +732,28 @@ class Pan115to123Transfer:
                     self.stats["failed_files"].append(file_info['name'])
                     continue
                 
-                # 处理文件路径
+                # 处理文件路径 - 关键修改：只返回目录路径
                 relative_path = get_relative_path(file_info['path'])
-                target_dir_path = os.path.dirname(relative_path) if '/' in relative_path else relative_path
                 
-                # 确保目标目录存在
-                dir_id = self.pan123.ensure_directory_path(target_dir_path)
-                if not dir_id:
-                    logger.error(f"目录创建失败: {target_dir_path}")
+                # 确定目标目录ID
+                if relative_path == "":
+                    # 根目录下的文件 - 直接使用基础目录
+                    target_dir_id = base_dir_id
+                    logger.info(f"文件 {file_info['name']} 位于根目录，将保存到基础目录")
+                else:
+                    # 子目录中的文件 - 确保路径存在
+                    target_dir_id = self.pan123.ensure_directory_path(relative_path)
+                    logger.info(f"文件 {file_info['name']} 位于目录 {relative_path}，确保目录存在")
+                
+                if not target_dir_id:
+                    logger.error(f"目录创建失败: {relative_path if relative_path != '' else '基础目录'}")
                     self.stats["fail_count"] += 1
                     self.stats["failed_files"].append(file_info['name'])
                     continue
                 
                 # 创建离线下载任务
                 task_id = self.pan123.create_offline_task_with_retry(
-                    file_url, file_info['name'], dir_id
+                    file_url, file_info['name'], target_dir_id
                 )
                 
                 if task_id:
