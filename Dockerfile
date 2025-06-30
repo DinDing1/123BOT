@@ -112,6 +112,9 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 WORKDIR /app
 
+# 创建数据目录并设置权限
+RUN mkdir -p /data && chmod 777 /data
+
 # 从构建阶段复制编译后的程序
 COPY --from=builder /app/dist/pan_bot /app/
 COPY --from=builder /app/VERSION /app/
