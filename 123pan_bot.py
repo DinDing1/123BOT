@@ -60,7 +60,7 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 
 # ====================== 配置区域 ======================
 # 数据库文件路径
-DB_PATH = os.getenv("DB_PATH", "/data/bot123.db")
+DB_PATH = os.getenv("DB_PATH", "bot123.db")
 
 # 123云盘API配置
 PAN_HOST = "https://www.123pan.com"
@@ -205,25 +205,19 @@ def parse_share_link(share_link):
 
 def get_relative_path(full_path):
     """获取相对于根目录的路径，正确处理根目录下的文件"""
-    # 移除开头的斜杠
     normalized_path = full_path.lstrip('/')
-    
-    # 如果路径为空，说明是根目录下的文件
     if not normalized_path:
         return ""
-    
-    # 如果路径中不含斜杠，说明文件在根目录下
     if '/' not in normalized_path:
         return ""
-    
-    # 否则返回除第一级目录外的所有路径（目录部分）
     parts = normalized_path.split('/')
-    return '/'.join(parts[1:-1])  # 修改这里：排除最后一部分（文件名）
+    return '/'.join(parts[1:-1])
 
 def is_allowed_file(filename):
     """检查文件扩展名是否在允许列表中"""
     _, ext = os.path.splitext(filename)
     return ext.lower() in ALLOWED_EXTENSIONS
+
 # =====================================================
 
 class TokenManager:
@@ -356,11 +350,6 @@ class TokenManager:
             "Content-Type": "application/json"
         }
         
-def is_allowed_file(filename):
-    """检查文件是否为允许的类型"""
-    ext = os.path.splitext(filename)[1].lower()
-    return ext in ALLOWED_VIDEO_EXTENSIONS or ext in ALLOWED_SUB_EXTENSIONS
-
 class Pan123API:
     """123云盘API客户端"""
     def __init__(self, token_manager):
@@ -369,11 +358,11 @@ class Pan123API:
     def get_access_token(self):
         """获取访问令牌"""
         return self.token_manager.access_token
-
+    
     def get_base_directory(self):
         """获取基础目录ID，如果不存在则创建"""
         return self.find_or_create_directory(0, DEFAULT_SAVE_DIR)
-
+    
     def find_or_create_directory(self, parent_id, dir_name):
         """查找或创建目录"""
         access_token = self.get_access_token()
@@ -3068,7 +3057,7 @@ def main():
         target_cid=TARGET_CID,
         user_agent=USER_AGENT,
         pan123_api=pan123_api,
-        allowed_user_ids=ADMIN_USER_IDS
+        allowed_extensions=ALLOWED_EXTENSIONS
     )
     
     logger.info("初始化Telegram机器人...")
