@@ -513,11 +513,12 @@ class Pan123API:
 class Pan115to123Transfer:
     """115至123云盘迁移核心逻辑"""
     def __init__(self, p115_cookie, target_cid, user_agent,
-                 pan123_api):
+                 pan123_api, allowed_extensions):
         self.p115_cookie = p115_cookie
         self.target_cid = target_cid
         self.user_agent = user_agent
         self.pan123 = pan123_api
+        self.allowed_extensions = allowed_extensions
         
         # 创建115客户端
         try:
@@ -605,13 +606,13 @@ class Pan115to123Transfer:
             else:
                 return self._build_result(False, "分享内容保存失败")
         
-        # 收集文件信息
-        file_paths = self._collect_files(saved_cid)
-        if file_paths is None:
+        # 按目录层级收集文件信息
+        directory_files = self._collect_files_by_directory(saved_cid)
+        if not directory_files:
             return self._build_result(False, "收集文件路径失败")
         
         # 处理文件迁移
-        self._process_files(file_paths, saved_cid)
+        self._process_files_by_directory(directory_files)
         
         self.stats["elapsed_time"] = time.time() - start_time
         return self._build_result(True, "迁移任务完成")
@@ -651,64 +652,130 @@ class Pan115to123Transfer:
         except Exception as e:
             logger.error(f"清空目录异常: {str(e)}")
             return False, f"清空目录异常: {str(e)}"
-    
-    def _collect_files(self, cid):
-        """收集要迁移的文件信息"""
-        logger.info(f"开始收集文件路径信息（只处理允许的文件类型）...")
-        file_paths = {}
+        
+    def _collect_files_by_directory(self, cid):
+        """按目录层级收集文件"""
+        logger.info(f"开始按目录层级收集文件信息（只处理允许的文件类型）...")
+        directory_files = {}
         
         try:
-            for file_attr in iter_files_with_path(
-                self.client_115,
-                cid=cid,
-                app="android",
-                headers={"User-Agent": self.user_agent}
-            ):
-                if file_attr.get('is_directory'):
+            # 创建115文件系统对象
+            fs = P115FileSystem(self.client_115)
+            fs.chdir(cid)
+            
+            # 处理根目录文件
+            root_files = []
+            for item in fs.listdir_attr():
+                if item['is_directory']:
                     continue
                 
                 self.stats["total_files"] += 1
-                file_size = file_attr.get('size', 0)
+                file_size = item.get('size', 0)
                 self.stats["total_size"] += file_size
                 
-                file_name = file_attr.get('name')
+                file_name = item.get('name')
                 if is_allowed_file(file_name):
-                    file_id = file_attr.get('id')
-                    pickcode = file_attr.get('pickcode')
-                    
-                    # 检查 pickcode 是否存在
-                    if not pickcode:
-                        logger.warning(f"文件缺少pickcode: {file_name}")
-                        self.stats["filtered_files"] += 1
-                        self.stats["filtered_size"] += file_size
-                        continue
-                    
-                    file_path = file_attr.get('path', '').lstrip('/')
-                    
-                    file_paths[file_id] = {
-                        "id": file_id,
-                        "pickcode": pickcode,
-                        "path": file_path,
+                    root_files.append({
+                        "id": item['id'],
+                        "pickcode": item.get('pickcode'),
                         "name": file_name,
                         "size": file_size
-                    }
+                    })
                     self.stats["to_transfer_files"] += 1
                     self.stats["transfer_size"] += file_size
-                    logger.info(f"收集文件: {file_name} ({format_size(file_size)})")
                 else:
                     self.stats["filtered_files"] += 1
                     self.stats["filtered_size"] += file_size
-                    logger.info(f"跳过非允许文件: {file_name} ({format_size(file_size)})")
             
-            logger.info(f"已收集 {len(file_paths)} 个允许的文件")
-            return file_paths
+            if root_files:
+                directory_files[""] = root_files
+                logger.info(f"根目录收集到 {len(root_files)} 个文件")
+            
+            # 递归处理子目录
+            for item in fs.listdir_attr():
+                if item['is_directory']:
+                    # 获取目录名
+                    dir_name = item.get('name', f"目录_{item['id']}")
+                    self._collect_directory_recursive(
+                        fs, 
+                        item['id'], 
+                        "", 
+                        dir_name,
+                        directory_files
+                    )
+            
+            logger.info(f"按目录层级收集完成，共 {len(directory_files)} 个目录")
+            return directory_files
         except Exception as e:
-            logger.error(f"收集文件路径时出错: {str(e)}")
+            logger.error(f"按目录收集文件时出错: {str(e)}")
             return None
     
-    def _process_files(self, file_paths, cid):
-        """处理文件迁移到123云盘"""
-        logger.info("开始获取文件下载链接并提交到123云盘...")
+    def _collect_directory_recursive(self, fs, dir_id, parent_path, dir_name, directory_files):
+        """递归收集目录文件（避免目录切换错误）"""
+        current_path = f"{parent_path}/{dir_name}" if parent_path else dir_name
+        
+        try:
+            # 保存当前目录ID（使用getcid而不是getcwd_id）
+            current_cid = fs.getcid()
+            
+            # 进入目标目录
+            fs.chdir(dir_id)
+            
+            # 收集当前目录文件
+            files_in_dir = []
+            for item in fs.listdir_attr():
+                if item['is_directory']:
+                    continue
+                
+                self.stats["total_files"] += 1
+                file_size = item.get('size', 0)
+                self.stats["total_size"] += file_size
+                
+                file_name = item.get('name')
+                if is_allowed_file(file_name):
+                    files_in_dir.append({
+                        "id": item['id'],
+                        "pickcode": item.get('pickcode'),
+                        "name": file_name,
+                        "size": file_size
+                    })
+                    self.stats["to_transfer_files"] += 1
+                    self.stats["transfer_size"] += file_size
+                else:
+                    self.stats["filtered_files"] += 1
+                    self.stats["filtered_size"] += file_size
+            
+            # 如果有文件，添加到目录结构
+            if files_in_dir:
+                directory_files[current_path] = files_in_dir
+                logger.info(f"目录 '{current_path}' 收集到 {len(files_in_dir)} 个文件")
+            
+            # 递归处理子目录
+            for item in fs.listdir_attr():
+                if item['is_directory']:
+                    self._collect_directory_recursive(
+                        fs, 
+                        item['id'], 
+                        current_path, 
+                        item.get('name', f"目录_{item['id']}"),
+                        directory_files
+                    )
+            
+            # 返回到原始目录（使用目录ID）
+            fs.chdir(current_cid)
+        except Exception as e:
+            logger.error(f"收集目录 '{current_path}' 失败: {str(e)}")
+            # 尝试恢复原始目录位置
+            try:
+                # 使用getcid获取当前目录ID并尝试切换
+                current_cid = fs.getcid()
+                fs.chdir(current_cid)
+            except Exception:
+                logger.warning("无法恢复目录位置")
+    
+    def _process_files_by_directory(self, directory_files):
+        """按目录处理文件迁移到123云盘"""
+        logger.info("开始按目录批量迁移文件到123云盘...")
         
         # 获取基础目录ID（"待整理"目录）
         base_dir_id = self.pan123.get_base_directory()
@@ -716,21 +783,44 @@ class Pan115to123Transfer:
             logger.error("无法获取基础目录ID")
             return
         
-        try:
-            # 改为直接遍历收集的文件列表
-            for file_id, file_info in file_paths.items():
-                # 使用 P115Client 的 download_url 方法获取直链
-                try:
-                    file_url = self.client_115.download_url(
-                        file_info['pickcode'],
-                        app="android",
-                        headers={"User-Agent": self.user_agent}
-                    )
-                except Exception as e:
-                    logger.error(f"获取下载链接失败: {file_info['name']}, 错误: {str(e)}")
+        # 先处理根目录文件（路径为""）
+        if "" in directory_files:
+            root_files = directory_files[""]
+            logger.info(f"处理根目录下的 {len(root_files)} 个文件")
+            self._process_directory_files("", base_dir_id, root_files)
+        
+        # 处理其他目录
+        for dir_path, files in directory_files.items():
+            if dir_path == "":  # 根目录已处理
+                continue
+            
+            # 确保目录路径存在
+            logger.info(f"确保目录路径存在: {dir_path}")
+            target_dir_id = self.pan123.ensure_directory_path(dir_path)
+            
+            if not target_dir_id:
+                logger.error(f"目录创建失败: {dir_path}")
+                # 记录该目录下所有文件为失败
+                for file_info in files:
                     self.stats["fail_count"] += 1
                     self.stats["failed_files"].append(file_info['name'])
-                    continue
+                continue
+            
+            # 处理该目录下的文件
+            self._process_directory_files(dir_path, target_dir_id, files)
+    
+    def _process_directory_files(self, dir_path, dir_id, files):
+        """处理单个目录下的所有文件"""
+        logger.info(f"处理目录 '{dir_path or '根目录'}' 下的 {len(files)} 个文件")
+        
+        for file_info in files:
+            try:
+                # 获取文件下载链接
+                file_url = self.client_115.download_url(
+                    file_info['pickcode'],
+                    app="android",
+                    headers={"User-Agent": self.user_agent}
+                )
                 
                 if not file_url:
                     logger.warning(f"文件无有效下载链接: {file_info['name']}")
@@ -738,28 +828,9 @@ class Pan115to123Transfer:
                     self.stats["failed_files"].append(file_info['name'])
                     continue
                 
-                # 处理文件路径 - 关键修改：只返回目录路径
-                relative_path = get_relative_path(file_info['path'])
-                
-                # 确定目标目录ID
-                if relative_path == "":
-                    # 根目录下的文件 - 直接使用基础目录
-                    target_dir_id = base_dir_id
-                    logger.info(f"文件 {file_info['name']} 位于根目录，将保存到基础目录")
-                else:
-                    # 子目录中的文件 - 确保路径存在
-                    target_dir_id = self.pan123.ensure_directory_path(relative_path)
-                    logger.info(f"文件 {file_info['name']} 位于目录 {relative_path}，确保目录存在")
-                
-                if not target_dir_id:
-                    logger.error(f"目录创建失败: {relative_path if relative_path != '' else '基础目录'}")
-                    self.stats["fail_count"] += 1
-                    self.stats["failed_files"].append(file_info['name'])
-                    continue
-                
                 # 创建离线下载任务
                 task_id = self.pan123.create_offline_task_with_retry(
-                    file_url, file_info['name'], target_dir_id
+                    file_url, file_info['name'], dir_id
                 )
                 
                 if task_id:
@@ -769,10 +840,11 @@ class Pan115to123Transfer:
                     logger.error(f"离线任务创建失败: {file_info['name']}")
                     self.stats["fail_count"] += 1
                     self.stats["failed_files"].append(file_info['name'])
-        except Exception as e:
-            logger.error(f"处理过程中出错: {str(e)}")
-            raise
-    
+            except Exception as e:
+                logger.error(f"处理文件 {file_info['name']} 失败: {str(e)}")
+                self.stats["fail_count"] += 1
+                self.stats["failed_files"].append(file_info['name'])
+
     def _build_result(self, success, message):
         """构建结果字典"""
         return {
@@ -2995,7 +3067,8 @@ def main():
         p115_cookie=P115_COOKIE,
         target_cid=TARGET_CID,
         user_agent=USER_AGENT,
-        pan123_api=pan123_api
+        pan123_api=pan123_api,
+        allowed_user_ids=ADMIN_USER_IDS
     )
     
     logger.info("初始化Telegram机器人...")
