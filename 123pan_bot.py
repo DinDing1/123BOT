@@ -373,10 +373,10 @@ class Pan123API:
     def get_base_directory(self):
         """获取基础目录ID，如果不存在则创建"""
         return self.find_or_create_directory(0, DEFAULT_SAVE_DIR)
-    
+
     def find_or_create_directory(self, parent_id, dir_name):
         """查找或创建目录"""
-        access_token = self.token_manager.access_token
+        access_token = self.get_access_token()
         if not access_token:
             return None
         
@@ -393,7 +393,7 @@ class Pan123API:
         }
         
         try:
-            response = requests.get(url, headers=headers, params=params, timeout=30)
+            response = httpx.get(url, headers=headers, params=params, timeout=30)
             response.raise_for_status()
             data = response.json()
             
@@ -409,15 +409,21 @@ class Pan123API:
                 "parentID": parent_id
             }
             headers["Content-Type"] = "application/json"
-            response = requests.post(url, json=payload, headers=headers, timeout=30)
+            response = httpx.post(url, json=payload, headers=headers, timeout=30)
             response.raise_for_status()
             data = response.json()
-            
-            if "data" in data and "dirID" in data["data"]:
+
+            if isinstance(data.get("data"), dict) and "dirID" in data["data"]:
                 return data["data"]["dirID"]
+            elif data.get("code") and data.get("message"):
+                if data.get("code") == 1 and "同名文件夹" in data.get("message", ""):
+                    logger.info(f"目录已存在: {dir_name}, 直接使用父目录ID: {parent_id}")
+                    return parent_id
+                else:
+                    logger.error(f"创建目录失败: 错误码 {data['code']} - {data['message']}")
             else:
                 logger.error(f"创建目录失败: {data.get('message', '未知错误')}")
-                return None
+            return None
         except Exception as e:
             logger.error(f"123云盘目录操作失败: {str(e)}")
             return None
