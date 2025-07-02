@@ -217,7 +217,6 @@ def is_allowed_file(filename):
     """检查文件扩展名是否在允许列表中"""
     _, ext = os.path.splitext(filename)
     return ext.lower() in ALLOWED_EXTENSIONS
-
 # =====================================================
 
 class TokenManager:
@@ -350,6 +349,11 @@ class TokenManager:
             "Content-Type": "application/json"
         }
         
+def is_allowed_file(filename):
+    """检查文件是否为允许的类型"""
+    ext = os.path.splitext(filename)[1].lower()
+    return ext in ALLOWED_VIDEO_EXTENSIONS or ext in ALLOWED_SUB_EXTENSIONS
+
 class Pan123API:
     """123云盘API客户端"""
     def __init__(self, token_manager):
