@@ -447,7 +447,7 @@ class Pan123API:
         
         return current_dir_id
     
-    def create_offline_task_with_retry(self, url, file_name, dir_id, max_retries=5):
+    def create_offline_task_with_retry(self, url, file_name, dir_id, max_retries=20):
         """创建123云盘离线下载任务（带重试机制）"""
         for attempt in range(1, max_retries + 1):
             try:
