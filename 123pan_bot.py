@@ -96,6 +96,7 @@ EXPORT_BASE_DIRS = [d.strip() for d in os.getenv("EXPORT_BASE_DIR", "").split(';
 SEARCH_MAX_DEPTH = int(os.getenv("SEARCH_MAX_DEPTH", "")) #扫描目录叠加深度
 DAILY_EXPORT_LIMIT = int(os.getenv("DAILY_EXPORT_LIMIT", "3")) #导出次数
 BANNED_EXPORT_NAMES = [name.strip().lower() for name in os.getenv("BANNED_EXPORT_NAMES", "电视剧;电影").split(';') if name.strip()] #导出黑名单
+PRIVATE_EXPORT = os.getenv("PRIVATE_EXPORT", "Flase").lower() == "true"  # 控制JSON文件是否私聊发送True为私聊False为群聊回复
 ####TGBOT配置
 BOT_TOKEN = os.getenv("TG_BOT_TOKEN","")
 ADMIN_USER_IDS = [int(id.strip()) for id in os.getenv("TG_ADMIN_USER_IDS", "").split(",") if id.strip()]
@@ -2178,35 +2179,42 @@ class TelegramBotHandler:
                 f"📊 平均大小：{format_size(avg_size)}\n\n"
                 f"❤️ 123因您分享更完美！"
             )
-
+            
             # 在发送文件处修改为私聊发送
             if in_group:
-                # 通过私聊发送文件
-                try:
+                if PRIVATE_EXPORT:
+                    try:
+                        with open(file_name, "rb") as f:
+                            context.bot.send_document(
+                                chat_id=user_id,
+                                document=f,
+                                filename=file_name,
+                                caption=caption
+                            )
+                    except Exception as e:
+                        logger.error(f"私聊发送失败: {e}")
+                        context.bot.send_message(
+                            chat_id=context.user_data['group_chat_id'],
+                            text=f"❌ 无法发送私聊消息，请先私聊我 @{context.bot.username} 并点击'开始'"
+                        )
+                else:
+                    # 群聊直接发送
                     with open(file_name, "rb") as f:
                         context.bot.send_document(
-                            chat_id=user_id,  # 直接发送给用户ID（私聊）
+                            chat_id=context.user_data['group_chat_id'],
                             document=f,
                             filename=file_name,
                             caption=caption
                         )
-                except Exception as e:
-                    logger.error(f"私聊发送失败: {e}")
-                    # 在群聊中提示用户
-                    context.bot.send_message(
-                        chat_id=context.user_data['group_chat_id'],
-                        text=f"❌ 无法发送私聊消息，请先私聊我 @{context.bot.username} 并点击'开始'"
-                    )
             else:
                 # 私聊环境正常发送
                 with open(file_name, "rb") as f:
                     context.bot.send_document(
-                    chat_id=query.message.chat_id,
-                    document=f,
-                    filename=file_name,
-                    caption=caption
-                )               
-            
+                        chat_id=query.message.chat_id,
+                        document=f,
+                        filename=file_name,
+                        caption=caption
+                    )   
             os.remove(file_name)
         
         # 更新用户导出次数
