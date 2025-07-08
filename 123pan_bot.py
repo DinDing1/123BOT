@@ -26,8 +26,8 @@ from functools import wraps
 import urllib3
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
-from p115 import P115Client, P115FileSystem, P115ShareFileSystem
-from p115client.tool.iterdir import iter_files_with_path
+from p115client import P115Client
+from p115client.tool.iterdir import iter_files_with_path, iter_files
 
 # 禁用SSL警告
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -206,13 +206,20 @@ def parse_share_link(share_link):
 
 def get_relative_path(full_path):
     """获取相对于根目录的路径，正确处理根目录下的文件"""
+    # 移除开头的斜杠
     normalized_path = full_path.lstrip('/')
+    
+    # 如果路径为空，说明是根目录下的文件
     if not normalized_path:
         return ""
+    
+    # 如果路径中不含斜杠，说明文件在根目录下
     if '/' not in normalized_path:
         return ""
+    
+    # 否则返回除第一级目录外的所有路径（目录部分）
     parts = normalized_path.split('/')
-    return '/'.join(parts[1:-1])
+    return '/'.join(parts[1:-1])  # 修改这里：排除最后一部分（文件名）
 
 def is_allowed_file(filename):
     """检查文件扩展名是否在允许列表中"""
@@ -550,22 +557,23 @@ class Pan115to123Transfer:
             "elapsed_time": 0,
             "failed_files": []
         }
-    
+
     def save_share_to_115(self, share_link, target_cid):
-        """使用P115ShareFileSystem保存分享链接到指定目录"""
+        """保存分享链接到指定目录"""
         try:
             share_code, password = parse_share_link(share_link)
             logger.info(f"解析分享链接成功 - 分享码: {share_code}")
             
-            # 创建分享文件系统对象
-            share_fs = P115ShareFileSystem(
-                client=self.client_115,
-                share_code=share_code,
-                receive_code=password,
-            )
+            # ===== 修改点：使用正确的API调用方式 =====
+            # 创建payload字典
+            payload = {
+                'share_code': share_code,
+                'receive_code': password,
+                'cid': target_cid
+            }
             
             # 接收分享内容到目标目录
-            resp = share_fs.receive(0, target_cid)
+            resp = self.client_115.share_receive(payload)
             
             if resp.get("state") is True:
                 logger.info(f"分享内容保存成功，目录ID: {target_cid}")
@@ -578,6 +586,21 @@ class Pan115to123Transfer:
             logger.error(f"保存分享链接失败: {str(e)}")
             return None
         
+    def mark_file_as_processed(self, file_id):
+        """标记文件为已处理（添加星标）"""
+        try:
+            # 使用 fs_star_set 方法添加星标
+            result = self.client_115.fs_star_set(file_id, star=True)
+            if result.get('state') is True:
+                logger.info(f"文件标记成功: {file_id}")
+                return True
+            else:
+                logger.error(f"文件标记失败: {result.get('error')}")
+                return False
+        except Exception as e:
+            logger.error(f"标记文件失败: {str(e)}")
+            return False
+              
     def migrate(self, share_link=None):
         """执行115到123云盘的迁移任务"""
         self.reset_stats()
@@ -611,67 +634,62 @@ class Pan115to123Transfer:
         self.stats["elapsed_time"] = time.time() - start_time
         return self._build_result(True, "迁移任务完成")
     
-    def clear_directory(self):
-        """清空115云盘目标目录"""
-        logger.info(f"清空115目录: {self.target_cid}")
-        
-        if not self.client_115:
-            logger.error("115客户端不可用")
-            return False, "115客户端不可用"
-        
-        try:
-            fs = P115FileSystem(self.client_115)
-            fs.chdir(self.target_cid)
-            
-            items = fs.listdir_attr()
-            ids_to_delete = [
-                item['id'] for item in items 
-                if item['parent_id'] == self.target_cid
-            ]
-            
-            if not ids_to_delete:
-                logger.info(f"目录 {self.target_cid} 已经是空的")
-                return True, "目录已经是空的"
-            
-            logger.info(f"准备删除 {len(ids_to_delete)} 个项目")
-            result = self.client_115.fs_delete(ids_to_delete)
-            
-            if result.get("state") or result.get("errno") == 0:
-                logger.info(f"✅ 目录内容删除成功! 已删除 {len(ids_to_delete)} 个项目")
-                return True, f"已删除 {len(ids_to_delete)} 个项目"
-            else:
-                error = result.get("error", result.get("errmsg", "未知错误"))
-                logger.error(f"❌ 目录内容删除失败: {error}")
-                return False, f"删除失败: {error}"
-        except Exception as e:
-            logger.error(f"清空目录异常: {str(e)}")
-            return False, f"清空目录异常: {str(e)}"
-        
     def _collect_files_by_directory(self, cid):
         """按目录层级收集文件"""
         logger.info(f"开始按目录层级收集文件信息（只处理允许的文件类型）...")
         directory_files = {}
+        seen_ids = set()  # 用于跟踪已处理的文件ID
         
         try:
-            # 创建115文件系统对象
-            fs = P115FileSystem(self.client_115)
-            fs.chdir(cid)
+            # 使用 iter_files_with_path 获取所有文件（包含路径）
+            logger.info(f"开始遍历目录树，根目录ID: {cid}")
+            all_files = iter_files_with_path(
+                client=self.client_115,
+                cid=cid,
+                cur=0,  # 递归遍历子目录
+                app="web"  # 使用web接口
+            )
             
-            # 处理根目录文件
-            root_files = []
-            for item in fs.listdir_attr():
-                if item['is_directory']:
+            file_count = 0
+            # 按目录分组文件
+            for file_info in all_files:
+                # 跳过目录
+                if file_info.get("is_directory"):
+                    continue
+
+                file_id = file_info["id"]
+                # 检查是否已处理过此文件
+                if file_id in seen_ids:
+                    continue
+                seen_ids.add(file_id)
+                
+                # 检查文件是否已标记（已处理）
+                if file_info.get('star') == 1:
+                    logger.info(f"文件已标记，跳过: {file_info.get('name')}")
                     continue
                 
+                file_count += 1
                 self.stats["total_files"] += 1
-                file_size = item.get('size', 0)
+                file_size = file_info.get("size", 0)
                 self.stats["total_size"] += file_size
                 
-                file_name = item.get('name')
+                file_name = file_info.get("name")
+                # 获取文件完整路径
+                full_path = file_info.get("path", "")
+                
+                # 获取相对于根目录的路径（排除第一级目录）
+                dir_path = get_relative_path(full_path)
+                
+                logger.info(f"处理文件: {file_name} | 路径: {full_path} | 相对路径: {dir_path} | 大小: {format_size(file_size)}")
+                
+                # 检查文件扩展名
                 if is_allowed_file(file_name):
-                    root_files.append({
-                        "id": item['id'],
-                        "pickcode": item.get('pickcode'),
+                    # 添加到对应目录
+                    if dir_path not in directory_files:
+                        directory_files[dir_path] = []
+                    directory_files[dir_path].append({
+                        "id": file_info["id"],
+                        "pickcode": file_info.get("pickcode"),
                         "name": file_name,
                         "size": file_size
                     })
@@ -681,92 +699,13 @@ class Pan115to123Transfer:
                     self.stats["filtered_files"] += 1
                     self.stats["filtered_size"] += file_size
             
-            if root_files:
-                directory_files[""] = root_files
-                logger.info(f"根目录收集到 {len(root_files)} 个文件")
-            
-            # 递归处理子目录
-            for item in fs.listdir_attr():
-                if item['is_directory']:
-                    # 获取目录名
-                    dir_name = item.get('name', f"目录_{item['id']}")
-                    self._collect_directory_recursive(
-                        fs, 
-                        item['id'], 
-                        "", 
-                        dir_name,
-                        directory_files
-                    )
-            
+            logger.info(f"遍历完成，共找到 {file_count} 个文件")
             logger.info(f"按目录层级收集完成，共 {len(directory_files)} 个目录")
             return directory_files
         except Exception as e:
             logger.error(f"按目录收集文件时出错: {str(e)}")
+            logger.error(f"错误详情: {traceback.format_exc()}")
             return None
-    
-    def _collect_directory_recursive(self, fs, dir_id, parent_path, dir_name, directory_files):
-        """递归收集目录文件（避免目录切换错误）"""
-        current_path = f"{parent_path}/{dir_name}" if parent_path else dir_name
-        
-        try:
-            # 保存当前目录ID（使用getcid而不是getcwd_id）
-            current_cid = fs.getcid()
-            
-            # 进入目标目录
-            fs.chdir(dir_id)
-            
-            # 收集当前目录文件
-            files_in_dir = []
-            for item in fs.listdir_attr():
-                if item['is_directory']:
-                    continue
-                
-                self.stats["total_files"] += 1
-                file_size = item.get('size', 0)
-                self.stats["total_size"] += file_size
-                
-                file_name = item.get('name')
-                if is_allowed_file(file_name):
-                    files_in_dir.append({
-                        "id": item['id'],
-                        "pickcode": item.get('pickcode'),
-                        "name": file_name,
-                        "size": file_size
-                    })
-                    self.stats["to_transfer_files"] += 1
-                    self.stats["transfer_size"] += file_size
-                else:
-                    self.stats["filtered_files"] += 1
-                    self.stats["filtered_size"] += file_size
-            
-            # 如果有文件，添加到目录结构
-            if files_in_dir:
-                directory_files[current_path] = files_in_dir
-                logger.info(f"目录 '{current_path}' 收集到 {len(files_in_dir)} 个文件")
-            
-            # 递归处理子目录
-            for item in fs.listdir_attr():
-                if item['is_directory']:
-                    self._collect_directory_recursive(
-                        fs, 
-                        item['id'], 
-                        current_path, 
-                        item.get('name', f"目录_{item['id']}"),
-                        directory_files
-                    )
-            
-            # 返回到原始目录（使用目录ID）
-            fs.chdir(current_cid)
-        except Exception as e:
-            logger.error(f"收集目录 '{current_path}' 失败: {str(e)}")
-            # 尝试恢复原始目录位置
-            try:
-                # 使用getcid获取当前目录ID并尝试切换
-                current_cid = fs.getcid()
-                fs.chdir(current_cid)
-            except Exception:
-                logger.warning("无法恢复目录位置")
-    
     def _process_files_by_directory(self, directory_files):
         """按目录处理文件迁移到123云盘"""
         logger.info("开始按目录批量迁移文件到123云盘...")
@@ -802,17 +741,17 @@ class Pan115to123Transfer:
             
             # 处理该目录下的文件
             self._process_directory_files(dir_path, target_dir_id, files)
-    
+
     def _process_directory_files(self, dir_path, dir_id, files):
         """处理单个目录下的所有文件"""
         logger.info(f"处理目录 '{dir_path or '根目录'}' 下的 {len(files)} 个文件")
         
         for file_info in files:
             try:
+                # ===== 修改点：正确调用 download_url 方法 =====
                 # 获取文件下载链接
                 file_url = self.client_115.download_url(
-                    file_info['pickcode'],
-                    app="android",
+                    file_info['pickcode'],  # 位置参数
                     headers={"User-Agent": self.user_agent}
                 )
                 
@@ -830,6 +769,9 @@ class Pan115to123Transfer:
                 if task_id:
                     logger.info(f"离线任务创建成功: {file_info['name']} (任务ID: {task_id})")
                     self.stats["success_count"] += 1
+                    
+                    # 标记文件为已处理
+                    self.mark_file_as_processed(file_info['id'])
                 else:
                     logger.error(f"离线任务创建失败: {file_info['name']}")
                     self.stats["fail_count"] += 1
@@ -1625,7 +1567,6 @@ class TelegramBotHandler:
         self.dispatcher.add_handler(CommandHandler("start", self.start_command))
         self.dispatcher.add_handler(CommandHandler("export", self.export_command))
         self.dispatcher.add_handler(CommandHandler("sync_full", self.sync_full_command))
-        self.dispatcher.add_handler(CommandHandler("clear_trash", self.clear_trash_command))
         self.dispatcher.add_handler(CommandHandler("add", self.add_command))
         self.dispatcher.add_handler(CommandHandler("delete", self.delete_command))
         self.dispatcher.add_handler(CommandHandler("info", self.info_command))
@@ -1646,7 +1587,6 @@ class TelegramBotHandler:
             BotCommand("export", "导出秒传文件"),
             BotCommand("sync_full", "全量同步"),
             BotCommand("transport", "迁移115文件"),  # 新增
-            BotCommand("clear", "清空115迁移目录"),      # 新增
             BotCommand("clear_trash", "清空123回收站"),
             BotCommand("refresh_token", "强制刷新Token"),
             BotCommand("info", "用户信息"),
@@ -3029,22 +2969,6 @@ class TelegramBotHandler:
             text=report
         )
     
-    @admin_required
-    def clear_command(self, update: Update, context: CallbackContext):
-        """处理/clear命令 - 清空115目录"""
-        self.send_auto_delete_message(update, context, "🧹 开始清空115目标目录...")
-        success, message = self.transfer.clear_directory()
-        
-        if success:
-            context.bot.send_message(
-                chat_id=update.message.chat_id,
-                text=f"✅ {message}"
-            )
-        else:
-            context.bot.send_message(
-                chat_id=update.message.chat_id,
-                text=f"❌ {message}"
-            )
 def main():
     # 添加授权信息提示
     logger.info("=============================================")
