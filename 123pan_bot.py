@@ -1572,7 +1572,6 @@ class TelegramBotHandler:
         self.dispatcher.add_handler(CommandHandler("info", self.info_command))
         self.dispatcher.add_handler(CommandHandler("refresh_token", self.refresh_token_command))
         self.dispatcher.add_handler(CommandHandler("transport", self.transport_command))  # 新增transport命令
-        self.dispatcher.add_handler(CommandHandler("clear", self.clear_command))         # 新增clear命令
         self.dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, self.handle_text))
         self.dispatcher.add_handler(MessageHandler(Filters.document, self.handle_document))
         self.dispatcher.add_handler(CallbackQueryHandler(self.button_callback))
