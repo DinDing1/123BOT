@@ -490,7 +490,8 @@ class Pan123API:
         payload = {
             "url": url,
             "fileName": file_name,
-            "dirID": dir_id
+            "dirID": dir_id,
+            "callBackUrl": "http://example.com/callback"  
         }
         
         try:
