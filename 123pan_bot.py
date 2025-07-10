@@ -1706,8 +1706,7 @@ class TelegramBotHandler:
                 f"▫️ /add - 添加用户\n"    
                 f"▫️ /delete - 删除用户\n"                                             
                 f"▫️ /clear_trash - 清空回收站\n"
-                f"▫️ /transport - 迁移115文件\n"   # 新增
-                f"▫️ /clear - 清空115目录\n\n"     # 新增
+                f"▫️ /transport - 迁移115文件\n\n"   # 新增
                 f"📦 <b>Version:</b> <code>{VERSION}</code>\n"
                 f"⏱️ <b>已运行:</b> {days}天{hours}小时{minutes}分{seconds}秒"
             )
