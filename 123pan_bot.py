@@ -1568,6 +1568,7 @@ class TelegramBotHandler:
         self.dispatcher.add_handler(CommandHandler("start", self.start_command))
         self.dispatcher.add_handler(CommandHandler("export", self.export_command))
         self.dispatcher.add_handler(CommandHandler("sync_full", self.sync_full_command))
+        self.dispatcher.add_handler(CommandHandler("clear_trash", self.clear_trash_command))
         self.dispatcher.add_handler(CommandHandler("add", self.add_command))
         self.dispatcher.add_handler(CommandHandler("delete", self.delete_command))
         self.dispatcher.add_handler(CommandHandler("info", self.info_command))
@@ -1586,7 +1587,7 @@ class TelegramBotHandler:
             BotCommand("start", "个人信息"),
             BotCommand("export", "导出秒传文件"),
             BotCommand("sync_full", "全量同步"),
-            BotCommand("transport", "迁移115文件"),  # 新增
+            BotCommand("transport", "迁移115文件"),
             BotCommand("clear_trash", "清空123回收站"),
             BotCommand("refresh_token", "强制刷新Token"),
             BotCommand("info", "用户信息"),
