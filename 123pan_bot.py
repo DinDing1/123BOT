@@ -61,7 +61,7 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 
 # ====================== 配置区域 ======================
 # 数据库文件路径
-DB_PATH = os.getenv("DB_PATH", "./data/bot123.db")
+DB_PATH = os.getenv("DB_PATH", "/data/bot123.db")
 
 # 123云盘API配置
 PAN_HOST = "https://www.123pan.com"
