@@ -26,6 +26,7 @@ from functools import wraps
 import urllib3
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from p115client import P115Client
 from p115client.tool.iterdir import iter_files_with_path, iter_files
 
@@ -60,7 +61,7 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 
 # ====================== 配置区域 ======================
 # 数据库文件路径
-DB_PATH = os.getenv("DB_PATH", "/data/bot123.db")
+DB_PATH = os.getenv("DB_PATH", "./data/bot123.db")
 
 # 123云盘API配置
 PAN_HOST = "https://www.123pan.com"
@@ -72,7 +73,8 @@ API_PATHS = {
     "CLEAR_TRASH": "/api/file/trash_delete_all",
     "GET_SHARE": "/b/api/share/get",
     "OFFLINE_DOWNLOAD": "/api/v1/offline/download",  # 新增离线下载API
-    "DIRECTORY_CREATE": "/upload/v1/file/mkdir"     # 新增目录创建API
+    "DIRECTORY_CREATE": "/upload/v1/file/mkdir",    # 新增目录创建API
+    "OFFLINE_TASK_LIST": "/api/offline_download/task/list"  # 新增离线任务列表API
 }
 
 # 开放平台地址
@@ -96,7 +98,7 @@ EXPORT_BASE_DIRS = [d.strip() for d in os.getenv("EXPORT_BASE_DIR", "").split(';
 SEARCH_MAX_DEPTH = int(os.getenv("SEARCH_MAX_DEPTH", "")) #扫描目录叠加深度
 DAILY_EXPORT_LIMIT = int(os.getenv("DAILY_EXPORT_LIMIT", "3")) #导出次数
 BANNED_EXPORT_NAMES = [name.strip().lower() for name in os.getenv("BANNED_EXPORT_NAMES", "电视剧;电影").split(';') if name.strip()] #导出黑名单
-PRIVATE_EXPORT = os.getenv("PRIVATE_EXPORT", "Flase").lower() == "true"  # 控制JSON文件是否私聊发送True为私聊False为群聊回复
+PRIVATE_EXPORT = os.getenv("PRIVATE_EXPORT", "Flase").lower() == "true"  # 控制JSON文件是否私聊发送
 ####TGBOT配置
 BOT_TOKEN = os.getenv("TG_BOT_TOKEN","")
 ADMIN_USER_IDS = [int(id.strip()) for id in os.getenv("TG_ADMIN_USER_IDS", "").split(",") if id.strip()]
@@ -454,6 +456,103 @@ class Pan123API:
         
         return current_dir_id
     
+    def get_offline_task_count(self):
+        """获取当前离线任务数量（等待+运行中）"""
+        # 注意：离线任务列表API需要使用网页版认证
+        access_token = self.get_access_token()
+        if not access_token:
+            logger.warning("无法获取访问令牌")
+            return None
+        
+        # 使用网页版API获取离线任务列表
+        url = f"{PAN_HOST}{API_PATHS['OFFLINE_TASK_LIST']}"
+        headers = {
+            "Authorization": f"Bearer {access_token}",  # 使用Bearer token认证
+            "Platform": "open_platform",
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "current_page": 1,
+            "page_size": 100,
+            "status_arr": [0, 1]  # 0:等待 1:运行
+        }
+        
+        try:
+            response = httpx.post(url, json=payload, headers=headers, timeout=30)
+            response.raise_for_status()
+            data = response.json()
+            
+            # 检查响应代码
+            if data.get("code") != 0:
+                logger.warning(f"离线任务列表API返回错误代码: {data.get('code')}, 消息: {data.get('message')}")
+                return None
+                
+            # 从响应中提取任务列表
+            task_list = []
+            
+            # 处理data部分
+            data_section = data.get("data", {})
+            
+            # 情况1: data_section是字典，包含list字段
+            if isinstance(data_section, dict):
+                # 检查list字段
+                if "list" in data_section and isinstance(data_section["list"], list):
+                    task_list = data_section["list"]
+                # 检查total字段（当list为None时使用total）
+                elif "total" in data_section and data_section["total"] is not None:
+                    logger.info(f"使用total字段获取任务数量: {data_section['total']}")
+                    return int(data_section["total"])
+            
+            # 情况2: data_section是列表
+            elif isinstance(data_section, list):
+                task_list = data_section
+            
+            # 如果成功获取到任务列表
+            if isinstance(task_list, list):
+                logger.info(f"成功获取离线任务列表，任务数量: {len(task_list)}")
+                return len(task_list)
+            else:
+                # 尝试使用total字段作为后备
+                total_tasks = data_section.get("total")
+                if total_tasks is not None:
+                    logger.info(f"使用total字段获取任务数量: {total_tasks}")
+                    return int(total_tasks)
+                
+                logger.warning(f"无法解析离线任务列表，响应类型: {type(data_section)}")
+                return None
+                
+        except httpx.HTTPStatusError as e:
+            logger.error(f"HTTP错误({e.response.status_code}): {e.response.text}")
+            return None
+        except Exception as e:
+            logger.error(f"获取离线任务数量失败: {str(e)}")
+            return None
+    
+    def wait_for_task_slot(self, max_queue_size=10, retry_interval=10):
+        """
+        无限期等待直到有可用的任务槽位
+        :param max_queue_size: 最大允许队列大小
+        :param retry_interval: 重试间隔(秒)
+        """
+        while True:
+            try:
+                task_count = self.get_offline_task_count()
+                
+                if task_count is None:
+                    logger.warning("获取任务队列状态失败，等待后重试...")
+                    time.sleep(retry_interval)
+                    continue
+                    
+                if task_count < max_queue_size:
+                    logger.info(f"当前任务队列: {task_count}/{max_queue_size}，有空位可用")
+                    return
+                else:
+                    logger.info(f"当前任务队列已满: {task_count}/{max_queue_size}，等待中...")
+                    time.sleep(retry_interval)
+            except Exception as e:
+                logger.error(f"等待任务槽位时出错: {str(e)}")
+                time.sleep(retry_interval)
+    
     def create_offline_task_with_retry(self, url, file_name, dir_id, max_retries=20):
         """创建123云盘离线下载任务（带重试机制）"""
         for attempt in range(1, max_retries + 1):
@@ -521,6 +620,8 @@ class Pan115to123Transfer:
         self.user_agent = user_agent
         self.pan123 = pan123_api
         self.allowed_extensions = allowed_extensions
+        self.lock = threading.Lock()  # 添加线程锁
+        self.active_transfers = {}    # 跟踪活跃迁移任务
         
         # 创建115客户端
         try:
@@ -602,38 +703,81 @@ class Pan115to123Transfer:
             logger.error(f"标记文件失败: {str(e)}")
             return False
               
-    def migrate(self, share_link=None):
-        """执行115到123云盘的迁移任务"""
+    def migrate(self, share_link=None, user_id=None):
+        """执行115到123云盘的迁移任务（支持后台线程）"""
+        # 重置统计信息
         self.reset_stats()
-        start_time = time.time()
-        logger.info("115分享链接处理脚本开始执行")
         
-        if not self.client_115:
-            logger.error("115客户端不可用")
-            return self._build_result(False, "115客户端不可用")
+        # 为每个用户创建唯一的任务ID
+        task_id = f"{user_id}_{int(time.time())}" if user_id else "system_{}".format(int(time.time()))
+        with self.lock:
+            self.active_transfers[task_id] = {
+                "status": "running",
+                "start_time": time.time(),
+                "stats_ref": self.stats  # 直接引用实时更新的统计信息字典
+            }
         
-        saved_cid = self.target_cid
+        # 在后台线程中执行迁移
+        def _run_migration():
+            start_time = time.time()
+            logger.info("115分享链接处理脚本开始执行")
+            
+            if not self.client_115:
+                logger.error("115客户端不可用")
+                result = self._build_result(False, "115客户端不可用")
+                with self.lock:
+                    self.active_transfers[task_id].update({
+                        "status": "completed",
+                        "end_time": time.time(),
+                        "result": result
+                    })
+                return
+            
+            saved_cid = self.target_cid
+            
+            # 处理分享链接（如果提供）
+            if share_link:
+                # 使用新的保存方法
+                result_cid = self.save_share_to_115(share_link, self.target_cid)
+                if result_cid:
+                    saved_cid = result_cid
+                    time.sleep(5)  # 等待文件处理完成
+                else:
+                    result = self._build_result(False, "分享内容保存失败")
+                    with self.lock:
+                        self.active_transfers[task_id].update({
+                            "status": "completed",
+                            "end_time": time.time(),
+                            "result": result
+                        })
+                    return
+            
+            # 按目录层级收集文件信息
+            directory_files = self._collect_files_by_directory(saved_cid)
+            if not directory_files:
+                result = self._build_result(False, "收集文件路径失败")
+                with self.lock:
+                    self.active_transfers[task_id].update({
+                        "status": "completed",
+                        "end_time": time.time(),
+                        "result": result
+                    })
+                return
+            
+            # 处理文件迁移
+            self._process_files_by_directory(directory_files)
+            
+            self.stats["elapsed_time"] = time.time() - start_time
+            result = self._build_result(True, "迁移任务完成")
+            with self.lock:
+                self.active_transfers[task_id].update({
+                    "status": "completed",
+                    "end_time": time.time(),
+                    "result": result
+                })
         
-        # 处理分享链接（如果提供）
-        if share_link:
-            # 使用新的保存方法
-            result_cid = self.save_share_to_115(share_link, self.target_cid)
-            if result_cid:
-                saved_cid = result_cid
-                time.sleep(5)  # 等待文件处理完成
-            else:
-                return self._build_result(False, "分享内容保存失败")
-        
-        # 按目录层级收集文件信息
-        directory_files = self._collect_files_by_directory(saved_cid)
-        if not directory_files:
-            return self._build_result(False, "收集文件路径失败")
-        
-        # 处理文件迁移
-        self._process_files_by_directory(directory_files)
-        
-        self.stats["elapsed_time"] = time.time() - start_time
-        return self._build_result(True, "迁移任务完成")
+        threading.Thread(target=_run_migration, daemon=True).start()
+        return task_id  # 返回任务ID用于查询状态
     
     def _collect_files_by_directory(self, cid):
         """按目录层级收集文件"""
@@ -749,8 +893,12 @@ class Pan115to123Transfer:
         
         for file_info in files:
             try:
-                # ===== 修改点：正确调用 download_url 方法 =====
+                # 无限期等待直到有可用的任务槽位
+                logger.info(f"等待可用任务槽位: {file_info['name']}")
+                self.pan123.wait_for_task_slot()
+                
                 # 获取文件下载链接
+                logger.info(f"获取下载链接: {file_info['name']}")
                 file_url = self.client_115.download_url(
                     file_info['pickcode'],  # 位置参数
                     headers={"User-Agent": self.user_agent}
@@ -763,16 +911,19 @@ class Pan115to123Transfer:
                     continue
                 
                 # 创建离线下载任务
+                logger.info(f"创建离线任务: {file_info['name']}")
                 task_id = self.pan123.create_offline_task_with_retry(
                     file_url, file_info['name'], dir_id
                 )
                 
                 if task_id:
-                    logger.info(f"离线任务创建成功: {file_info['name']} (任务ID: {task_id})")
                     self.stats["success_count"] += 1
                     
                     # 标记文件为已处理
                     self.mark_file_as_processed(file_info['id'])
+                    
+                    # 提交后短暂等待，避免请求过于频繁
+                    time.sleep(2)
                 else:
                     logger.error(f"离线任务创建失败: {file_info['name']}")
                     self.stats["fail_count"] += 1
@@ -1996,7 +2147,7 @@ class TelegramBotHandler:
                 del user_data[key]
     
     def process_export_selection(self, update: Update, context: CallbackContext, selected_indices):
-        """处理选择的导出任务"""
+        """处理选择的导出任务（使用后台线程）"""
         query = update.callback_query
         results = context.user_data.get('export_search_results', [])
         if not results or not selected_indices:
@@ -2054,121 +2205,153 @@ class TelegramBotHandler:
             for job in context.job_queue.get_jobs_by_name(job_name):
                 job.schedule_removal()
         
-        total = folder_count
-        progress_messages = []
+        # 获取选中的文件夹信息
+        selected_folders = [results[idx] for idx in selected_indices]
         
-        for i, idx in enumerate(selected_indices):
-            selected_folder = results[idx]
-            folder_id = selected_folder["file_id"]
-            folder_name = selected_folder["filename"]
-            folder_path = selected_folder["full_path"]
-            
-            files = self.pan_client.get_directory_files(folder_id, folder_name)
-            if not files:
-                logger.warning(f"文件夹为空: {folder_name}")
-                continue
-                
-            # 清理文件夹名称（移除非法字符）
-            clean_folder_name = re.sub(r'[\\/*?:"<>|]', "", folder_name)
-            # 在文件夹名称后添加斜杠
-            common_path = f"{clean_folder_name}/"
-            # 文件名保持原始格式（不带斜杠）
-            file_name = f"{clean_folder_name}.json"
-            
-            # 每处理3个文件夹更新一次进度
-            if i % 3 == 0:
-                try:
-                    msg = context.bot.send_message(
-                        chat_id=query.message.chat_id,
-                        text=f"⏳ 正在处理文件夹 [{i+1}/{total}]:\n├ 名称: {folder_name}\n└ 路径: {folder_path}"
-                    )
-                    progress_messages.append(msg.message_id)
-                except Exception:
-                    pass
-            
-            # 计算文件统计信息
-            total_size = sum(file_info["size"] for file_info in files)
-            file_count = len(files)
-            
-            json_data = {
-                "usesBase62EtagsInExport": False,
-                "commonPath": common_path,
-                "totalFilesCount": file_count,
-                "totalSize": total_size,
-                "formattedTotalSize": format_size(total_size),
-                "files": [
-                    {"path": file_info["path"], "etag": file_info["etag"], "size": file_info["size"]}
-                    for file_info in files
-                ]
-            }
-            
-            with open(file_name, "w", encoding="utf-8") as f:
-                json.dump(json_data, f, ensure_ascii=False, indent=2)
-            
-            user_info = self.pan_client.get_user_info()
-            nickname = user_info.get("nickname", "未知用户") if user_info else "未知用户"
-
-            # 计算平均大小
-            avg_size = total_size / file_count if file_count > 0 else 0
-            
-            caption = (             
-                f"✨ 分享者：{nickname}\n"
-                f"📁 文件名: {clean_folder_name}\n"
-                f"📝 文件数: {file_count}\n"
-                f"💾 总大小：{format_size(total_size)}\n"
-                f"📊 平均大小：{format_size(avg_size)}\n\n"
-                f"❤️ 123因您分享更完美！"
-            )
-            
-            # 在发送文件处修改为私聊发送
-            if in_group:
-                if PRIVATE_EXPORT:
-                    try:
-                        with open(file_name, "rb") as f:
-                            context.bot.send_document(
-                                chat_id=user_id,
-                                document=f,
-                                filename=file_name,
-                                caption=caption
-                            )
-                    except Exception as e:
-                        logger.error(f"私聊发送失败: {e}")
-                        context.bot.send_message(
-                            chat_id=context.user_data['group_chat_id'],
-                            text=f"❌ 无法发送私聊消息，请先私聊我 @{context.bot.username} 并点击'开始'"
-                        )
-                else:
-                    # 群聊直接发送
-                    with open(file_name, "rb") as f:
-                        context.bot.send_document(
-                            chat_id=context.user_data['group_chat_id'],
-                            document=f,
-                            filename=file_name,
-                            caption=caption
-                        )
-            else:
-                # 私聊环境正常发送
-                with open(file_name, "rb") as f:
-                    context.bot.send_document(
-                        chat_id=query.message.chat_id,
-                        document=f,
-                        filename=file_name,
-                        caption=caption
-                    )   
-            os.remove(file_name)
+        # 启动后台线程执行导出
+        threading.Thread(
+            target=self.export_folders,
+            args=(
+                context.bot,
+                query.message.chat_id,
+                user_id,
+                selected_folders,
+                in_group,
+                context.user_data.get('group_chat_id') if in_group else None
+            ),
+            daemon=True
+        ).start()
         
         # 更新用户导出次数
         self.update_user_export_count(user_id, folder_count)
         
+        # 清理上下文
+        self.cleanup_export_context(context.user_data)
+    
+    def export_folders(self, bot, chat_id, user_id, folders, is_group=False, group_chat_id=None):
+        """在后台线程中导出文件夹"""
+        total = len(folders)
+        progress_messages = []
+        
+        # 每处理一个文件夹发送一个进度消息（最多10条）
+        for i, folder_info in enumerate(folders):
+            # 每3个文件夹发送一次进度
+            if i % 3 == 0:
+                try:
+                    msg_text = f"⏳ 正在处理文件夹 [{i+1}/{total}]:\n├ 名称: {folder_info['filename']}\n└ 路径: {folder_info['full_path']}"
+                    if is_group and PRIVATE_EXPORT:
+                        # 在群聊中且设置私聊发送，则发到用户私聊
+                        msg = bot.send_message(chat_id=user_id, text=msg_text)
+                    else:
+                        # 否则发到原聊天
+                        target_chat_id = group_chat_id if is_group else chat_id
+                        msg = bot.send_message(chat_id=target_chat_id, text=msg_text)
+                    progress_messages.append(msg.message_id)
+                except Exception as e:
+                    logger.error(f"发送进度消息失败: {e}")
+            
+            # 处理单个文件夹
+            self._export_single_folder(bot, folder_info, user_id, is_group, group_chat_id)
+        
         # 导出完成后删除所有进度消息
-        chat_id = query.message.chat_id
         for msg_id in progress_messages:
             try:
-                context.bot.delete_message(chat_id=chat_id, message_id=msg_id)
+                if is_group and PRIVATE_EXPORT:
+                    bot.delete_message(chat_id=user_id, message_id=msg_id)
+                else:
+                    target_chat_id = group_chat_id if is_group else chat_id
+                    bot.delete_message(chat_id=target_chat_id, message_id=msg_id)
+            except Exception as e:
+                logger.warning(f"删除进度消息失败: {e}")
+        
+        # 发送完成通知
+        completion_msg = f"✅ 导出完成！共处理 {total} 个文件夹"
+        if is_group and PRIVATE_EXPORT:
+            bot.send_message(chat_id=user_id, text=completion_msg)
+        else:
+            target_chat_id = group_chat_id if is_group else chat_id
+            bot.send_message(chat_id=target_chat_id, text=completion_msg)
+    
+    def _export_single_folder(self, bot, folder_info, user_id, is_group, group_chat_id):
+        """导出单个文件夹（线程安全）"""
+        folder_id = folder_info["file_id"]
+        folder_name = folder_info["filename"]
+        folder_path = folder_info["full_path"]
+        
+        files = self.pan_client.get_directory_files(folder_id, folder_name)
+        if not files:
+            logger.warning(f"文件夹为空: {folder_name}")
+            return
+            
+        # 清理文件夹名称（移除非法字符）
+        clean_folder_name = re.sub(r'[\\/*?:"<>|]', "", folder_name)
+        # 在文件夹名称后添加斜杠
+        common_path = f"{clean_folder_name}/"
+        # 文件名保持原始格式（不带斜杠）
+        file_name = f"{clean_folder_name}.json"
+        
+        # 计算文件统计信息
+        total_size = sum(file_info["size"] for file_info in files)
+        file_count = len(files)
+        
+        json_data = {
+            "usesBase62EtagsInExport": False,
+            "commonPath": common_path,
+            "totalFilesCount": file_count,
+            "totalSize": total_size,
+            "formattedTotalSize": format_size(total_size),
+            "files": [
+                {"path": file_info["path"], "etag": file_info["etag"], "size": file_info["size"]}
+                for file_info in files
+            ]
+        }
+        
+        with open(file_name, "w", encoding="utf-8") as f:
+            json.dump(json_data, f, ensure_ascii=False, indent=2)
+        
+        user_info = self.pan_client.get_user_info()
+        nickname = user_info.get("nickname", "未知用户") if user_info else "未知用户"
+
+        # 计算平均大小
+        avg_size = total_size / file_count if file_count > 0 else 0
+        
+        caption = (             
+            f"✨ 分享者：{nickname}\n"
+            f"📁 文件名: {clean_folder_name}\n"
+            f"📝 文件数: {file_count}\n"
+            f"💾 总大小：{format_size(total_size)}\n"
+            f"📊 平均大小：{format_size(avg_size)}\n\n"
+            f"❤️ 123因您分享更完美！"
+        )
+        
+        # 发送文件
+        try:
+            with open(file_name, "rb") as f:
+                if is_group and PRIVATE_EXPORT:
+                    # 群聊且设置私聊发送，则发送到用户私聊
+                    bot.send_document(
+                        chat_id=user_id,
+                        document=f,
+                        filename=file_name,
+                        caption=caption
+                    )
+                else:
+                    # 否则发送到原聊天
+                    target_chat_id = group_chat_id if is_group else user_id
+                    bot.send_document(
+                        chat_id=target_chat_id,
+                        document=f,
+                        filename=file_name,
+                        caption=caption
+                    )
+        except Exception as e:
+            logger.error(f"发送文件失败: {e}")
+        finally:
+            # 删除临时文件
+            try:
+                os.remove(file_name)
             except Exception:
                 pass
-        
-        self.cleanup_export_context(context.user_data)
  
     @admin_required
     def handle_document(self, update: Update, context: CallbackContext):
@@ -2417,6 +2600,68 @@ class TelegramBotHandler:
                 self.execute_full_sync(update, context)
             else:
                 context.bot.send_message(chat_id=chat_id, text="❌ 全量同步已取消")
+        # 添加迁移状态查询处理
+        elif data.startswith("transport_status_"):
+            task_id = data.split("_", 2)[2]
+            self.get_transport_status(update, context, task_id)
+
+    def get_transport_status(self, update: Update, context: CallbackContext, task_id):
+        """获取迁移任务状态 - 修复统计信息显示问题"""
+        with self.transfer.lock:
+            task = self.transfer.active_transfers.get(task_id)
+        
+        if not task:
+            update.callback_query.edit_message_text(f"❌ 找不到迁移任务: {task_id}")
+            return
+            
+        if task["status"] == "running":
+            # 直接使用实时统计信息引用
+            stats = task["stats_ref"]
+            
+            elapsed = time.time() - task["start_time"]
+            # 构建状态消息
+            status_msg = (
+                f"⏳ 迁移任务进行中 (ID: {task_id})\n"
+                f"├ 已运行: {format_time(elapsed)}\n"
+                f"├ 扫描文件数: {stats.get('total_files', 0)}\n"
+                f"├ 需提交迁移: {stats.get('to_transfer_files', 0)}\n"
+                f"├ 成功: {stats.get('success_count', 0)}\n"
+                f"└ 失败: {stats.get('fail_count', 0)}\n"
+                f"├ 总大小: {format_size(stats.get('total_size', 0))}\n"
+                f"└ 迁移大小: {format_size(stats.get('transfer_size', 0))}"
+            )
+            
+            # 更新按钮保持可刷新
+            keyboard = [[
+                InlineKeyboardButton("🔄 刷新状态", callback_data=f"transport_status_{task_id}")
+            ]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            try:
+                context.bot.edit_message_text(
+                    chat_id=update.callback_query.message.chat_id,
+                    message_id=update.callback_query.message.message_id,
+                    text=status_msg,
+                    reply_markup=reply_markup
+                )
+            except Exception as e:
+                logger.error(f"更新消息失败: {e}")
+        else:
+            result = task.get("result", {})
+            stats = result.get("stats", {})
+            elapsed_time = stats.get("elapsed_time", 0)
+            report = self._build_transfer_report(stats, elapsed_time)
+            
+            context.bot.edit_message_text(
+                chat_id=update.callback_query.message.chat_id,
+                message_id=update.callback_query.message.message_id,
+                text=f"✅ 迁移任务已完成 (ID: {task_id})\n\n{report}"
+            )
+            
+            # 清理已完成的任务
+            with self.transfer.lock:
+                if task_id in self.transfer.active_transfers:
+                    del self.transfer.active_transfers[task_id]
 
     def execute_full_sync(self, update: Update, context: CallbackContext):
         """执行全量同步"""
@@ -2949,24 +3194,27 @@ class TelegramBotHandler:
         except Exception as e:
             logger.error(f"刷新Token失败: {e}")
             self.send_auto_delete_message(update, context, f"❌ 刷新Token失败: {e}")
-
-    
+  
     @admin_required
     def transport_command(self, update: Update, context: CallbackContext):
-        """处理/transport命令 - 迁移115文件"""
-        self.send_auto_delete_message(update, context, "🚀 开始迁移115云盘文件到123云盘...")
-        start_time = time.time()
+        """处理/transport命令 - 迁移115文件（后台运行）"""
+        user_id = update.message.from_user.id
+        self.send_auto_delete_message(update, context, "🚀 开始在后台迁移115云盘文件到123云盘...")
         
-        # 执行迁移任务
-        result = self.transfer.migrate()
-        elapsed_time = time.time() - start_time
-        stats = result.get("stats", {})
+        # 启动后台迁移任务
+        task_id = self.transfer.migrate(user_id=user_id)
         
-        # 发送统计报告
-        report = self._build_transfer_report(stats, elapsed_time)
+        # 创建状态查询按钮
+        keyboard = [[
+            InlineKeyboardButton("🔄 查看迁移进度", callback_data=f"transport_status_{task_id}")
+        ]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        # 发送任务启动消息
         context.bot.send_message(
             chat_id=update.message.chat_id,
-            text=report
+            text=f"⏳ 迁移任务已在后台启动 (ID: {task_id})\n点击下方按钮查看进度",
+            reply_markup=reply_markup
         )
     
 def main():
