@@ -22,6 +22,7 @@ from telegram.ext import (
     CommandHandler,
     CallbackQueryHandler
 )
+from telegram.error import BadRequest
 from functools import wraps
 import urllib3
 from requests.adapters import HTTPAdapter
@@ -93,7 +94,7 @@ BASE62_CHARS = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 ####123配置
 CLIENT_ID = os.getenv("PAN_CLIENT_ID","") #开发者API
 CLIENT_SECRET = os.getenv("PAN_CLIENT_SECRET","")  #开发者API
-DEFAULT_SAVE_DIR = os.getenv("DEFAULT_SAVE_DIR", "").strip() #JSON和115转存存放目录
+DEFAULT_SAVE_DIR = os.getenv("DEFAULT_SAVE_DIR", "测试3").strip() #JSON和115转存存放目录
 EXPORT_BASE_DIRS = [d.strip() for d in os.getenv("EXPORT_BASE_DIR", "").split(';') if d.strip()] #媒体库目录，生成JSON目录
 SEARCH_MAX_DEPTH = int(os.getenv("SEARCH_MAX_DEPTH", "")) #扫描目录叠加深度
 DAILY_EXPORT_LIMIT = int(os.getenv("DAILY_EXPORT_LIMIT", "3")) #导出次数
@@ -2606,62 +2607,93 @@ class TelegramBotHandler:
             self.get_transport_status(update, context, task_id)
 
     def get_transport_status(self, update: Update, context: CallbackContext, task_id):
-        """获取迁移任务状态 - 修复统计信息显示问题"""
-        with self.transfer.lock:
-            task = self.transfer.active_transfers.get(task_id)
-        
-        if not task:
-            update.callback_query.edit_message_text(f"❌ 找不到迁移任务: {task_id}")
-            return
-            
-        if task["status"] == "running":
-            # 直接使用实时统计信息引用
-            stats = task["stats_ref"]
-            
-            elapsed = time.time() - task["start_time"]
-            # 构建状态消息
-            status_msg = (
-                f"⏳ 迁移任务进行中 (ID: {task_id})\n"
-                f"├ 已运行: {format_time(elapsed)}\n"
-                f"├ 扫描文件数: {stats.get('total_files', 0)}\n"
-                f"├ 需提交迁移: {stats.get('to_transfer_files', 0)}\n"
-                f"├ 成功: {stats.get('success_count', 0)}\n"
-                f"└ 失败: {stats.get('fail_count', 0)}\n"
-                f"├ 总大小: {format_size(stats.get('total_size', 0))}\n"
-                f"└ 迁移大小: {format_size(stats.get('transfer_size', 0))}"
-            )
-            
-            # 更新按钮保持可刷新
-            keyboard = [[
-                InlineKeyboardButton("🔄 刷新状态", callback_data=f"transport_status_{task_id}")
-            ]]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            
-            try:
-                context.bot.edit_message_text(
-                    chat_id=update.callback_query.message.chat_id,
-                    message_id=update.callback_query.message.message_id,
-                    text=status_msg,
-                    reply_markup=reply_markup
-                )
-            except Exception as e:
-                logger.error(f"更新消息失败: {e}")
-        else:
-            result = task.get("result", {})
-            stats = result.get("stats", {})
-            elapsed_time = stats.get("elapsed_time", 0)
-            report = self._build_transfer_report(stats, elapsed_time)
-            
-            context.bot.edit_message_text(
-                chat_id=update.callback_query.message.chat_id,
-                message_id=update.callback_query.message.message_id,
-                text=f"✅ 迁移任务已完成 (ID: {task_id})\n\n{report}"
-            )
-            
-            # 清理已完成的任务
+        """获取迁移任务状态 - 任务完成后自动显示完整报告"""
+        try:
+            # 获取任务状态
             with self.transfer.lock:
-                if task_id in self.transfer.active_transfers:
-                    del self.transfer.active_transfers[task_id]
+                task = self.transfer.active_transfers.get(task_id)
+            
+            if not task:
+                # 尝试发送任务不存在的消息
+                try:
+                    update.callback_query.edit_message_text(
+                        f"❌ 迁移任务 {task_id} 已完成或已过期"
+                    )
+                except Exception:
+                    pass
+                return
+                
+            if task["status"] == "running":
+                # 获取实时统计信息
+                stats = task["stats_ref"]
+                
+                # 生成唯一标识符防止消息未修改错误
+                unique_id = int(time.time())
+                
+                # 构建状态消息
+                status_msg = (
+                    f"⏳ 迁移任务进行中 (ID: {task_id})\n"
+                    f"├ 已运行: {format_time(time.time() - task['start_time'])}\n"
+                    f"├ 扫描文件数: {stats.get('total_files', 0)}\n"
+                    f"├ 需提交迁移: {stats.get('to_transfer_files', 0)}\n"
+                    f"├ 成功: {stats.get('success_count', 0)}\n"
+                    f"└ 失败: {stats.get('fail_count', 0)}\n"
+                    f"├ 总大小: {format_size(stats.get('total_size', 0))}\n"
+                    f"└ 迁移大小: {format_size(stats.get('transfer_size', 0))}\n"
+                    f"🔁 刷新ID: {unique_id}"
+                )
+                
+                # 更新按钮保持可刷新
+                keyboard = [[
+                    InlineKeyboardButton("🔄 刷新状态", callback_data=f"transport_status_{task_id}")
+                ]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                
+                # 尝试更新消息
+                try:
+                    context.bot.edit_message_text(
+                        chat_id=update.callback_query.message.chat_id,
+                        message_id=update.callback_query.message.message_id,
+                        text=status_msg,
+                        reply_markup=reply_markup
+                    )
+                except Exception as e:
+                    # 忽略所有错误，因为可能是状态没有变化
+                    logger.debug(f"状态更新可能无变化: {e}")
+            else:
+                # 任务已完成 - 显示完整报告
+                result = task.get("result", {})
+                stats = result.get("stats", {})
+                elapsed_time = stats.get("elapsed_time", 0)
+                report = self._build_transfer_report(stats, elapsed_time)
+                
+                # 任务完成后，显示完整报告并移除按钮
+                final_message = f"✅ 115迁移任务已完成 (ID: {task_id})\n\n{report}"
+                try:
+                    context.bot.edit_message_text(
+                        chat_id=update.callback_query.message.chat_id,
+                        message_id=update.callback_query.message.message_id,
+                        text=final_message
+                    )
+                    
+                    # 任务完成后保留一段时间（10分钟）再删除
+                    def cleanup_task():
+                        time.sleep(600)  # 10分钟后清理
+                        with self.transfer.lock:
+                            if task_id in self.transfer.active_transfers:
+                                del self.transfer.active_transfers[task_id]
+                    
+                    threading.Thread(target=cleanup_task, daemon=True).start()
+                except Exception as e:
+                    logger.error(f"更新最终报告失败: {e}")
+        except Exception as e:
+            logger.error(f"获取迁移状态时出错: {e}")
+            try:
+                update.callback_query.edit_message_text(
+                    f"❌ 获取迁移状态时出错: {str(e)}"
+                )
+            except:
+                pass
 
     def execute_full_sync(self, update: Update, context: CallbackContext):
         """执行全量同步"""
