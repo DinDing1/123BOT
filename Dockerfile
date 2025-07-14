@@ -15,7 +15,8 @@ COPY VERSION .
 # 将 Python 脚本编译为字节码文件并复制到镜像中
 COPY 123pan_bot.py .
 RUN python -m py_compile 123pan_bot.py
-RUN rm -f 123pan_bot.py  # 删除源码文件，仅保留字节码文件
+# 删除源码文件，仅保留字节码文件
+RUN rm -f 123pan_bot.py
 
 # 设置环境变量，用于存储构建时间戳
 ARG BUILD_TIMESTAMP
