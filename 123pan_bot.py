@@ -2797,34 +2797,25 @@ class TelegramBotHandler:
     def process_115_share(self, update: Update, context: CallbackContext, share_link):
         """处理115分享链接迁移"""
         try:
-            # 发送临时消息并保存消息ID
-            temp_msg = self.send_auto_delete_message(update, context, "⏳ 正在处理115分享链接...")
-            
-            # 执行迁移任务
-            start_time = time.time()
-            result = self.transfer.migrate(share_link)
-            elapsed_time = time.time() - start_time
-            stats = result.get("stats", {})
-            
-            # 删除临时消息
-            try:
-                context.bot.delete_message(
-                    chat_id=update.message.chat_id,
-                    message_id=temp_msg.message_id
-                )
-            except Exception:
-                pass
-            
-            # 发送统计报告
-            report = self._build_transfer_report(stats, elapsed_time)
+            user_id = update.message.from_user.id
+            # 启动迁移任务
+            task_id = self.transfer.migrate(share_link, user_id=user_id)
+            # 创建状态查询按钮
+            keyboard = [[
+                InlineKeyboardButton("🔄 查看迁移进度", callback_data=f"transport_status_{task_id}")
+            ]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+
+            # 发送任务启动消息
             context.bot.send_message(
                 chat_id=update.message.chat_id,
-                text=report
+                text=f"⏳ 115分享链接迁移任务已在后台启动 (ID: {task_id})\n点击下方按钮查看进度",
+                reply_markup=reply_markup
             )
         except Exception as e:
             logger.error(f"处理115分享链接失败: {e}")
             self.send_auto_delete_message(update, context, f"❌ 处理115分享链接失败: {e}")
-    
+            
     def _build_transfer_report(self, stats, elapsed_time):
         """构建迁移统计报告"""
         report = (
