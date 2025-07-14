@@ -18,7 +18,6 @@ FROM python:3.12-slim
 # 安装运行时依赖
 RUN apt-get update && apt-get install -y \
     libssl3 \
-    file \  
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -38,35 +37,33 @@ ENV BUILD_TIMESTAMP=$BUILD_TIMESTAMP
 ENV DB_PATH=/data/bot123.db
 VOLUME /data
 
-# 创建entrypoint.sh - 使用UNIX格式(LF换行符)
-RUN echo -e '#!/bin/bash\n\
-# 有效期检查（30天）\n\
-EXPIRY_DAYS=30\n\
-BUILD_DATE=$(date -d @$BUILD_TIMESTAMP +%s)\n\
-CURRENT_DATE=$(date +%s)\n\
-DAYS_PASSED=$(( (CURRENT_DATE - BUILD_DATE) / 86400 ))\n\
-\n\
-if [ $DAYS_PASSED -gt $EXPIRY_DAYS ]; then\n\
-    echo "错误：此Docker镜像已过期（构建于 $(date -d @$BUILD_TIMESTAMP)）"\n\
-    echo "请重新构建并拉取最新版本镜像"\n\
-    exit 1\n\
-fi\n\
-\n\
-# 调试信息\n\
-echo "===== 环境诊断 ====="\n\
-echo "入口点脚本信息:"\n\
-file /app/entrypoint.sh\n\
-echo "Python版本: $(python --version)"\n\
-echo "当前时间: $(date)"\n\
-echo "构建时间: $(date -d @$BUILD_TIMESTAMP)"\n\
-echo "已运行天数: $DAYS_PASSED"\n\
-echo "===================="\n\
-\n\
-# 解码并执行\n\
-echo "正在解码并启动程序..."\n\
-base64 -d /app/encoded_bot.txt > /app/bot.pyc\n\
-exec python /app/bot.pyc\n' > /app/entrypoint.sh \
-    && chmod +x /app/entrypoint.sh \
-    && dos2unix /app/entrypoint.sh  
+# 创建 entrypoint.sh 使用可靠的方法
+RUN echo '#!/bin/sh' > /app/entrypoint.sh && \
+    echo '# 有效期检查（30天）' >> /app/entrypoint.sh && \
+    echo 'EXPIRY_DAYS=30' >> /app/entrypoint.sh && \
+    echo 'BUILD_DATE=$(date -d "@$BUILD_TIMESTAMP" +%s)' >> /app/entrypoint.sh && \
+    echo 'CURRENT_DATE=$(date +%s)' >> /app/entrypoint.sh && \
+    echo 'DAYS_PASSED=$(( (CURRENT_DATE - BUILD_DATE) / 86400 ))' >> /app/entrypoint.sh && \
+    echo '' >> /app/entrypoint.sh && \
+    echo 'if [ "$DAYS_PASSED" -gt "$EXPIRY_DAYS" ]; then' >> /app/entrypoint.sh && \
+    echo '    echo "错误：此Docker镜像已过期（构建于 $(date -d "@$BUILD_TIMESTAMP")）"' >> /app/entrypoint.sh && \
+    echo '    echo "请重新构建并拉取最新版本镜像"' >> /app/entrypoint.sh && \
+    echo '    exit 1' >> /app/entrypoint.sh && \
+    echo 'fi' >> /app/entrypoint.sh && \
+    echo '' >> /app/entrypoint.sh && \
+    echo '# 调试信息' >> /app/entrypoint.sh && \
+    echo 'echo "===== 环境诊断 ====="' >> /app/entrypoint.sh && \
+    echo 'echo "入口点脚本路径: /app/entrypoint.sh"' >> /app/entrypoint.sh && \
+    echo 'echo "Python版本: $(python --version)"' >> /app/entrypoint.sh && \
+    echo 'echo "当前时间: $(date)"' >> /app/entrypoint.sh && \
+    echo 'echo "构建时间: $(date -d "@$BUILD_TIMESTAMP")"' >> /app/entrypoint.sh && \
+    echo 'echo "已运行天数: $DAYS_PASSED"' >> /app/entrypoint.sh && \
+    echo 'echo "===================="' >> /app/entrypoint.sh && \
+    echo '' >> /app/entrypoint.sh && \
+    echo '# 解码并执行' >> /app/entrypoint.sh && \
+    echo 'echo "正在解码并启动程序..."' >> /app/entrypoint.sh && \
+    echo 'base64 -d /app/encoded_bot.txt > /app/bot.pyc' >> /app/entrypoint.sh && \
+    echo 'exec python /app/bot.pyc' >> /app/entrypoint.sh && \
+    chmod +x /app/entrypoint.sh
 
 ENTRYPOINT ["/app/entrypoint.sh"]
