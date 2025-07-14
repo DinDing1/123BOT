@@ -1,29 +1,16 @@
 # 构建阶段
 FROM python:3.12-slim as builder
 
-# 安装编译依赖
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    libssl-dev \
-    && rm -rf /var/lib/apt/lists/*
-
-# 安装加密工具
-RUN pip install --no-cache-dir pyarmor==8.3.6
-
 WORKDIR /app
 
-# 复制源码和依赖
-COPY requirements.txt .
+# 复制源码
 COPY 123pan_bot.py .
 
-# 安装依赖
-RUN pip install --no-cache-dir -r requirements.txt
-
-# 创建最小化的加密配置文件
-RUN echo "pyarmor-options: --obfuscate --mix-str --enable-suffix" > .pyarmor_config
-
-# 使用配置文件进行加密
-RUN pyarmor gen -C .pyarmor_config -O dist 123pan_bot.py
+# 编译为pyc并base64编码
+RUN python -c "import py_compile, base64; \
+    py_compile.compile('123pan_bot.py'); \
+    encoded = base64.b64encode(open('__pycache__/123pan_bot.cpython-312.pyc', 'rb').read()); \
+    open('encoded_bot.txt', 'wb').write(encoded)"
 
 # 运行时阶段
 FROM python:3.12-slim
@@ -35,14 +22,12 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# 复制加密后的代码
-COPY --from=builder /app/dist /app
+# 复制编码后的程序
+COPY --from=builder /app/encoded_bot.txt .
 COPY requirements.txt .
-COPY entrypoint.sh /app/entrypoint.sh
 
 # 安装依赖
-RUN pip install --no-cache-dir -r requirements.txt \
-    && chmod +x /app/entrypoint.sh
+RUN pip install --no-cache-dir -r requirements.txt
 
 # 设置构建时间戳
 ARG BUILD_TIMESTAMP
@@ -51,5 +36,25 @@ ENV BUILD_TIMESTAMP=$BUILD_TIMESTAMP
 # 设置环境变量默认值
 ENV DB_PATH=/data/bot123.db
 VOLUME /data
+
+# 创建entrypoint.sh（包含有效期检查和执行逻辑）
+RUN echo $'#!/bin/bash\n\
+# 有效期检查（30天）\n\
+EXPIRY_DAYS=30\n\
+BUILD_DATE=$(date -d @$BUILD_TIMESTAMP +%s)\n\
+CURRENT_DATE=$(date +%s)\n\
+DAYS_PASSED=$(( (CURRENT_DATE - BUILD_DATE) / 86400 ))\n\
+\n\
+if [ $DAYS_PASSED -gt $EXPIRY_DAYS ]; then\n\
+    echo "错误：此Docker镜像已过期（构建于 $(date -d @$BUILD_TIMESTAMP)）"\n\
+    echo "请重新构建并拉取最新版本镜像"\n\
+    exit 1\n\
+fi\n\
+\n\
+# 解码并执行\n\
+echo "正在解码并启动程序..."\n\
+base64 -d /app/encoded_bot.txt > /app/bot.pyc\n\
+exec python /app/bot.pyc\n' > /app/entrypoint.sh \
+    && chmod +x /app/entrypoint.sh
 
 ENTRYPOINT ["/app/entrypoint.sh"]
