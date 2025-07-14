@@ -18,7 +18,7 @@ FROM python:3.12-slim
 # 安装运行时依赖
 RUN apt-get update && apt-get install -y \
     libssl3 \
-    file \  # 新增 file 工具用于诊断
+    file \  
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -67,6 +67,6 @@ echo "正在解码并启动程序..."\n\
 base64 -d /app/encoded_bot.txt > /app/bot.pyc\n\
 exec python /app/bot.pyc\n' > /app/entrypoint.sh \
     && chmod +x /app/entrypoint.sh \
-    && dos2unix /app/entrypoint.sh  # 确保UNIX格式
+    && dos2unix /app/entrypoint.sh  
 
 ENTRYPOINT ["/app/entrypoint.sh"]
