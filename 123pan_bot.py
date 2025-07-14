@@ -3240,9 +3240,8 @@ class TelegramBotHandler:
 def main():
     # 添加授权信息提示
     logger.info("=============================================")
-    logger.info("123云盘机器人 - 专业版")
+    logger.info("123云盘机器人 - 开心版")
     logger.info(f"版本: {VERSION}")
-    logger.info("授权验证通过，正在启动服务...")
     logger.info("=============================================")
 
     logger.info("初始化123云盘客户端...")
