@@ -1,18 +1,16 @@
-# main.py
-import marshal, sys, os, time, datetime
+#!/bin/bash
 
-# 镜像有效期：30 天
-BUILD_TIMESTAMP = int(os.getenv("BUILD_TIMESTAMP", "0"))
-if BUILD_TIMESTAMP == 0:
-    print("BUILD_TIMESTAMP 未设置，跳过有效期检查")
-else:
-    now = int(time.time())
-    if (now - BUILD_TIMESTAMP) > 30 * 86400:
-        print("❌ 镜像已过期，请重新拉取")
-        sys.exit(1)
+# 有效期检查（30天）
+EXPIRY_DAYS=30
+BUILD_DATE=$(date -d @$BUILD_TIMESTAMP +%s)
+CURRENT_DATE=$(date +%s)
+DAYS_PASSED=$(( (CURRENT_DATE - BUILD_DATE) / 86400 ))
 
-# 加载字节码并执行
-import importlib.util
-spec = importlib.util.spec_from_file_location("bot", "123pan_bot.cpython-312.pyc")
-bot = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(bot)
+if [ $DAYS_PASSED -gt $EXPIRY_DAYS ]; then
+    echo "错误：此Docker镜像已过期（构建于 $(date -d @$BUILD_TIMESTAMP)）"
+    echo "请重新构建并拉取最新版本镜像"
+    exit 1
+fi
+
+# 运行加密后的程序
+exec python /app/123pan_bot.py
