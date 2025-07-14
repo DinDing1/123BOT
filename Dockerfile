@@ -45,9 +45,20 @@ RUN echo "import sys, os, time" > entrypoint.py && \
     echo "if __name__ == '__main__':" >> entrypoint.py && \
     echo "    main()" >> entrypoint.py
 
+# 创建修复补丁文件
+RUN echo "from itertools import chain" > patch_asynctools.py && \
+    echo "from asynctools import __all__ as original_all" >> patch_asynctools.py && \
+    echo "from asynctools import *" >> patch_asynctools.py && \
+    echo "async_chain_from_iterable = chain" >> patch_asynctools.py && \
+    echo "if 'async_chain_from_iterable' not in original_all:" >> patch_asynctools.py && \
+    echo "    original_all.append('async_chain_from_iterable')" >> patch_asynctools.py
+
 # 使用PyInstaller编译
 RUN pyinstaller --onefile --name pan_bot \
     --hidden-import=pan_bot_main \
+    --hidden-import=asynctools \
+    --hidden-import=p115client.tool.iterdir \
+    --hidden-import=p115client.tool.download \
     --hidden-import=sqlite3 \
     --hidden-import=telegram.ext \
     --hidden-import=telegram \
@@ -70,6 +81,8 @@ RUN pyinstaller --onefile --name pan_bot \
     --hidden-import=functools \
     --hidden-import=concurrent.futures \
     --hidden-import=p115client \
+    --add-data "patch_asynctools.py:." \
+    --runtime-hook "patch_asynctools.py" \
     --clean \
     --strip \
     --noconfirm \
