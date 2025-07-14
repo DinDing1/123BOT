@@ -19,10 +19,11 @@ COPY 123pan_bot.py .
 # 安装依赖
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 修复：使用正确的加密参数
-RUN pyarmor gen --obfuscate --mix-str --enable-suffix \
-    --platform linux.x86_64,linux.aarch64 \
-    -O dist 123pan_bot.py
+# 创建最小化的加密配置文件
+RUN echo "pyarmor-options: --obfuscate --mix-str --enable-suffix" > .pyarmor_config
+
+# 使用配置文件进行加密
+RUN pyarmor gen -C .pyarmor_config -O dist 123pan_bot.py
 
 # 运行时阶段
 FROM python:3.12-slim
