@@ -16,28 +16,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-dev \
     libssl-dev \
     build-essential \
-    zlib1g-dev \
-    libncurses5-dev \
-    libgdbm-dev \
-    libnss3-dev \
-    libreadline-dev \
-    libffi-dev \
-    wget \
     && rm -rf /var/lib/apt/lists/*
 
 # 安装依赖
 COPY requirements.txt .
 RUN pip install --no-cache-dir -U pip && \
-    pip install --no-cache-dir -r requirements.txt
-RUN pip install --no-cache-dir pyinstaller==6.2.0
+    pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir pyinstaller==6.2.0
 
-# 复制源码
+# 复制源码并重命名主文件
 COPY . .
+RUN mv 123pan_bot.py pan_bot_main.py && \
+    echo "from pan_bot_main import main" > __main__.py
 
 # 创建安全验证入口脚本
 RUN echo "import sys, os, time" > entrypoint.py && \
     echo "def security_check():" >> entrypoint.py && \
-    # 镜像有效期检查 (30天) >> entrypoint.py && \
     echo "    build_timestamp = $BUILD_TIMESTAMP" >> entrypoint.py && \
     echo "    current_time = time.time()" >> entrypoint.py && \
     echo "    expiry_seconds = 30 * 24 * 3600" >> entrypoint.py && \
@@ -47,12 +41,13 @@ RUN echo "import sys, os, time" > entrypoint.py && \
     echo "        sys.exit('❌ 镜像已过期！请重新构建镜像获取更新。有效期: 30天')" >> entrypoint.py && \
     echo "    print('✅ 安全验证通过，启动机器人...')" >> entrypoint.py && \
     echo "security_check()" >> entrypoint.py && \
-    echo "from 123pan_bot import main" >> entrypoint.py && \
+    echo "from pan_bot_main import main" >> entrypoint.py && \
     echo "if __name__ == '__main__':" >> entrypoint.py && \
     echo "    main()" >> entrypoint.py
 
-# 使用PyInstaller编译（添加必要的隐藏导入）
+# 使用PyInstaller编译
 RUN pyinstaller --onefile --name pan_bot \
+    --hidden-import=pan_bot_main \
     --hidden-import=sqlite3 \
     --hidden-import=telegram.ext \
     --hidden-import=telegram \
@@ -94,6 +89,8 @@ RUN mkdir -p /data && chmod 777 /data
 
 # 从构建阶段复制编译后的程序
 COPY --from=builder /app/dist/pan_bot /app/
+COPY --from=builder /app/pan_bot_main.py /app/
+COPY --from=builder /app/VERSION /app/
 
 # 安装运行时最小依赖
 RUN apt-get update && apt-get install -y --no-install-recommends \
