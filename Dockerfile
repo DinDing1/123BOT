@@ -1,4 +1,4 @@
-# 第一阶段：构建依赖和编译
+# 第一阶段：构建依赖和安全验证
 FROM python:3.12-slim AS builder
 
 # 设置构建时的时间戳（作为镜像有效期起始点）
@@ -34,56 +34,22 @@ RUN pip install --no-cache-dir pyinstaller==6.2.0
 # 复制源码
 COPY . .
 
-# 添加安全检测代码到脚本开头
-RUN echo "import sys, os, hashlib, time" > security.py && \
-    echo "def security_check():" >> security.py && \
-    # 检测调试器
-    echo "    if sys.gettrace() is not None:" >> security.py && \
-    echo "        sys.exit('Debugger detected! Exiting for security.')" >> security.py && \
-    # 检测调试环境变量
-    echo "    if os.environ.get('PYTHON_DEBUG'):" >> security.py && \
-    echo "        sys.exit('Debug environment detected! Exiting for security.')" >> security.py && \
-    # ==== 时间验证逻辑 ====
-    echo "    # 镜像有效期检查 (30天)" >> security.py && \
-    echo "    build_timestamp = $BUILD_TIMESTAMP  # 构建时间戳" >> security.py && \
-    echo "    current_time = time.time()" >> security.py && \
-    echo "    expiry_seconds = 30 * 24 * 3600  # 30天有效期" >> security.py && \
-    echo "    if current_time < build_timestamp:" >> security.py && \
-    echo "        sys.exit('❌ 系统时间异常！检测到时间回溯')" >> security.py && \
-    echo "    if current_time - build_timestamp > expiry_seconds:" >> security.py && \
-    echo "        sys.exit('❌ 镜像已过期！请重新构建镜像获取更新。有效期: 30天')" >> security.py && \
-    # ==== 许可证验证 ====
-    echo "    def verify_license(license_key):" >> security.py && \
-    echo "        valid_hashes = [" >> security.py && \
-    # 许可证密钥哈希列表（保持您指定的格式）
-    echo "            'f871cab818025f1f4781483ea21ccf5d',  # BY123_666ZTJ" >> security.py && \
-    echo "            '6d30a34ca9ec1bd5308618a24e40d5bf',  # BY123_269VBR" >> security.py && \
-    echo "            'ef3b6917603fb32bbb0bffbb9f9336e7',  # BY123_135HDC" >> security.py && \
-    echo "            '13546b91d0543ea599969ce501e6278d',  # BY123_690CDF" >> security.py && \
-    echo "            '8d27b87d1e7f3f99fd6f00cbe65fe610',  # BY123_7J3F9K2L" >> security.py && \
-    echo "            'dd3dea2a4f89d3b7db9df6b5a38dc44f',  # BY123_R4T6Y8U1" >> security.py && \
-    echo "            '9f4b1a191ca427d5109b5690d47b1b69',  # BY123_Q9W2E4R6" >> security.py && \
-    echo "            'fc5378de7343df1580a84eb59ef739f3',  # BY123_Z3X5C7V9" >> security.py && \
-    echo "        ]" >> security.py && \
-    echo "        hash_md5 = hashlib.md5(license_key.encode('utf-8')).hexdigest()" >> security.py && \
-    echo "        return hash_md5 in valid_hashes" >> security.py && \
-    # 检查环境变量中的许可证
-    echo "    license_key = os.getenv('PAN_BOT_LICENSE', '')" >> security.py && \
-    echo "    if not license_key:" >> security.py && \
-    echo "        sys.exit('❌ 未提供许可证密钥，请设置PAN_BOT_LICENSE环境变量')" >> security.py && \
-    echo "    if not verify_license(license_key):" >> security.py && \
-    echo "        sys.exit('❌ 许可证密钥无效或已过期')" >> security.py && \
-    echo "security_check()" >> security.py
-
-# 将安全检测代码和主脚本合并
-RUN cat security.py 123pan_bot.py > protected_bot.py
-
-# 调试：检查合并后的文件
-RUN head -n 50 protected_bot.py && \
-    tail -n 20 protected_bot.py
-
-# 调试：尝试运行主脚本
-RUN python -c "import protected_bot" || echo "Import test failed, continuing..."
+# 创建安全验证入口脚本
+RUN echo "import sys, os, time" > entrypoint.py && \
+    echo "def security_check():" >> entrypoint.py && \
+    # 镜像有效期检查 (30天) >> entrypoint.py && \
+    echo "    build_timestamp = $BUILD_TIMESTAMP" >> entrypoint.py && \
+    echo "    current_time = time.time()" >> entrypoint.py && \
+    echo "    expiry_seconds = 30 * 24 * 3600" >> entrypoint.py && \
+    echo "    if current_time < build_timestamp:" >> entrypoint.py && \
+    echo "        sys.exit('❌ 系统时间异常！检测到时间回溯')" >> entrypoint.py && \
+    echo "    if current_time - build_timestamp > expiry_seconds:" >> entrypoint.py && \
+    echo "        sys.exit('❌ 镜像已过期！请重新构建镜像获取更新。有效期: 30天')" >> entrypoint.py && \
+    echo "    print('✅ 安全验证通过，启动机器人...')" >> entrypoint.py && \
+    echo "security_check()" >> entrypoint.py && \
+    echo "from 123pan_bot import main" >> entrypoint.py && \
+    echo "if __name__ == '__main__':" >> entrypoint.py && \
+    echo "    main()" >> entrypoint.py
 
 # 使用PyInstaller编译（添加必要的隐藏导入）
 RUN pyinstaller --onefile --name pan_bot \
@@ -98,10 +64,21 @@ RUN pyinstaller --onefile --name pan_bot \
     --hidden-import=time \
     --hidden-import=os \
     --hidden-import=sys \
+    --hidden-import=warnings \
+    --hidden-import=re \
+    --hidden-import=json \
+    --hidden-import=logging \
+    --hidden-import=threading \
+    --hidden-import=traceback \
+    --hidden-import=contextlib \
+    --hidden-import=datetime \
+    --hidden-import=functools \
+    --hidden-import=concurrent.futures \
+    --hidden-import=p115client \
     --clean \
     --strip \
     --noconfirm \
-    protected_bot.py
+    entrypoint.py
 
 # 第二阶段：最小化运行时环境
 FROM python:3.12-slim
@@ -117,7 +94,6 @@ RUN mkdir -p /data && chmod 777 /data
 
 # 从构建阶段复制编译后的程序
 COPY --from=builder /app/dist/pan_bot /app/
-COPY --from=builder /app/VERSION /app/
 
 # 安装运行时最小依赖
 RUN apt-get update && apt-get install -y --no-install-recommends \
