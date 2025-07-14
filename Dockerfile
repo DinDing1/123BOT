@@ -1,117 +1,33 @@
-# 第一阶段：构建依赖和安全验证
-FROM python:3.12-slim AS builder
-
-# 设置构建时的时间戳（作为镜像有效期起始点）
-ARG BUILD_TIMESTAMP
-
-# 设置时区
-ENV TZ=Asia/Shanghai
-RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
-
-WORKDIR /app
-
-# 安装构建依赖
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
-    python3-dev \
-    libssl-dev \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/*
-
-# 安装依赖
-COPY requirements.txt .
-RUN pip install --no-cache-dir -U pip && \
-    pip install --no-cache-dir -r requirements.txt && \
-    pip install --no-cache-dir pyinstaller==6.2.0
-
-# 复制源码并重命名主文件
-COPY . .
-RUN mv 123pan_bot.py pan_bot_main.py && \
-    echo "from pan_bot_main import main" > __main__.py
-
-# 创建安全验证入口脚本
-RUN echo "import sys, os, time" > entrypoint.py && \
-    echo "def security_check():" >> entrypoint.py && \
-    echo "    build_timestamp = $BUILD_TIMESTAMP" >> entrypoint.py && \
-    echo "    current_time = time.time()" >> entrypoint.py && \
-    echo "    expiry_seconds = 30 * 24 * 3600" >> entrypoint.py && \
-    echo "    if current_time < build_timestamp:" >> entrypoint.py && \
-    echo "        sys.exit('❌ 系统时间异常！检测到时间回溯')" >> entrypoint.py && \
-    echo "    if current_time - build_timestamp > expiry_seconds:" >> entrypoint.py && \
-    echo "        sys.exit('❌ 镜像已过期！请重新构建镜像获取更新。有效期: 30天')" >> entrypoint.py && \
-    echo "    print('✅ 安全验证通过，启动机器人...')" >> entrypoint.py && \
-    echo "security_check()" >> entrypoint.py && \
-    echo "from pan_bot_main import main" >> entrypoint.py && \
-    echo "if __name__ == '__main__':" >> entrypoint.py && \
-    echo "    main()" >> entrypoint.py
-
-# 创建修复补丁文件
-RUN echo "from itertools import chain" > patch_asynctools.py && \
-    echo "from asynctools import __all__ as original_all" >> patch_asynctools.py && \
-    echo "from asynctools import *" >> patch_asynctools.py && \
-    echo "async_chain_from_iterable = chain" >> patch_asynctools.py && \
-    echo "if 'async_chain_from_iterable' not in original_all:" >> patch_asynctools.py && \
-    echo "    original_all.append('async_chain_from_iterable')" >> patch_asynctools.py
-
-# 使用PyInstaller编译
-RUN pyinstaller --onefile --name pan_bot \
-    --hidden-import=pan_bot_main \
-    --hidden-import=asynctools \
-    --hidden-import=p115client.tool.iterdir \
-    --hidden-import=p115client.tool.download \
-    --hidden-import=sqlite3 \
-    --hidden-import=telegram.ext \
-    --hidden-import=telegram \
-    --hidden-import=telegram._updater \
-    --hidden-import=telegram.ext._application \
-    --hidden-import=requests \
-    --hidden-import=urllib3 \
-    --hidden-import=hashlib \
-    --hidden-import=time \
-    --hidden-import=os \
-    --hidden-import=sys \
-    --hidden-import=warnings \
-    --hidden-import=re \
-    --hidden-import=json \
-    --hidden-import=logging \
-    --hidden-import=threading \
-    --hidden-import=traceback \
-    --hidden-import=contextlib \
-    --hidden-import=datetime \
-    --hidden-import=functools \
-    --hidden-import=concurrent.futures \
-    --hidden-import=p115client \
-    --add-data "patch_asynctools.py:." \
-    --runtime-hook "patch_asynctools.py" \
-    --clean \
-    --strip \
-    --noconfirm \
-    entrypoint.py
-
-# 第二阶段：最小化运行时环境
+# 使用 Python 3.12 的 slim 版本作为基础镜像，slim 版本更轻量
 FROM python:3.12-slim
 
-# 设置时区
-ENV TZ=Asia/Shanghai
-RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
-
+# 设置工作目录
 WORKDIR /app
 
-# 创建数据目录并设置权限
-RUN mkdir -p /data && chmod 777 /data
+# 复制 requirements.txt 文件并安装依赖
+# 将依赖安装与应用代码分离，利用 Docker 构建缓存
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-# 从构建阶段复制编译后的程序
-COPY --from=builder /app/dist/pan_bot /app/
-COPY --from=builder /app/pan_bot_main.py /app/
-COPY --from=builder /app/VERSION /app/
+# 将 VERSION 文件复制到镜像中
+COPY VERSION .
 
-# 安装运行时最小依赖
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libsqlite3-0 \
-    && rm -rf /var/lib/apt/lists/*
+# 将 Python 脚本编译为字节码文件并复制到镜像中
+COPY 123pan_bot.py .
+RUN python -m py_compile 123pan_bot.py
+RUN rm -f 123pan_bot.py  # 删除源码文件，仅保留字节码文件
+
+# 设置环境变量，用于存储构建时间戳
+ARG BUILD_TIMESTAMP
+ENV BUILD_TIMESTAMP=${BUILD_TIMESTAMP}
+
+# 复制 entrypoint 脚本并设置为可执行
+COPY entrypoint.sh .
+RUN chmod +x entrypoint.sh
 
 # 设置数据卷
 VOLUME /data
 
-# 设置入口点
-ENTRYPOINT ["/app/pan_bot"]
+# 设置入口点和命令
+ENTRYPOINT ["./entrypoint.sh"]
+CMD ["python", "-c", "import marshal; exec(marshal.loads(open('123pan_bot.pyc', 'rb').read()[8:]))"]
