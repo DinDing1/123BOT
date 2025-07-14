@@ -94,7 +94,7 @@ BASE62_CHARS = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 ####123配置
 CLIENT_ID = os.getenv("PAN_CLIENT_ID","") #开发者API
 CLIENT_SECRET = os.getenv("PAN_CLIENT_SECRET","")  #开发者API
-DEFAULT_SAVE_DIR = os.getenv("DEFAULT_SAVE_DIR", "测试3").strip() #JSON和115转存存放目录
+DEFAULT_SAVE_DIR = os.getenv("DEFAULT_SAVE_DIR", "").strip() #JSON和115转存存放目录
 EXPORT_BASE_DIRS = [d.strip() for d in os.getenv("EXPORT_BASE_DIR", "").split(';') if d.strip()] #媒体库目录，生成JSON目录
 SEARCH_MAX_DEPTH = int(os.getenv("SEARCH_MAX_DEPTH", "")) #扫描目录叠加深度
 DAILY_EXPORT_LIMIT = int(os.getenv("DAILY_EXPORT_LIMIT", "3")) #导出次数
@@ -2812,7 +2812,7 @@ class TelegramBotHandler:
         except Exception as e:
             logger.error(f"处理115分享链接失败: {e}")
             self.send_auto_delete_message(update, context, f"❌ 处理115分享链接失败: {e}")
-            
+    
     def _build_transfer_report(self, stats, elapsed_time):
         """构建迁移统计报告"""
         report = (
