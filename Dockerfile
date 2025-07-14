@@ -18,6 +18,7 @@ FROM python:3.12-slim
 # 安装运行时依赖
 RUN apt-get update && apt-get install -y \
     libssl3 \
+    file \  # 新增 file 工具用于诊断
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -37,8 +38,8 @@ ENV BUILD_TIMESTAMP=$BUILD_TIMESTAMP
 ENV DB_PATH=/data/bot123.db
 VOLUME /data
 
-# 创建entrypoint.sh（包含有效期检查和执行逻辑）
-RUN echo $'#!/bin/bash\n\
+# 创建entrypoint.sh - 使用UNIX格式(LF换行符)
+RUN echo -e '#!/bin/bash\n\
 # 有效期检查（30天）\n\
 EXPIRY_DAYS=30\n\
 BUILD_DATE=$(date -d @$BUILD_TIMESTAMP +%s)\n\
@@ -51,10 +52,21 @@ if [ $DAYS_PASSED -gt $EXPIRY_DAYS ]; then\n\
     exit 1\n\
 fi\n\
 \n\
+# 调试信息\n\
+echo "===== 环境诊断 ====="\n\
+echo "入口点脚本信息:"\n\
+file /app/entrypoint.sh\n\
+echo "Python版本: $(python --version)"\n\
+echo "当前时间: $(date)"\n\
+echo "构建时间: $(date -d @$BUILD_TIMESTAMP)"\n\
+echo "已运行天数: $DAYS_PASSED"\n\
+echo "===================="\n\
+\n\
 # 解码并执行\n\
 echo "正在解码并启动程序..."\n\
 base64 -d /app/encoded_bot.txt > /app/bot.pyc\n\
 exec python /app/bot.pyc\n' > /app/entrypoint.sh \
-    && chmod +x /app/entrypoint.sh
+    && chmod +x /app/entrypoint.sh \
+    && dos2unix /app/entrypoint.sh  # 确保UNIX格式
 
 ENTRYPOINT ["/app/entrypoint.sh"]
