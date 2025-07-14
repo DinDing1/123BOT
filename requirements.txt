@@ -4,4 +4,4 @@ urllib3==1.26.18
 p115client==0.0.5.12.3
 setuptools==68.2.2
 httpx==0.28.1
-asynctools
+asynctools==0.1.3
