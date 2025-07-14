@@ -1855,10 +1855,7 @@ class TelegramBotHandler:
                 f"└ 数据缓存: <code>{len(self.pan_client.directory_cache)}</code>\n\n"
                 f"🤖 <b>机器人控制中心</b>\n"
                 f"▫️ /export - 导出文件\n"
-                f"▫️ /sync_full - 全量同步\n"
-                f"▫️ /info - 查询用户信息\n"
-                f"▫️ /add - 添加用户\n"    
-                f"▫️ /delete - 删除用户\n"                                             
+                f"▫️ /sync_full - 全量同步\n"                                           
                 f"▫️ /clear_trash - 清空回收站\n"
                 f"▫️ /transport - 迁移115文件\n\n"   # 新增
                 f"📦 <b>Version:</b> <code>{VERSION}</code>\n"
