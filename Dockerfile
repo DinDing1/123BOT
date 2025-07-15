@@ -38,7 +38,7 @@ RUN echo "import sys, os, time" > wrapper.py && \
     echo "        expiry_seconds = expiry_days * 24 * 3600" >> wrapper.py && \
     echo "        print(f'[安全验证] 构建时间: {time.ctime(build_timestamp)}')" >> wrapper.py && \
     echo "        print(f'[安全验证] 当前时间: {time.ctime(current_time)}')" >> wrapper.py && \
-    echo "        print(f'[安全验证] 有效期: {expiry_days}天')" >> wrapper.py && \
+    #echo "        print(f'[安全验证] 有效期: {expiry_days}天')" >> wrapper.py && \
     echo "        if current_time < build_timestamp:" >> wrapper.py && \
     echo "            sys.exit('❌ 安全验证失败：系统时间异常！检测到时间回溯')" >> wrapper.py && \
     echo "        if current_time - build_timestamp > expiry_seconds:" >> wrapper.py && \
