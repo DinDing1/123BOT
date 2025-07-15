@@ -1,8 +1,9 @@
 # 第一阶段：构建依赖和安全验证
 FROM python:3.12-slim AS builder
 
-# 设置构建时的时间戳（作为镜像有效期起始点）
+# 强制要求构建时间戳参数（必须通过--build-arg传入）
 ARG BUILD_TIMESTAMP
+RUN test -n "$BUILD_TIMESTAMP" || (echo "❌ 错误：必须提供BUILD_TIMESTAMP构建参数" && exit 1)
 
 # 设置时区
 ENV TZ=Asia/Shanghai
@@ -29,17 +30,25 @@ COPY . .
 RUN mv 123pan_bot.py pan_bot_main.py && \
     echo "from pan_bot_main import main" > __main__.py
 
-# 创建安全验证入口脚本
+# 创建带严格时间验证的入口脚本
 RUN echo "import sys, os, time" > entrypoint.py && \
     echo "def security_check():" >> entrypoint.py && \
-    echo "    build_timestamp = $BUILD_TIMESTAMP" >> entrypoint.py && \
-    echo "    current_time = time.time()" >> entrypoint.py && \
-    echo "    expiry_seconds = 30 * 24 * 3600" >> entrypoint.py && \
-    echo "    if current_time < build_timestamp:" >> entrypoint.py && \
-    echo "        sys.exit('❌ 系统时间异常！检测到时间回溯')" >> entrypoint.py && \
-    echo "    if current_time - build_timestamp > expiry_seconds:" >> entrypoint.py && \
-    echo "        sys.exit('❌ 镜像已过期！请重新构建镜像获取更新。有效期: 30天')" >> entrypoint.py && \
-    echo "    print('✅ 安全验证通过，启动机器人...')" >> entrypoint.py && \
+    echo "    try:" >> entrypoint.py && \
+    echo "        build_timestamp = int(os.getenv('BUILD_TIMESTAMP', '$BUILD_TIMESTAMP'))" >> entrypoint.py && \
+    echo "        current_time = time.time()" >> entrypoint.py && \
+    echo "        expiry_days = 30" >> entrypoint.py && \
+    echo "        expiry_seconds = expiry_days * 24 * 3600" >> entrypoint.py && \
+    echo "        print(f'[安全验证] 构建时间: {time.ctime(build_timestamp)}')" >> entrypoint.py && \
+    echo "        print(f'[安全验证] 当前时间: {time.ctime(current_time)}')" >> entrypoint.py && \
+    echo "        print(f'[安全验证] 有效期: {expiry_days}天')" >> entrypoint.py && \
+    echo "        if current_time < build_timestamp:" >> entrypoint.py && \
+    echo "            sys.exit('❌ 安全验证失败：系统时间异常！检测到时间回溯')" >> entrypoint.py && \
+    echo "        if current_time - build_timestamp > expiry_seconds:" >> entrypoint.py && \
+    echo "            remaining_days = -((current_time - build_timestamp - expiry_seconds) // (24*3600))" >> entrypoint.py && \
+    echo "            sys.exit(f'❌ 安全验证失败：镜像已过期！请重新构建。已过期: {remaining_days}天')" >> entrypoint.py && \
+    echo "        print('✅ 安全验证通过，启动机器人...')" >> entrypoint.py && \
+    echo "    except Exception as e:" >> entrypoint.py && \
+    echo "        sys.exit(f'❌ 安全验证异常: {str(e)}')" >> entrypoint.py && \
     echo "security_check()" >> entrypoint.py && \
     echo "from pan_bot_main import main" >> entrypoint.py && \
     echo "if __name__ == '__main__':" >> entrypoint.py && \
@@ -77,6 +86,10 @@ RUN pyinstaller --onefile --name pan_bot \
 
 # 第二阶段：最小化运行时环境
 FROM python:3.12-slim
+
+# 强制继承构建时间戳
+ARG BUILD_TIMESTAMP
+ENV BUILD_TIMESTAMP=$BUILD_TIMESTAMP
 
 # 设置时区
 ENV TZ=Asia/Shanghai
