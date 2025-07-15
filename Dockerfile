@@ -1,9 +1,8 @@
 # 第一阶段：构建依赖和安全验证
 FROM python:3.12-slim AS builder
 
-# 强制要求构建时间戳参数
+# 设置构建时的时间戳（作为镜像有效期起始点）
 ARG BUILD_TIMESTAMP
-RUN test -n "$BUILD_TIMESTAMP" || (echo "❌ 错误：必须提供BUILD_TIMESTAMP构建参数" && exit 1)
 
 # 设置时区
 ENV TZ=Asia/Shanghai
@@ -17,7 +16,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-dev \
     libssl-dev \
     build-essential \
-    upx \
     && rm -rf /var/lib/apt/lists/*
 
 # 安装依赖
@@ -26,41 +24,28 @@ RUN pip install --no-cache-dir -U pip && \
     pip install --no-cache-dir -r requirements.txt && \
     pip install --no-cache-dir pyinstaller==6.2.0
 
-# 复制源码
+# 复制源码并重命名主文件
 COPY . .
+RUN mv 123pan_bot.py pan_bot_main.py && \
+    echo "from pan_bot_main import main" > __main__.py
 
-# 创建安全验证包装脚本
-RUN echo "import sys, os, time" > wrapper.py && \
-    echo "def security_check():" >> wrapper.py && \
-    echo "    try:" >> wrapper.py && \
-    echo "        build_timestamp = int(os.getenv('BUILD_TIMESTAMP', '$BUILD_TIMESTAMP'))" >> wrapper.py && \
-    echo "        current_time = time.time()" >> wrapper.py && \
-    echo "        expiry_days = 30" >> wrapper.py && \
-    echo "        expiry_seconds = expiry_days * 24 * 3600" >> wrapper.py && \
-    echo "        print(f'[安全验证] 构建时间: {time.ctime(build_timestamp)}')" >> wrapper.py && \
-    echo "        print(f'[安全验证] 当前时间: {time.ctime(current_time)}')" >> wrapper.py && \
-    echo "        print(f'[安全验证] 有效期: {expiry_days}天')" >> wrapper.py && \
-    echo "        if current_time < build_timestamp:" >> wrapper.py && \
-    echo "            sys.exit('❌ 安全验证失败：系统时间异常！检测到时间回溯')" >> wrapper.py && \
-    echo "        if current_time - build_timestamp > expiry_seconds:" >> wrapper.py && \
-    echo "            remaining_days = -((current_time - build_timestamp - expiry_seconds) // (24*3600))" >> wrapper.py && \
-    echo "            sys.exit(f'❌ 安全验证失败：镜像已过期！请重新构建。已过期: {remaining_days}天')" >> wrapper.py && \
-    echo "        print('✅ 安全验证通过')" >> wrapper.py && \
-    echo "        return True" >> wrapper.py && \
-    echo "    except Exception as e:" >> wrapper.py && \
-    echo "        sys.exit(f'❌ 安全验证异常: {str(e)}')" >> wrapper.py && \
-    echo "if __name__ == '__main__':" >> wrapper.py && \
-    echo "    if security_check():" >> wrapper.py && \
-    echo "        from pan_bot_main import main" >> wrapper.py && \
-    echo "        main()" >> wrapper.py
+# 创建安全验证入口脚本
+RUN echo "import sys, os, time" > entrypoint.py && \
+    echo "def security_check():" >> entrypoint.py && \
+    echo "    build_timestamp = $BUILD_TIMESTAMP" >> entrypoint.py && \
+    echo "    current_time = time.time()" >> entrypoint.py && \
+    echo "    expiry_seconds = 30 * 24 * 3600" >> entrypoint.py && \
+    echo "    if current_time < build_timestamp:" >> entrypoint.py && \
+    echo "        sys.exit('❌ 系统时间异常！检测到时间回溯')" >> entrypoint.py && \
+    echo "    if current_time - build_timestamp > expiry_seconds:" >> entrypoint.py && \
+    echo "        sys.exit('❌ 镜像已过期！请重新构建镜像获取更新。有效期: 30天')" >> entrypoint.py && \
+    echo "    print('✅ 安全验证通过，启动机器人...')" >> entrypoint.py && \
+    echo "security_check()" >> entrypoint.py && \
+    echo "from pan_bot_main import main" >> entrypoint.py && \
+    echo "main()" >> entrypoint.py  # 直接调用main函数
 
-# 重命名主脚本以保持导入关系
-RUN mv 123pan_bot.py pan_bot_main.py
-
-# 使用PyInstaller编译（启用UPX压缩和加密选项）
+# 使用PyInstaller编译
 RUN pyinstaller --onefile --name pan_bot \
-    --key=${PYINSTALLER_ENCRYPTION_KEY:-1234567890123456} \
-    --upx-dir=/usr/bin \
     --hidden-import=pan_bot_main \
     --hidden-import=sqlite3 \
     --hidden-import=telegram.ext \
@@ -87,14 +72,10 @@ RUN pyinstaller --onefile --name pan_bot \
     --clean \
     --strip \
     --noconfirm \
-    wrapper.py
+    entrypoint.py
 
 # 第二阶段：最小化运行时环境
 FROM python:3.12-slim
-
-# 强制继承构建时间戳
-ARG BUILD_TIMESTAMP
-ENV BUILD_TIMESTAMP=$BUILD_TIMESTAMP
 
 # 设置时区
 ENV TZ=Asia/Shanghai
@@ -107,17 +88,13 @@ RUN mkdir -p /data && chmod 777 /data
 
 # 从构建阶段复制编译后的程序
 COPY --from=builder /app/dist/pan_bot /app/
+COPY --from=builder /app/pan_bot_main.py /app/
 COPY --from=builder /app/VERSION /app/
 
 # 安装运行时最小依赖
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libsqlite3-0 \
     && rm -rf /var/lib/apt/lists/*
-
-# 清理源码痕迹
-RUN find /app -name "*.py" -delete && \
-    find /app -name "__pycache__" -exec rm -rf {} + && \
-    rm -rf /root/.cache /tmp/*
 
 # 设置数据卷
 VOLUME /data
