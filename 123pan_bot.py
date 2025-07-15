@@ -2603,6 +2603,52 @@ class TelegramBotHandler:
             task_id = data.split("_", 2)[2]
             self.get_transport_status(update, context, task_id)
 
+    def send_transport_status(self, update: Update, context: CallbackContext, task_id):
+        """发送迁移状态消息"""
+        # 获取任务状态
+        with self.transfer.lock:
+            task = self.transfer.active_transfers.get(task_id)
+            if not task:
+                context.bot.send_message(
+                    chat_id=update.message.chat_id,
+                    text=f"❌ 迁移任务 {task_id} 不存在或已过期"
+                )
+                return
+            # 构建状态消息
+            stats = task["stats_ref"]
+            status_msg = self._build_transport_status_message(task_id, task, stats)
+            # 创建刷新按钮
+            keyboard = [[
+                InlineKeyboardButton("🔄 刷新状态", callback_data=f"transport_status_{task_id}")
+            ]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            # 发送消息
+            context.bot.send_message(
+                chat_id=update.message.chat_id,
+                text=status_msg,
+                reply_markup=reply_markup
+            )
+
+    def _build_transport_status_message(self, task_id, task, stats):
+        """构建迁移状态消息"""
+        # 获取实时统计信息
+        elapsed_time = time.time() - task['start_time']
+        # 生成唯一标识符防止消息未修改错误
+        unique_id = int(time.time())
+        # 构建状态消息
+        status_msg = (
+            f"⏳ 迁移任务进行中 (ID: {task_id})\n"
+            f"├ 已运行: {format_time(elapsed_time)}\n"
+            f"├ 扫描文件数: {stats.get('total_files', 0)}\n"
+            f"├ 需提交迁移: {stats.get('to_transfer_files', 0)}\n"
+            f"├ 成功: {stats.get('success_count', 0)}\n"
+            f"└ 失败: {stats.get('fail_count', 0)}\n"
+            f"├ 总大小: {format_size(stats.get('total_size', 0))}\n"
+            f"└ 迁移大小: {format_size(stats.get('transfer_size', 0))}\n"
+            f"🔁 刷新ID: {unique_id}"
+        )
+        return status_msg
+
     def get_transport_status(self, update: Update, context: CallbackContext, task_id):
         """获取迁移任务状态 - 任务完成后自动显示完整报告"""
         try:
@@ -2623,23 +2669,8 @@ class TelegramBotHandler:
             if task["status"] == "running":
                 # 获取实时统计信息
                 stats = task["stats_ref"]
-                
-                # 生成唯一标识符防止消息未修改错误
-                unique_id = int(time.time())
-                
                 # 构建状态消息
-                status_msg = (
-                    f"⏳ 迁移任务进行中 (ID: {task_id})\n"
-                    f"├ 已运行: {format_time(time.time() - task['start_time'])}\n"
-                    f"├ 扫描文件数: {stats.get('total_files', 0)}\n"
-                    f"├ 需提交迁移: {stats.get('to_transfer_files', 0)}\n"
-                    f"├ 成功: {stats.get('success_count', 0)}\n"
-                    f"└ 失败: {stats.get('fail_count', 0)}\n"
-                    f"├ 总大小: {format_size(stats.get('total_size', 0))}\n"
-                    f"└ 迁移大小: {format_size(stats.get('transfer_size', 0))}\n"
-                    f"🔁 刷新ID: {unique_id}"
-                )
-                
+                status_msg = self._build_transport_status_message(task_id, task, stats)
                 # 更新按钮保持可刷新
                 keyboard = [[
                     InlineKeyboardButton("🔄 刷新状态", callback_data=f"transport_status_{task_id}")
@@ -2797,18 +2828,8 @@ class TelegramBotHandler:
             user_id = update.message.from_user.id
             # 启动迁移任务
             task_id = self.transfer.migrate(share_link, user_id=user_id)
-            # 创建状态查询按钮
-            keyboard = [[
-                InlineKeyboardButton("🔄 查看迁移进度", callback_data=f"transport_status_{task_id}")
-            ]]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-
-            # 发送任务启动消息
-            context.bot.send_message(
-                chat_id=update.message.chat_id,
-                text=f"⏳ 115分享链接迁移任务已在后台启动 (ID: {task_id})\n点击下方按钮查看进度",
-                reply_markup=reply_markup
-            )
+            # 直接发送迁移状态消息
+            self.send_transport_status(update, context, task_id)
         except Exception as e:
             logger.error(f"处理115分享链接失败: {e}")
             self.send_auto_delete_message(update, context, f"❌ 处理115分享链接失败: {e}")
@@ -3218,24 +3239,14 @@ class TelegramBotHandler:
     @admin_required
     def transport_command(self, update: Update, context: CallbackContext):
         """处理/transport命令 - 迁移115文件（后台运行）"""
-        user_id = update.message.from_user.id
-        self.send_auto_delete_message(update, context, "🚀 开始在后台迁移115云盘文件到123云盘...")
-        
-        # 启动后台迁移任务
-        task_id = self.transfer.migrate(user_id=user_id)
-        
-        # 创建状态查询按钮
-        keyboard = [[
-            InlineKeyboardButton("🔄 查看迁移进度", callback_data=f"transport_status_{task_id}")
-        ]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        # 发送任务启动消息
-        context.bot.send_message(
-            chat_id=update.message.chat_id,
-            text=f"⏳ 迁移任务已在后台启动 (ID: {task_id})\n点击下方按钮查看进度",
-            reply_markup=reply_markup
-        )
+        try:
+            user_id = update.message.from_user.id
+            task_id = self.transfer.migrate(user_id=user_id)
+            # 直接发送迁移状态消息
+            self.send_transport_status(update, context, task_id)
+        except Exception as e:
+            logger.error(f"启动迁移任务失败: {e}")
+            self.send_auto_delete_message(update, context, f"❌ 启动迁移任务失败: {e}")
     
 def main():
     # 添加授权信息提示
