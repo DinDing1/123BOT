@@ -75,7 +75,8 @@ API_PATHS = {
     "GET_SHARE": "/b/api/share/get",
     "OFFLINE_DOWNLOAD": "/api/v1/offline/download",  # 新增离线下载API
     "DIRECTORY_CREATE": "/upload/v1/file/mkdir",    # 新增目录创建API
-    "OFFLINE_TASK_LIST": "/api/offline_download/task/list"  # 新增离线任务列表API
+    "OFFLINE_TASK_LIST": "/api/offline_download/task/list",  # 新增离线任务列表API
+    "CREATE_SHARE": "/api/v1/share/create" #创建分享链接
 }
 
 # 开放平台地址
@@ -1624,6 +1625,37 @@ class Pan123Client:
         
         return items
 
+    def create_share_link(self, file_id, folder_name, expire_days=0):
+        """创建分享链接"""
+        try:
+            url = f"{OPEN_API_HOST}{API_PATHS['CREATE_SHARE']}"
+            headers = self.token_manager.get_auth_header()
+            # 固定提取码为ZY4K
+            share_pwd = "ZY4K"
+            
+            payload = {
+                "shareName": folder_name,
+                "shareExpire": expire_days,  # 0=永久
+                "fileIDList": str(file_id),
+                "sharePwd": share_pwd,
+                "trafficSwitch": 1,  # 关闭免登录流量包
+                "trafficLimitSwitch": 1  # 关闭流量限制
+            }
+            
+            response = self._call_api("POST", url, json=payload, headers=headers, timeout=30)
+            if not response or response.status_code != 200:
+                return None, None
+                
+            data = response.json()
+            if data.get("code") != 0:
+                return None, None
+                
+            share_key = data["data"].get("shareKey")
+            return share_key, share_pwd
+        except Exception as e:
+            logger.error(f"创建分享链接失败: {e}")
+            return None, None
+
 class FastLinkProcessor:
     @staticmethod
     def parse_share_link(share_link):
@@ -2313,14 +2345,27 @@ class TelegramBotHandler:
         # 计算平均大小
         avg_size = total_size / file_count if file_count > 0 else 0
         
+        # 创建分享链接 (固定提取码ZY4K)
+        share_key, share_pwd = self.pan_client.create_share_link(folder_id, clean_folder_name)
+        
         caption = (             
             f"✨ 分享者：{nickname}\n"
             f"📁 文件名: {clean_folder_name}\n"
             f"📝 文件数: {file_count}\n"
             f"💾 总大小：{format_size(total_size)}\n"
-            f"📊 平均大小：{format_size(avg_size)}\n\n"
-            f"❤️ 123因您分享更完美！"
+            f"📊 平均大小：{format_size(avg_size)}\n"
         )
+        # 如果有分享链接则添加
+        if share_key:
+            caption += (
+                f"🔗 分享链接：https://www.123pan.com/s/{share_key}?提取码:ZY4K\n\n"
+                f"❤️ 123因您分享更完美！"
+            )
+        else:
+            caption += (
+                f"⚠️ 此片你懂的😍，未能创建分享链接\n\n"
+                f"❤️ 123因您分享更完美！"
+            )
         
         # 发送文件
         try:
