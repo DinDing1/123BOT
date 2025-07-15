@@ -56,9 +56,8 @@ RUN echo "import sys, os, time" > wrapper.py && \
 # 重命名主脚本以保持导入关系
 RUN mv 123pan_bot.py pan_bot_main.py
 
-# 使用PyInstaller编译（移除了UPX相关选项）
+# 使用PyInstaller编译
 RUN pyinstaller --onefile --name pan_bot \
-    --key=${PYINSTALLER_ENCRYPTION_KEY:-1234567890123456} \
     --hidden-import=pan_bot_main \
     --hidden-import=sqlite3 \
     --hidden-import=telegram.ext \
