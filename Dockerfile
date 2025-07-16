@@ -23,10 +23,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -U pip && \
     pip install --no-cache-dir -r requirements.txt && \
-    pip install --no-cache-dir pyinstaller==6.2.0
+    pip install --no-cache-dir pyinstaller==6.2.0 PyObfuscate
 
 # 复制源码
 COPY . .
+
+# 混淆主脚本
+RUN pyobfuscate -O . 123pan_bot.py && \
+    mv 123pan_bot.obfuscated.py obfuscated_pan_bot.py
 
 # 创建新的主入口脚本，确保安全验证最先执行
 RUN echo "import sys, os, time" > new_main.py && \
@@ -39,7 +43,6 @@ RUN echo "import sys, os, time" > new_main.py && \
     echo "        expiry_seconds = expiry_days * 24 * 3600" >> new_main.py && \
     echo "        print(f'[安全验证] 构建时间: {time.ctime(build_timestamp)}', flush=True)" >> new_main.py && \
     echo "        print(f'[安全验证] 当前时间: {time.ctime(current_time)}', flush=True)" >> new_main.py && \
-    #echo "        print(f'[安全验证] 有效期: {expiry_days}天', flush=True)" >> new_main.py && \
     echo "        if current_time < build_timestamp:" >> new_main.py && \
     echo "            sys.exit('❌ 安全验证失败：系统时间异常！检测到时间回溯')" >> new_main.py && \
     echo "        if current_time - build_timestamp > expiry_seconds:" >> new_main.py && \
@@ -51,19 +54,16 @@ RUN echo "import sys, os, time" > new_main.py && \
     echo "    except Exception as e:" >> new_main.py && \
     echo "        sys.exit(f'❌ 安全验证异常: {str(e)}')" >> new_main.py && \
     echo "def main():" >> new_main.py && \
-    echo "    # 导入原始主程序" >> new_main.py && \
-    echo "    from pan_bot_main import main as original_main" >> new_main.py && \
-    echo "    original_main()" >> new_main.py && \
+    echo "    # 导入混淆后的主程序" >> new_main.py && \
+    echo "    from obfuscated_pan_bot import main as obfuscated_main" >> new_main.py && \
+    echo "    obfuscated_main()" >> new_main.py && \
     echo "if __name__ == '__main__':" >> new_main.py && \
     echo "    if security_check():" >> new_main.py && \
     echo "        main()" >> new_main.py
 
-# 重命名主脚本以保持导入关系
-RUN mv 123pan_bot.py pan_bot_main.py
-
 # 使用PyInstaller编译
 RUN pyinstaller --onefile --name pan_bot \
-    --hidden-import=pan_bot_main \
+    --hidden-import=obfuscated_pan_bot \
     --hidden-import=sqlite3 \
     --hidden-import=telegram.ext \
     --hidden-import=telegram \
