@@ -28,24 +28,6 @@ RUN pip install --no-cache-dir -U pip && \
 # 复制源码
 COPY . .
 
-# 创建编码脚本
-RUN echo "import base64" > encode_script.py && \
-    echo "import zlib" >> encode_script.py && \
-    echo "def encode_file(input_file, output_file):" >> encode_script.py && \
-    echo "    with open(input_file, 'rb') as f:" >> encode_script.py && \
-    echo "        code = f.read()" >> encode_script.py && \
-    echo "    compressed = zlib.compress(code, level=9)" >> encode_script.py && \
-    echo "    encoded = base64.b85encode(compressed)" >> encode_script.py && \
-    echo "    with open(output_file, 'wb') as f:" >> encode_script.py && \
-    echo "        f.write(b'import base64, zlib, marshal, sys\\n')" >> encode_script.py && \
-    echo "        f.write(b'exec(marshal.loads(zlib.decompress(base64.b85decode(\\\"')" >> encode_script.py && \
-    echo "        f.write(encoded)" >> encode_script.py && \
-    echo "        f.write(b'\\\"))), globals())\\n')" >> encode_script.py && \
-    echo "encode_file('123pan_bot.py', 'obfuscated_pan_bot.py')" >> encode_script.py
-
-# 运行编码脚本
-RUN python encode_script.py
-
 # 创建新的主入口脚本，确保安全验证最先执行
 RUN echo "import sys, os, time" > new_main.py && \
     echo "def security_check():" >> new_main.py && \
@@ -57,6 +39,7 @@ RUN echo "import sys, os, time" > new_main.py && \
     echo "        expiry_seconds = expiry_days * 24 * 3600" >> new_main.py && \
     echo "        print(f'[安全验证] 构建时间: {time.ctime(build_timestamp)}', flush=True)" >> new_main.py && \
     echo "        print(f'[安全验证] 当前时间: {time.ctime(current_time)}', flush=True)" >> new_main.py && \
+    #echo "        print(f'[安全验证] 有效期: {expiry_days}天', flush=True)" >> new_main.py && \
     echo "        if current_time < build_timestamp:" >> new_main.py && \
     echo "            sys.exit('❌ 安全验证失败：系统时间异常！检测到时间回溯')" >> new_main.py && \
     echo "        if current_time - build_timestamp > expiry_seconds:" >> new_main.py && \
@@ -67,13 +50,20 @@ RUN echo "import sys, os, time" > new_main.py && \
     echo "        return True" >> new_main.py && \
     echo "    except Exception as e:" >> new_main.py && \
     echo "        sys.exit(f'❌ 安全验证异常: {str(e)}')" >> new_main.py && \
+    echo "def main():" >> new_main.py && \
+    echo "    # 导入原始主程序" >> new_main.py && \
+    echo "    from pan_bot_main import main as original_main" >> new_main.py && \
+    echo "    original_main()" >> new_main.py && \
     echo "if __name__ == '__main__':" >> new_main.py && \
     echo "    if security_check():" >> new_main.py && \
-    echo "        import obfuscated_pan_bot" >> new_main.py
+    echo "        main()" >> new_main.py
+
+# 重命名主脚本以保持导入关系
+RUN mv 123pan_bot.py pan_bot_main.py
 
 # 使用PyInstaller编译
 RUN pyinstaller --onefile --name pan_bot \
-    --hidden-import=obfuscated_pan_bot \
+    --hidden-import=pan_bot_main \
     --hidden-import=sqlite3 \
     --hidden-import=telegram.ext \
     --hidden-import=telegram \
