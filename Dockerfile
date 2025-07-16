@@ -23,14 +23,28 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -U pip && \
     pip install --no-cache-dir -r requirements.txt && \
-    pip install --no-cache-dir pyinstaller==6.2.0 PyObfuscate
+    pip install --no-cache-dir pyinstaller==6.2.0
 
 # 复制源码
 COPY . .
 
-# 混淆主脚本
-RUN pyobfuscate -O . 123pan_bot.py && \
-    mv 123pan_bot.obfuscated.py obfuscated_pan_bot.py
+# 创建编码脚本
+RUN echo "import base64" > encode_script.py && \
+    echo "import zlib" >> encode_script.py && \
+    echo "def encode_file(input_file, output_file):" >> encode_script.py && \
+    echo "    with open(input_file, 'rb') as f:" >> encode_script.py && \
+    echo "        code = f.read()" >> encode_script.py && \
+    echo "    compressed = zlib.compress(code, level=9)" >> encode_script.py && \
+    echo "    encoded = base64.b85encode(compressed)" >> encode_script.py && \
+    echo "    with open(output_file, 'wb') as f:" >> encode_script.py && \
+    echo "        f.write(b'import base64, zlib, marshal, sys\\n')" >> encode_script.py && \
+    echo "        f.write(b'exec(marshal.loads(zlib.decompress(base64.b85decode(\\\"')" >> encode_script.py && \
+    echo "        f.write(encoded)" >> encode_script.py && \
+    echo "        f.write(b'\\\"))), globals())\\n')" >> encode_script.py && \
+    echo "encode_file('123pan_bot.py', 'obfuscated_pan_bot.py')" >> encode_script.py
+
+# 运行编码脚本
+RUN python encode_script.py
 
 # 创建新的主入口脚本，确保安全验证最先执行
 RUN echo "import sys, os, time" > new_main.py && \
@@ -53,13 +67,9 @@ RUN echo "import sys, os, time" > new_main.py && \
     echo "        return True" >> new_main.py && \
     echo "    except Exception as e:" >> new_main.py && \
     echo "        sys.exit(f'❌ 安全验证异常: {str(e)}')" >> new_main.py && \
-    echo "def main():" >> new_main.py && \
-    echo "    # 导入混淆后的主程序" >> new_main.py && \
-    echo "    from obfuscated_pan_bot import main as obfuscated_main" >> new_main.py && \
-    echo "    obfuscated_main()" >> new_main.py && \
     echo "if __name__ == '__main__':" >> new_main.py && \
     echo "    if security_check():" >> new_main.py && \
-    echo "        main()" >> new_main.py
+    echo "        import obfuscated_pan_bot" >> new_main.py
 
 # 使用PyInstaller编译
 RUN pyinstaller --onefile --name pan_bot \
