@@ -76,7 +76,8 @@ API_PATHS = {
     "OFFLINE_DOWNLOAD": "/api/v1/offline/download",  # 新增离线下载API
     "DIRECTORY_CREATE": "/upload/v1/file/mkdir",    # 新增目录创建API
     "OFFLINE_TASK_LIST": "/api/offline_download/task/list",  # 新增离线任务列表API
-    "CREATE_SHARE": "/api/v1/share/create" #创建分享链接
+    "CREATE_SHARE": "/api/v1/share/create", #创建分享链接
+    "LIST_SHARE": "/api/v1/share/list" #分享链接列表
 }
 
 # 开放平台地址
@@ -101,6 +102,7 @@ SEARCH_MAX_DEPTH = int(os.getenv("SEARCH_MAX_DEPTH", "")) #扫描目录叠加深
 DAILY_EXPORT_LIMIT = int(os.getenv("DAILY_EXPORT_LIMIT", "3")) #导出次数
 BANNED_EXPORT_NAMES = [name.strip().lower() for name in os.getenv("BANNED_EXPORT_NAMES", "电视剧;电影").split(';') if name.strip()] #导出黑名单
 PRIVATE_EXPORT = os.getenv("PRIVATE_EXPORT", "Flase").lower() == "true"  # 控制JSON文件是否私聊发送
+DEFAULT_SHARE_PASSWORD = os.getenv("DEFAULT_SHARE_PASSWORD", "ZY4K")  # 分享链接默认提取码ZY4K
 ####TGBOT配置
 BOT_TOKEN = os.getenv("TG_BOT_TOKEN","")
 ADMIN_USER_IDS = [int(id.strip()) for id in os.getenv("TG_ADMIN_USER_IDS", "").split(",") if id.strip()]
@@ -1627,19 +1629,59 @@ class Pan123Client:
         
         return items
 
+    def get_share_info_by_folder_name(self, folder_name):
+        """根据文件夹名称获取分享信息（分页查询）"""
+        if not self.token_manager.ensure_token_valid():
+            return None
+            
+        last_share_id = 0
+        headers = self.token_manager.get_auth_header()
+        
+        while True:
+            url = f"{OPEN_API_HOST}{API_PATHS['LIST_SHARE']}"
+            params = {
+                "limit": 100,
+                "lastShareId": last_share_id
+            }
+            
+            try:
+                response = self._call_api("GET", url, params=params, headers=headers, timeout=30)
+                if not response or response.status_code != 200:
+                    return None
+                    
+                data = response.json()
+                if data.get("code") != 0:
+                    return None
+                
+                # 检查当前页的分享列表
+                for share in data["data"].get("shareList", []):
+                    # 检查分享是否包含目标文件夹且未失效
+                    if (share["shareName"] == (folder_name) and \
+                       share["expired"] == 0 ):
+                        return share
+                
+                # 检查是否还有下一页
+                last_share_id = data["data"].get("lastShareId", -1)
+                if last_share_id == -1:
+                    break
+                    
+            except Exception as e:
+                logger.error(f"查询分享列表出错: {e}")
+                return None
+                
+        return None
+
     def create_share_link(self, file_id, folder_name, expire_days=0):
-        """创建分享链接"""
+        """创建分享链接（使用预设提取码）"""
         try:
             url = f"{OPEN_API_HOST}{API_PATHS['CREATE_SHARE']}"
             headers = self.token_manager.get_auth_header()
-            # 固定提取码为ZY4K
-            share_pwd = "ZY4K"
             
             payload = {
                 "shareName": folder_name,
                 "shareExpire": expire_days,  # 0=永久
                 "fileIDList": str(file_id),
-                "sharePwd": share_pwd,
+                "sharePwd": DEFAULT_SHARE_PASSWORD,  # 使用预设提取码
                 "trafficSwitch": 1,  # 关闭免登录流量包
                 "trafficLimitSwitch": 1  # 关闭流量限制
             }
@@ -1653,7 +1695,7 @@ class Pan123Client:
                 return None, None
                 
             share_key = data["data"].get("shareKey")
-            return share_key, share_pwd
+            return share_key, DEFAULT_SHARE_PASSWORD  # 返回预设提取码
         except Exception as e:
             logger.error(f"创建分享链接失败: {e}")
             return None, None
@@ -2346,9 +2388,19 @@ class TelegramBotHandler:
 
         # 计算平均大小
         avg_size = total_size / file_count if file_count > 0 else 0
-        
-        # 创建分享链接 (固定提取码ZY4K)
-        share_key, share_pwd = self.pan_client.create_share_link(folder_id, clean_folder_name)
+
+        # 先尝试获取现有分享链接
+        share_info = self.pan_client.get_share_info_by_folder_name(folder_name)
+        if share_info and share_info["expired"] == 0:
+            # 使用现有分享链接
+            share_key = share_info["shareKey"]
+            share_pwd = share_info["sharePwd"]
+            logger.info(f"使用现有分享链接: {folder_name} (ID: {folder_id})")
+        else:
+            # 创建新分享链接
+            share_key, share_pwd = self.pan_client.create_share_link(folder_id, clean_folder_name)
+            if share_key:
+                logger.info(f"创建新分享链接: {folder_name} (ID: {folder_id})")
         
         caption = (             
             f"✨ 分享者：{nickname}\n"
@@ -2360,7 +2412,7 @@ class TelegramBotHandler:
         # 如果有分享链接则添加
         if share_key:
             caption += (
-                f"🔗 分享链接：https://www.123pan.com/s/{share_key}?提取码:ZY4K\n\n"
+                f"🔗 分享链接：https://www.123pan.com/s/{share_key}?提取码:{share_pwd}\n\n"
                 f"❤️ 123因您分享更完美！"
             )
         else:
