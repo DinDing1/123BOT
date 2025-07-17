@@ -29,7 +29,7 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from p115client import P115Client
-from p115client.tool.iterdir import iter_files_with_path_skim, iter_files
+from p115client.tool.iterdir import iter_files_with_path, iter_files
 
 # 禁用SSL警告
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -790,15 +790,13 @@ class Pan115to123Transfer:
         seen_ids = set()  # 用于跟踪已处理的文件ID
         
         try:
-            # 使用 iter_files_with_path_skim 获取所有文件（包含路径）
+            # 使用 iter_files_with_path 获取所有文件（包含路径）
             logger.info(f"开始遍历目录树，根目录ID: {cid}")
-            all_files = iter_files_with_path_skim(
+            all_files = iter_files_with_path(
                 client=self.client_115,
                 cid=cid,
-                app="android",  # 使用web接口
-                with_ancestors=False,  # 不需要祖先信息
-                path_already=False,  # 没有预先构建路径
-                max_workers=4  # 设置并发数
+                cur=0,  # 递归遍历子目录
+                app="web"  # 使用web接口
             )
             
             file_count = 0
