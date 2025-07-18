@@ -11,6 +11,7 @@ import sqlite3
 import threading
 import traceback
 import httpx
+import hashlib
 from contextlib import closing
 from datetime import datetime, timedelta, timezone
 from telegram import Update, BotCommand, InlineKeyboardButton, InlineKeyboardMarkup
@@ -103,6 +104,8 @@ DAILY_EXPORT_LIMIT = int(os.getenv("DAILY_EXPORT_LIMIT", "3")) #导出次数
 BANNED_EXPORT_NAMES = [name.strip().lower() for name in os.getenv("BANNED_EXPORT_NAMES", "电视剧;电影").split(';') if name.strip()] #导出黑名单
 PRIVATE_EXPORT = os.getenv("PRIVATE_EXPORT", "Flase").lower() == "true"  # 控制JSON文件是否私聊发送
 DEFAULT_SHARE_PASSWORD = os.getenv("DEFAULT_SHARE_PASSWORD", "ZY4K")  # 分享链接默认提取码ZY4K
+STRM_SERVICE_URL = os.getenv("STRM_SERVICE_URL", "http://172.17.0.1:8123")  # STRM服务URL
+STRM_OUTPUT_DIR = os.getenv("STRM_OUTPUT_DIR", "/data/media")  # STRM文件输出目录
 ####TGBOT配置
 BOT_TOKEN = os.getenv("TG_BOT_TOKEN","")
 ADMIN_USER_IDS = [int(id.strip()) for id in os.getenv("TG_ADMIN_USER_IDS", "").split(",") if id.strip()]
@@ -118,7 +121,6 @@ ALLOWED_VIDEO_EXTENSIONS = [ext.strip().lower() for ext in os.getenv("ALLOWED_VI
 ALLOWED_SUB_EXTENSIONS = [ext.strip().lower() for ext in os.getenv("ALLOWED_SUB_EXT", ".srt,.ass,.ssa,.sub,.idx,.vtt,.sup").split(',') if ext.strip()]
 ALLOWED_EXTENSIONS = ALLOWED_VIDEO_EXTENSIONS + ALLOWED_SUB_EXTENSIONS  # 合并扩展名
 # =====================================================
-
 def init_db():
     """初始化数据库"""
     try:
@@ -154,6 +156,20 @@ def init_db():
                     user_id INTEGER NOT NULL,
                     export_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     folder_count INTEGER NOT NULL
+                )''',
+                '''CREATE TABLE IF NOT EXISTS file_records (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    file_path TEXT NOT NULL,
+                    file_name TEXT NOT NULL,
+                    size INTEGER NOT NULL,
+                    etag TEXT NOT NULL,
+                    s3KeyFlag TEXT,
+                    file_type TEXT NOT NULL,
+                    local_path TEXT NOT NULL,
+                    unique_hash TEXT NOT NULL UNIQUE,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    media_name TEXT,
+                    media_type TEXT
                 )'''
             ]
             
@@ -164,9 +180,13 @@ def init_db():
             indexes = [
                 "CREATE INDEX IF NOT EXISTS idx_filename ON directory_cache (filename)",
                 "CREATE INDEX IF NOT EXISTS idx_full_path ON directory_cache (full_path)",
-                "CREATE INDEX IF NOT EXISTS idx_base_dir ON directory_cache (base_dir_id)"
+                "CREATE INDEX IF NOT EXISTS idx_base_dir ON directory_cache (base_dir_id)",
+                "CREATE INDEX IF NOT EXISTS idx_unique_hash ON file_records (unique_hash)",
+                "CREATE INDEX IF NOT EXISTS idx_file_path ON file_records (file_path)"
             ]
-            
+            # 执行创建表和索引
+            for table in tables:
+                c.execute(table)
             for index in indexes:
                 c.execute(index)
                 
@@ -231,6 +251,73 @@ def is_allowed_file(filename):
     """检查文件扩展名是否在允许列表中"""
     _, ext = os.path.splitext(filename)
     return ext.lower() in ALLOWED_EXTENSIONS
+
+def calculate_unique_hash(size, etag, s3KeyFlag):
+    """计算唯一标识哈希"""
+    return hashlib.md5(f"{size}|{etag}|{s3KeyFlag}".encode()).hexdigest()
+
+def get_media_library_stats():
+    """从数据库获取媒体库统计信息"""
+    stats = {
+        'movie_count': 0,
+        'movie_size': 0,
+        'tv_count': 0,
+        'tv_size': 0,
+        'sub_count': 0,
+        'sub_size': 0,
+        'total_count': 0,
+        'total_size': 0
+    }
+    
+    try:
+        with closing(sqlite3.connect(DB_PATH)) as conn:
+            conn.row_factory = sqlite3.Row
+            c = conn.cursor()
+            
+            # 电影统计（按media_name去重）
+            c.execute("""
+                SELECT COUNT(DISTINCT media_name) AS count, SUM(size) AS total_size 
+                FROM file_records 
+                WHERE media_type = 'movie' AND file_type = 'video'
+            """)
+            movie = c.fetchone()
+            if movie:
+                stats['movie_count'] = movie['count'] or 0
+                stats['movie_size'] = movie['total_size'] or 0
+            
+            # 电视剧统计（按media_name去重）
+            c.execute("""
+                SELECT COUNT(DISTINCT media_name) AS count, SUM(size) AS total_size 
+                FROM file_records 
+                WHERE media_type = 'tv' AND file_type = 'video'
+            """)
+            tv = c.fetchone()
+            if tv:
+                stats['tv_count'] = tv['count'] or 0
+                stats['tv_size'] = tv['total_size'] or 0
+            
+            # 字幕统计
+            c.execute("""
+                SELECT COUNT(*) AS count, SUM(size) AS total_size 
+                FROM file_records 
+                WHERE file_type = 'subtitle'
+            """)
+            sub = c.fetchone()
+            if sub:
+                stats['sub_count'] = sub['count'] or 0
+                stats['sub_size'] = sub['total_size'] or 0
+            
+            # 总体统计
+            c.execute("SELECT COUNT(*) AS count, SUM(size) AS total_size FROM file_records")
+            total = c.fetchone()
+            if total:
+                stats['total_count'] = total['count'] or 0
+                stats['total_size'] = total['total_size'] or 0
+                
+    except Exception as e:
+        logger.error(f"获取媒体库统计失败: {e}")
+    
+    return stats
 # =====================================================
 
 class TokenManager:
@@ -367,6 +454,299 @@ def is_allowed_file(filename):
     """检查文件是否为允许的类型"""
     ext = os.path.splitext(filename)[1].lower()
     return ext in ALLOWED_VIDEO_EXTENSIONS or ext in ALLOWED_SUB_EXTENSIONS
+
+class STRMGenerator:
+
+    def extract_media_info(self, relative_path):
+        """从文件路径提取媒体名称和类型（改进版）"""
+        # 标准化路径并分割
+        path_parts = relative_path.strip('/').split('/')
+        
+        # 如果路径为空，返回空值
+        if not path_parts:
+            return "", ""
+        
+        # 如果路径深度为1（只有文件名），则按电影处理
+        if len(path_parts) == 1:
+            # 只有文件名，没有目录 - 按电影处理
+            return os.path.splitext(path_parts[0])[0], "movie"
+        
+        # 检查最后一个目录是否为季目录
+        last_dir = path_parts[-2]  # 最后一部分是文件名，倒数第二部分是目录
+        
+        # 定义季目录的正则表达式模式（不区分大小写）
+        season_patterns = [
+            r"^season\s*\d+$",      # Season 1, Season 01
+            r"^s\d+$",               # S1, S01
+            r"^第\s*\d+\s*季$",       # 第1季, 第 1 季
+            r"^season\s*\d+$",       # Season1 (无空格)
+            r"^series\s*\d+$",       # Series 1
+        ]
+        
+        last_dir_lower = last_dir.lower().strip()
+        
+        for pattern in season_patterns:
+            if re.match(pattern, last_dir_lower):
+                # 季目录格式 - 电视剧
+                if len(path_parts) > 2:
+                    # 媒体名称为倒数第二个目录
+                    media_name = path_parts[-3]
+                else:
+                    # 如果路径深度只有2（如：剧集名/Season 01/文件），则使用第一个目录
+                    media_name = path_parts[0] if path_parts else ""
+                return media_name, "tv"
+        
+        # 非季目录格式 - 电影
+        media_name = last_dir
+        return media_name, "movie"
+
+    def record_file_info(self, file_path, file_name, size, etag, s3KeyFlag, file_type, local_path, relative_path):
+        """记录文件信息到数据库（支持字幕文件）"""
+        try:
+            unique_hash = calculate_unique_hash(size, etag, s3KeyFlag)
+            media_name, media_type = self.extract_media_info(relative_path)
+            
+            with closing(sqlite3.connect(DB_PATH)) as conn:
+                c = conn.cursor()
+                c.execute('''INSERT OR IGNORE INTO file_records 
+                            (file_path, file_name, size, etag, s3KeyFlag, file_type, local_path, unique_hash, media_name, media_type)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                          (file_path, file_name, size, etag, s3KeyFlag, file_type, local_path, unique_hash, media_name, media_type))
+                conn.commit()
+            return True
+        except Exception as e:
+            logger.error(f"记录文件信息失败: {e}")
+            return False
+        
+    def generate_strm_files_recursive(self, directory_id, base_path="", prefix_to_remove=""):
+        """递归生成STRM文件和下载字幕文件"""
+        generated_count = 0
+        last_file_id = 0
+        
+        # 使用完整路径作为目录名称
+        current_dir_path = base_path if base_path else "根目录"
+        
+        while True:
+            # 获取当前目录文件列表
+            url = f"{OPEN_API_HOST}{API_PATHS['LIST_FILES_V2']}"
+            params = {
+                "parentFileId": directory_id,
+                "trashed": 0,
+                "limit": 100,
+                "lastFileId": last_file_id
+            }
+            headers = self.pan_client.token_manager.get_auth_header()
+            
+            try:
+                response = self.pan_client._call_api("GET", url, params=params, headers=headers, timeout=30)
+                if not response or response.status_code != 200:
+                    return generated_count
+                
+                data = response.json()
+                if data.get("code") != 0:
+                    return generated_count
+                
+                # 批量处理文件
+                video_items = []
+                sub_items = []
+                for item in data["data"].get("fileList", []):
+                    if item.get("trashed", 1) != 0:
+                        continue
+                    # 构建文件路径时去掉媒体库目录部分
+                    file_full_path = f"{base_path}/{item['filename']}" if base_path else item['filename']
+
+                    if item["type"] == 0:  # 文件
+                        # 移除媒体库前缀
+                        relative_path = file_full_path
+                        if prefix_to_remove and file_full_path.startswith(prefix_to_remove):
+                            relative_path = file_full_path[len(prefix_to_remove):].lstrip('/')
+                        
+                        ext = os.path.splitext(item['filename'])[1].lower()
+                        # 处理视频文件
+                        if ext in ALLOWED_VIDEO_EXTENSIONS:
+                            video_items.append((relative_path, item))
+                        # 处理字幕文件
+                        elif ext in ALLOWED_SUB_EXTENSIONS:
+                            sub_items.append((relative_path, item))
+
+                    elif item["type"] == 1:  # 目录
+                        # 构建目录路径时去掉媒体库目录部分
+                        dir_full_path = f"{base_path}/{item['filename']}" if base_path else item['filename']
+
+                        # 递归处理子目录
+                        sub_count = self.generate_strm_files_recursive(item["fileId"], dir_full_path, prefix_to_remove)
+                        generated_count += sub_count
+                
+                # 批量生成STRM文件
+                if video_items:
+                    count = self._batch_create_strm_files(video_items)
+                    generated_count += count
+                    logger.info(f"在目录 '{current_dir_path}' 下生成 {count} 个视频STRM文件")
+                
+                # 批量下载字幕文件
+                if sub_items:
+                    sub_count = self._batch_download_subtitles(sub_items)
+                    logger.info(f"在目录 '{current_dir_path}' 下下载 {sub_count} 个字幕文件")
+                
+                last_file_id = data["data"].get("lastFileId", -1)
+                if last_file_id == -1:
+                    break
+                    
+            except Exception as e:
+                logger.error(f"处理目录 '{current_dir_path}' 时出错: {str(e)}")
+                return generated_count
+        
+        return generated_count
+
+    def _batch_create_strm_files(self, file_items):
+        """批量创建STRM文件"""
+        count = 0
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            futures = []
+            for relative_path, item in file_items:
+                futures.append(executor.submit(self._create_single_strm_file, relative_path, item))
+
+            for future in as_completed(futures):
+                if future.result():
+                    count += 1
+        return count
+    
+    def _batch_download_subtitles(self, sub_items):
+        """批量下载字幕文件"""
+        count = 0
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            futures = []
+            for relative_path, item in sub_items:
+                futures.append(executor.submit(self._download_single_subtitle, relative_path, item))
+
+            for future in as_completed(futures):
+                if future.result():
+                    count += 1
+        return count
+    
+    def _create_single_strm_file(self, relative_path, item):
+        """创建单个STRM文件（保留目录结构）"""
+        try:
+            # 创建输出路径 - 使用相对路径
+            file_name = os.path.basename(relative_path)
+            file_name_without_ext = os.path.splitext(file_name)[0]
+            dir_path = os.path.dirname(relative_path)
+            
+            # 构建STRM文件路径
+            strm_file_path = os.path.join(STRM_OUTPUT_DIR, dir_path, f"{file_name_without_ext}.strm")
+            
+            # 创建目录结构
+            os.makedirs(os.path.dirname(strm_file_path), exist_ok=True)
+            
+            # 生成STRM内容
+            strm_content = (
+                f"{STRM_SERVICE_URL}/"
+                f"{file_name}|"
+                f"{item['size']}|"
+                f"{item['etag']}?"
+                f"{item.get('s3KeyFlag')}"
+            )
+            
+            # 写入文件
+            with open(strm_file_path, 'w', encoding='utf-8') as f:
+                f.write(strm_content)
+            
+            # 提取媒体信息
+            media_name, media_type = self.extract_media_info(relative_path)
+            
+            # 记录文件信息到数据库
+            file_type = "video" 
+            file_path = item.get('path', relative_path)  # 获取123云盘中的完整路径
+            self.record_file_info(
+                file_path=file_path,
+                file_name=file_name,
+                size=item['size'],
+                etag=item['etag'],
+                s3KeyFlag=item.get('s3KeyFlag', 'x-0'),
+                file_type=file_type,
+                local_path=strm_file_path,
+                relative_path=relative_path  # 添加相对路径参数
+            )
+            
+            return True
+        except Exception as e:
+            logger.error(f"生成STRM文件失败: {relative_path} - {str(e)}")
+            return False
+
+    def _download_single_subtitle(self, relative_path, item):
+        """下载单个字幕文件并记录到数据库"""
+        try:
+            # 获取文件信息
+            file_name = os.path.basename(relative_path)
+            dir_path = os.path.dirname(relative_path)
+            
+            # 构建本地保存路径
+            local_path = os.path.join(STRM_OUTPUT_DIR, dir_path, file_name)
+            
+            # 创建目录（如果不存在）
+            os.makedirs(os.path.dirname(local_path), exist_ok=True)
+            
+            # 获取文件下载链接
+            download_url = self._get_subtitle_download_url(item)
+            
+            # 下载文件
+            if download_url:
+                self._download_file(download_url, local_path)
+                
+            # 提取媒体信息
+            media_name, media_type = self.extract_media_info(relative_path)
+            
+            # 记录到数据库
+            self.record_file_info(
+                file_path=relative_path,
+                file_name=file_name,
+                size=item['size'],
+                etag=item['etag'],
+                s3KeyFlag=item.get('s3KeyFlag', 'x-0'),
+                file_type="subtitle",
+                local_path=local_path,
+                relative_path=relative_path  # 添加相对路径参数
+            )
+            return True
+        except Exception as e:
+            logger.error(f"下载字幕文件失败: {relative_path} - {str(e)}")
+            return False
+
+    def _get_subtitle_download_url(self, item):
+        """生成字幕文件下载URL"""
+        try:
+            return (
+                f"{STRM_SERVICE_URL}/"
+                f"{item['filename']}|"
+                f"{item['size']}|"
+                f"{item['etag']}?"
+                f"{item.get('s3KeyFlag')}"
+            )
+        except Exception as e:
+            logger.error(f"生成字幕下载URL失败: {str(e)}")
+            return None
+
+    def _download_file(self, url, save_path):
+        """下载文件到本地"""
+        try:
+            # 使用带重试机制的下载
+            for attempt in range(3):
+                try:
+                    response = requests.get(url, stream=True, timeout=30)
+                    response.raise_for_status()
+                    
+                    with open(save_path, 'wb') as f:
+                        for chunk in response.iter_content(chunk_size=8192):
+                            if chunk:
+                                f.write(chunk)
+                    return True
+                except (requests.exceptions.RequestException, IOError) as e:
+                    logger.warning(f"文件下载失败（尝试 {attempt+1}/3）: {save_path} - {str(e)}")
+                    time.sleep(2)
+            return False
+        except Exception as e:
+            logger.error(f"文件下载异常: {save_path} - {str(e)}")
+            return False
 
 class Pan123API:
     """123云盘API客户端"""
@@ -1794,6 +2174,7 @@ class TelegramBotHandler:
         self.dispatcher.add_handler(CommandHandler("start", self.start_command))
         self.dispatcher.add_handler(CommandHandler("export", self.export_command))
         self.dispatcher.add_handler(CommandHandler("sync_full", self.sync_full_command))
+        self.dispatcher.add_handler(CommandHandler("strm", self.strm_command))  # 新增STRM命令
         self.dispatcher.add_handler(CommandHandler("clear_trash", self.clear_trash_command))
         self.dispatcher.add_handler(CommandHandler("add", self.add_command))
         self.dispatcher.add_handler(CommandHandler("delete", self.delete_command))
@@ -1812,6 +2193,7 @@ class TelegramBotHandler:
         commands = [
             BotCommand("start", "个人信息"),
             BotCommand("export", "导出秒传文件"),
+            BotCommand("strm", "生成STRM"),
             BotCommand("sync_full", "全量同步"),
             BotCommand("transport", "迁移115文件"),
             BotCommand("clear_trash", "清空123回收站"),
@@ -1907,6 +2289,8 @@ class TelegramBotHandler:
             else:
                 usage_percent = 0
                 usage_bar = ""
+
+            media_stats = get_media_library_stats()
             
             # 构建用户信息消息
             message = (
@@ -1922,6 +2306,11 @@ class TelegramBotHandler:
                 f"📡 <b>流量信息</b>\n"
                 f"└ 直链: {direct_traffic}\n"
                 f"══════════════════════\n\n"
+                f"🎬 <b>媒体库统计</b>\n"
+                f"├ 电影: {media_stats['movie_count']}部 ({format_size(media_stats['movie_size'])})\n"
+                f"├ 电视剧: {media_stats['tv_count']}部 ({format_size(media_stats['tv_size'])})\n"
+                f"├ 字幕文件: {media_stats['sub_count']}个 ({format_size(media_stats['sub_size'])})\n"
+                f"└ 文件总数: {media_stats['total_count']}个 ({format_size(media_stats['total_size'])})\n\n"
                 f"⚙️ <b>当前配置:</b>\n"
                 f"├ 保存目录: <code>{DEFAULT_SAVE_DIR or '根目录'}</code>\n"
                 f"├ 导出目录: <code>{', '.join(EXPORT_BASE_DIRS) if EXPORT_BASE_DIRS else '根目录'}</code>\n"
@@ -1929,6 +2318,7 @@ class TelegramBotHandler:
                 f"└ 数据缓存: <code>{len(self.pan_client.directory_cache)}</code>\n\n"
                 f"🤖 <b>机器人控制中心</b>\n"
                 f"▫️ /export - 导出文件\n"
+                f"▫️ /strm - 生成STRM\n"
                 f"▫️ /sync_full - 全量同步\n"                                           
                 f"▫️ /clear_trash - 清空回收站\n"
                 f"▫️ /transport - 迁移115文件\n\n"   # 新增
@@ -3344,6 +3734,49 @@ class TelegramBotHandler:
         except Exception as e:
             logger.error(f"启动迁移任务失败: {e}")
             self.send_auto_delete_message(update, context, f"❌ 启动迁移任务失败: {e}")
+
+    @admin_required
+    def strm_command(self, update: Update, context: CallbackContext):
+        """处理/strm命令 - 高效生成STRM文件"""
+        self.send_auto_delete_message(update, context, "⏳ 正在快速生成视频STRM文件，请稍候...")
+        logger.info("开始高效生成视频STRM文件...")
+        
+        try:
+            # 确保输出目录存在
+            os.makedirs(STRM_OUTPUT_DIR, exist_ok=True)
+            # 创建STRM生成器实例
+            strm_generator = STRMGenerator()
+            strm_generator.pan_client = self.pan_client  # 注入pan_client依赖
+            
+            total_generated = 0
+            start_time = time.time()
+            # 并行处理所有媒体库目录
+            with ThreadPoolExecutor(max_workers=3) as executor:
+                futures = []
+                for base_dir_id in self.pan_client.export_base_dir_ids:
+                    base_dir_name = self.pan_client.export_base_dir_map.get(base_dir_id, str(base_dir_id))
+                    futures.append(executor.submit(
+                        strm_generator.generate_strm_files_recursive,  # 使用正确的实例方法
+                        base_dir_id, 
+                        base_dir_name,
+                        base_dir_name  # 作为前缀移除
+                    ))
+                for future in as_completed(futures):
+                    count = future.result()
+                    total_generated += count
+                    logger.info(f"媒体库目录处理完成，生成 {count} 个视频STRM文件")
+            elapsed = time.time() - start_time
+            message = (
+                f"✅ 视频STRM文件生成完成！\n"
+                f"├ 共生成 {total_generated} 个文件\n"
+                f"├ 保存位置: {STRM_OUTPUT_DIR}\n"
+                f"└ 总耗时: {elapsed:.2f}秒"
+            )
+            update.message.reply_text(message)
+            logger.info(f"STRM高效生成任务完成，总计 {total_generated} 个视频文件，耗时 {elapsed:.2f}秒")        
+        except Exception as e:
+            logger.error(f"生成STRM文件失败: {e}")
+            self.send_auto_delete_message(update, context, f"❌ 生成STRM文件失败: {str(e)}")
     
 def main():
     # 添加授权信息提示
