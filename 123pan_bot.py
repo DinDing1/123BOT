@@ -841,6 +841,102 @@ class STRMGenerator:
             logger.error(f"从数据库恢复文件失败: {str(e)}", exc_info=True)
             return f"❌ 恢复失败: {str(e)}"
 
+
+    def search_media(self, keyword):
+        """在数据库中搜索媒体"""
+        results = []
+        try:
+            with closing(sqlite3.connect(DB_PATH)) as conn:
+                conn.row_factory = sqlite3.Row
+                c = conn.cursor()
+                # 按media_name分组统计
+                c.execute("""
+                    SELECT media_name, media_type, 
+                           COUNT(*) AS file_count, 
+                           SUM(size) AS total_size,
+                           GROUP_CONCAT(local_path) AS sample_paths
+                    FROM file_records
+                    WHERE media_name LIKE ?
+                    GROUP BY media_name, media_type
+                    ORDER BY media_name
+                """, (f'%{keyword}%',))
+                
+                for row in c.fetchall():
+                    # 提取示例路径（取第一个路径）
+                    sample_path = row["sample_paths"].split(',')[0] if row["sample_paths"] else ""
+                    # 提取到媒体名称目录
+                    if sample_path and row["media_name"]:
+                        # 尝试找到媒体名称在路径中的位置
+                        media_index = sample_path.find(row["media_name"])
+                        if media_index != -1:
+                            sample_path = sample_path[:media_index + len(row["media_name"])]
+                    
+                    results.append({
+                        "media_name": row["media_name"],
+                        "media_type": row["media_type"],
+                        "file_count": row["file_count"],
+                        "total_size": row["total_size"],
+                        "sample_path": sample_path
+                    })
+        except Exception as e:
+            logger.error(f"媒体搜索失败: {e}")
+        return results
+    
+    def delete_media(self, media_name):
+        """从数据库中删除媒体记录"""
+        try:
+            with closing(sqlite3.connect(DB_PATH)) as conn:
+                c = conn.cursor()
+                c.execute("DELETE FROM file_records WHERE media_name = ?", (media_name,))
+                conn.commit()
+                return c.rowcount
+        except Exception as e:
+            logger.error(f"删除媒体失败: {e}")
+            return 0
+    
+    def export_media_json(self, media_name):
+        """导出媒体JSON文件"""
+        try:
+            with closing(sqlite3.connect(DB_PATH)) as conn:
+                conn.row_factory = sqlite3.Row
+                c = conn.cursor()
+                c.execute("""
+                    SELECT file_path, etag, size 
+                    FROM file_records 
+                    WHERE media_name = ?
+                """, (media_name,))
+                
+                files = []
+                for row in c.fetchall():
+                    files.append({
+                        "path": row["file_path"],
+                        "etag": row["etag"],
+                        "size": row["size"]
+                    })
+                
+                if not files:
+                    return None
+                
+                # 创建JSON结构
+                json_data = {
+                    "usesBase62EtagsInExport": False,
+                    "commonPath": "",
+                    "totalFilesCount": len(files),
+                    "totalSize": sum(f["size"] for f in files),
+                    "formattedTotalSize": format_size(sum(f["size"] for f in files)),
+                    "files": files
+                }
+                
+                # 保存到临时文件
+                file_name = f"{re.sub(r'[\\/*?:\"<>|]', '', media_name)}.json"
+                with open(file_name, "w", encoding="utf-8") as f:
+                    json.dump(json_data, f, ensure_ascii=False, indent=2)
+                
+                return file_name
+        except Exception as e:
+            logger.error(f"导出媒体JSON失败: {e}")
+            return None
+
 class Pan123API:
     """123云盘API客户端"""
     def __init__(self, token_manager):
@@ -2268,6 +2364,7 @@ class TelegramBotHandler:
         self.dispatcher.add_handler(CommandHandler("export", self.export_command))
         self.dispatcher.add_handler(CommandHandler("sync_full", self.sync_full_command))
         self.dispatcher.add_handler(CommandHandler("strm", self.strm_command))  # 新增STRM命令
+        self.dispatcher.add_handler(CommandHandler("search", self.search_command))
         self.dispatcher.add_handler(CommandHandler("restore", self.restore_command))
         self.dispatcher.add_handler(CommandHandler("clear_trash", self.clear_trash_command))
         self.dispatcher.add_handler(CommandHandler("add", self.add_command))
@@ -2288,6 +2385,7 @@ class TelegramBotHandler:
             BotCommand("start", "个人信息"),
             BotCommand("export", "导出秒传文件"),
             BotCommand("strm", "生成STRM"),
+            BotCommand("search", "生成STRM"),
             BotCommand("sync_full", "全量同步"),
             BotCommand("transport", "迁移115文件"),
             BotCommand("restore", "恢复STRM"),
@@ -2415,6 +2513,7 @@ class TelegramBotHandler:
                 f"▫️ /export - 导出文件\n"
                 f"▫️ /strm - 生成STRM\n"
                 f"▫️ /restore - 从数据库恢复STRM\n"
+                f"▫️ /search - 搜索媒体库\n"
                 f"▫️ /sync_full - 全量同步\n"                                           
                 f"▫️ /clear_trash - 清空回收站\n"
                 f"▫️ /transport - 迁移115文件\n\n"   # 新增
@@ -3831,6 +3930,7 @@ class TelegramBotHandler:
             logger.error(f"启动迁移任务失败: {e}")
             self.send_auto_delete_message(update, context, f"❌ 启动迁移任务失败: {e}")
 
+
     @admin_required
     def strm_command(self, update: Update, context: CallbackContext):
         """处理/strm命令 - 高效生成STRM文件"""
@@ -3873,7 +3973,7 @@ class TelegramBotHandler:
         except Exception as e:
             logger.error(f"生成STRM文件失败: {e}")
             self.send_auto_delete_message(update, context, f"❌ 生成STRM文件失败: {str(e)}")
-            
+
     @admin_required
     def restore_command(self, update: Update, context: CallbackContext):
         """处理/restore命令 - 从数据库恢复STRM和字幕文件"""
@@ -3894,6 +3994,295 @@ class TelegramBotHandler:
                 )
         
         threading.Thread(target=do_restore, daemon=True).start()
+    
+    def search_command(self, update: Update, context: CallbackContext):
+        """处理/search命令"""
+        keyword = " ".join(context.args) if context.args else ""
+        
+        if not keyword:
+            self.send_auto_delete_message(update, context, "❌ 请指定搜索关键字！格式: /search <关键字>")
+            return
+        
+        # 保存搜索关键字
+        context.user_data['search_keyword'] = keyword
+        context.user_data['search_page'] = 0
+        context.user_data['search_results'] = []
+        
+        # 执行搜索
+        strm_generator = STRMGenerator()
+        results = strm_generator.search_media(keyword)
+        
+        if not results:
+            self.send_auto_delete_message(update, context, f"❌ 未找到包含 '{keyword}' 的媒体资源")
+            return
+        
+        context.user_data['search_results'] = results
+        self.show_search_results(update, context)
+    
+    def show_search_results(self, update: Update, context: CallbackContext):
+        """显示搜索结果（分页）"""
+        results = context.user_data.get('search_results', [])
+        page = context.user_data.get('search_page', 0)
+        keyword = context.user_data.get('search_keyword', '')
+        
+        if not results:
+            return
+        
+        total_pages = (len(results) + 5) // 6  # 每页6个结果
+        start_idx = page * 6
+        end_idx = min((page + 1) * 6, len(results))
+        page_results = results[start_idx:end_idx]
+        
+        # 创建结果键盘
+        keyboard = []
+        for i, result in enumerate(page_results):
+            idx = start_idx + i
+            display_name = result["media_name"]
+            if len(display_name) > 20:
+                display_name = display_name[:17] + "..."
+                
+            keyboard.append([
+                InlineKeyboardButton(
+                    f"{idx+1}. {display_name} ({result['media_type']})", 
+                    callback_data=f"search_select_{idx}"
+                )
+            ])
+        
+        # 添加分页按钮
+        page_buttons = []
+        if page > 0:
+            page_buttons.append(InlineKeyboardButton("⬅️ 上一页", callback_data="search_prev"))
+        if page < total_pages - 1:
+            page_buttons.append(InlineKeyboardButton("➡️ 下一页", callback_data="search_next"))
+        
+        if page_buttons:
+            keyboard.append(page_buttons)
+        
+        # 添加取消按钮
+        keyboard.append([InlineKeyboardButton("❌ 取消", callback_data="search_cancel")])
+        
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        # 发送或更新消息
+        message_text = (
+            f"🔍 搜索 '{keyword}' 结果 (第 {page+1}/{total_pages} 页)\n"
+            f"找到 {len(results)} 个匹配的媒体资源:"
+        )
+
+        if update.callback_query:
+            chat_id = update.callback_query.message.chat_id
+        else:
+            chat_id = update.message.chat_id  # 普通消息场景
+        
+        if 'search_message_id' in context.user_data:
+            try:
+                context.bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=context.user_data['search_message_id'],
+                    text=message_text,
+                    reply_markup=reply_markup
+                )
+            except BadRequest:
+                # 消息内容未变化，忽略错误
+                pass
+        else:
+            msg = update.message.reply_text(message_text, reply_markup=reply_markup)
+            context.user_data['search_message_id'] = msg.message_id
+        
+        # 设置超时任务
+        self.set_search_timeout(context, chat_id) 
+    
+    def set_search_timeout(self, context, chat_id):
+        """设置搜索超时任务"""
+        # 取消现有任务
+        if 'search_timeout_job' in context.user_data:
+            context.user_data['search_timeout_job'].schedule_removal()
+        
+        # 创建新任务
+        job = context.job_queue.run_once(
+            self.search_timeout, 
+            120,  # 2分钟后超时
+            context=chat_id,
+            name=f"search_timeout_{chat_id}"
+        )
+        context.user_data['search_timeout_job'] = job
+    
+    def search_timeout(self, context):
+        """搜索超时处理"""
+        if context is None or context.user_data is None:
+            logger.warning("search_timeout: context or user_data is None, skipping cleanup")
+            return
+        
+        # 清除搜索状态
+        if 'search_message_id' in context.user_data:
+            try:
+                context.bot.edit_message_text(
+                    chat_id=context.job.context,
+                    message_id=context.user_data['search_message_id'],
+                    text="⏱️ 搜索会话已超时关闭"
+                )
+            except Exception:
+                pass
+        
+        # 清理用户数据
+        keys = ['search_keyword', 'search_page', 'search_results', 'search_message_id', 'selected_media']
+        for key in keys:
+            if key in context.user_data:
+                del context.user_data[key]
+    
+    def show_media_details(self, update: Update, context: CallbackContext, result_idx):
+        """显示媒体详细信息"""
+        results = context.user_data.get('search_results', [])
+        if result_idx < 0 or result_idx >= len(results):
+            return
+        
+        media_info = results[result_idx]
+        context.user_data['selected_media'] = media_info
+        
+        # 构建信息消息
+        message = (
+            f"🎬 媒体详情\n"
+            f"══════════════════════\n"
+            f"📛 名称: {media_info['media_name']}\n"
+            f"📁 类型: {media_info['media_type'].upper()}\n"
+            f"📊 文件数: {media_info['file_count']}\n"
+            f"💾 总大小: {format_size(media_info['total_size'])}\n"
+            f"📂 本地路径: {media_info['sample_path'] or '无'}\n"
+            f"══════════════════════"
+        )
+        
+        # 创建操作按钮
+        keyboard = [
+            [
+                InlineKeyboardButton("🗑️ 删除", callback_data="media_delete"),
+                InlineKeyboardButton("📥 导出JSON", callback_data="media_export")
+            ],
+            [InlineKeyboardButton("🔙 返回", callback_data="media_back")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        # 发送或更新消息
+        try:
+            context.bot.edit_message_text(
+                chat_id=update.callback_query.message.chat_id,
+                message_id=context.user_data['search_message_id'],
+                text=message,
+                reply_markup=reply_markup
+            )
+        except BadRequest:
+            pass
+        
+        # 重置超时时间
+        self.set_search_timeout(context, update.callback_query.message.chat_id)
+    
+    def button_callback(self, update: Update, context: CallbackContext):
+        """处理按钮回调"""
+        query = update.callback_query
+        query.answer()
+        data = query.data
+        
+        if context.user_data is None:
+            logger.warning("Button callback received with no user_data")
+            return
+        
+        # 搜索相关回调
+        if data.startswith("search_"):
+            if data == "search_prev":
+                context.user_data['search_page'] = max(0, context.user_data.get('search_page', 0) - 1)
+                self.show_search_results(update, context)
+            elif data == "search_next":
+                context.user_data['search_page'] = context.user_data.get('search_page', 0) + 1
+                self.show_search_results(update, context)
+            elif data == "search_cancel":
+                query.edit_message_text("❌ 搜索已取消")
+                self.cleanup_search_context(context.user_data)
+            elif data.startswith("search_select_"):
+                try:
+                    result_idx = int(data.split("_")[2])
+                    self.show_media_details(update, context, result_idx)
+                except (ValueError, IndexError):
+                    pass
+        
+        # 媒体操作回调
+        elif data.startswith("media_"):
+            media_info = context.user_data.get('selected_media', {})
+            media_name = media_info.get('media_name', '')
+            
+            if data == "media_delete":
+                self.delete_media(update, context, media_name)
+            elif data == "media_export":
+                self.export_media(update, context, media_name)
+            elif data == "media_back":
+                self.show_search_results(update, context)
+    
+    def delete_media(self, update: Update, context: CallbackContext, media_name):
+        """删除媒体"""
+        strm_generator = STRMGenerator()
+        deleted_count = strm_generator.delete_media(media_name)
+        
+        if deleted_count > 0:
+            message = f"✅ 已删除媒体 '{media_name}'\n共移除 {deleted_count} 条记录"
+            # 从搜索结果中移除
+            results = context.user_data.get('search_results', [])
+            context.user_data['search_results'] = [r for r in results if r['media_name'] != media_name]
+        else:
+            message = f"❌ 删除媒体 '{media_name}' 失败"
+        
+        try:
+            context.bot.edit_message_text(
+                chat_id=update.callback_query.message.chat_id,
+                message_id=context.user_data['search_message_id'],
+                text=message
+            )
+        except BadRequest:
+            pass
+        
+        # 清理上下文
+        if 'selected_media' in context.user_data:
+            del context.user_data['selected_media']
+        
+        # 设置5秒后返回搜索结果
+        context.job_queue.run_once(
+            lambda ctx: self.show_search_results(update, context), 
+            5, 
+            name="return_to_search"
+        )
+    
+    def export_media(self, update: Update, context: CallbackContext, media_name):
+        """导出媒体JSON"""
+        strm_generator = STRMGenerator()
+        json_file = strm_generator.export_media_json(media_name)
+        
+        if json_file:
+            try:
+                with open(json_file, "rb") as f:
+                    context.bot.send_document(
+                        chat_id=update.callback_query.message.chat_id,
+                        document=f,
+                        filename=os.path.basename(json_file),
+                        caption=f"📥 媒体 '{media_name}' 的JSON导出文件"
+                    )
+                # 删除临时文件
+                os.remove(json_file)
+            except Exception as e:
+                logger.error(f"发送JSON文件失败: {e}")
+        else:
+            try:
+                context.bot.edit_message_text(
+                    chat_id=update.callback_query.message.chat_id,
+                    message_id=context.user_data['search_message_id'],
+                    text=f"❌ 导出媒体 '{media_name}' 失败"
+                )
+            except BadRequest:
+                pass
+    
+    def cleanup_search_context(self, user_data: dict):
+        """清理搜索相关的上下文数据"""
+        keys = ['search_keyword', 'search_page', 'search_results', 
+                'search_message_id', 'selected_media', 'search_timeout_job']
+        for key in keys:
+            if key in user_data:
+                del user_data[key]
     
 def main():
     # 添加授权信息提示
