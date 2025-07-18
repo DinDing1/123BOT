@@ -2385,7 +2385,7 @@ class TelegramBotHandler:
             BotCommand("start", "个人信息"),
             BotCommand("export", "导出秒传文件"),
             BotCommand("strm", "生成STRM"),
-            BotCommand("search", "生成STRM"),
+            BotCommand("search", "搜索媒体库"),
             BotCommand("sync_full", "全量同步"),
             BotCommand("transport", "迁移115文件"),
             BotCommand("restore", "恢复STRM"),
@@ -3265,25 +3265,52 @@ class TelegramBotHandler:
         query = update.callback_query
         query.answer()
         data = query.data
-        
+        # 1. 处理导出相关回调        
         if data.startswith("export_"):
             self.export_choice_callback(update, context)
-        elif data.startswith("sync_full_"):
+            return
+        # 2. 处理全量同步回调
+        if data.startswith("sync_full_"):
             chat_id = query.message.chat_id
             message_id = query.message.message_id
             try:
                 context.bot.delete_message(chat_id=chat_id, message_id=message_id)
             except Exception:
-                pass
-            
+                pass            
             if data == 'sync_full_confirm':
                 self.execute_full_sync(update, context)
             else:
                 context.bot.send_message(chat_id=chat_id, text="❌ 全量同步已取消")
-        # 添加迁移状态查询处理
-        elif data.startswith("transport_status_"):
-            task_id = data.split("_", 2)[2]
-            self.get_transport_status(update, context, task_id)
+            return
+        # 3. 处理迁移状态查询回调
+        if data.startswith("search_"):
+            if data == "search_prev":
+                context.user_data['search_page'] = max(0, context.user_data.get('search_page', 0) - 1)
+                self.show_search_results(update, context)
+            elif data == "search_next":
+                context.user_data['search_page'] = context.user_data.get('search_page', 0) + 1
+                self.show_search_results(update, context)
+            elif data == "search_cancel":
+                query.edit_message_text("❌ 搜索已取消")
+                self.cleanup_search_context(context.user_data)
+            elif data.startswith("search_select_"):
+                try:
+                    result_idx = int(data.split("_")[2])
+                    self.show_media_details(update, context, result_idx)
+                except (ValueError, IndexError):
+                    pass
+            return
+        # 5. 处理媒体操作回调
+        if data.startswith("media_"):
+            media_info = context.user_data.get('selected_media', {})
+            media_name = media_info.get('media_name', '')
+            if data == "media_delete":
+                self.delete_media(update, context, media_name)
+            elif data == "media_export":
+                self.export_media(update, context, media_name)
+            elif data == "media_back":
+                self.show_search_results(update, context)
+            return
 
     def send_transport_status(self, update: Update, context: CallbackContext, task_id):
         """发送迁移状态消息"""
@@ -4174,46 +4201,6 @@ class TelegramBotHandler:
         
         # 重置超时时间
         self.set_search_timeout(context, update.callback_query.message.chat_id)
-    
-    def button_callback(self, update: Update, context: CallbackContext):
-        """处理按钮回调"""
-        query = update.callback_query
-        query.answer()
-        data = query.data
-        
-        if context.user_data is None:
-            logger.warning("Button callback received with no user_data")
-            return
-        
-        # 搜索相关回调
-        if data.startswith("search_"):
-            if data == "search_prev":
-                context.user_data['search_page'] = max(0, context.user_data.get('search_page', 0) - 1)
-                self.show_search_results(update, context)
-            elif data == "search_next":
-                context.user_data['search_page'] = context.user_data.get('search_page', 0) + 1
-                self.show_search_results(update, context)
-            elif data == "search_cancel":
-                query.edit_message_text("❌ 搜索已取消")
-                self.cleanup_search_context(context.user_data)
-            elif data.startswith("search_select_"):
-                try:
-                    result_idx = int(data.split("_")[2])
-                    self.show_media_details(update, context, result_idx)
-                except (ValueError, IndexError):
-                    pass
-        
-        # 媒体操作回调
-        elif data.startswith("media_"):
-            media_info = context.user_data.get('selected_media', {})
-            media_name = media_info.get('media_name', '')
-            
-            if data == "media_delete":
-                self.delete_media(update, context, media_name)
-            elif data == "media_export":
-                self.export_media(update, context, media_name)
-            elif data == "media_back":
-                self.show_search_results(update, context)
     
     def delete_media(self, update: Update, context: CallbackContext, media_name):
         """删除媒体"""
