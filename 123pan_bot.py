@@ -105,7 +105,7 @@ BANNED_EXPORT_NAMES = [name.strip().lower() for name in os.getenv("BANNED_EXPORT
 PRIVATE_EXPORT = os.getenv("PRIVATE_EXPORT", "Flase").lower() == "true"  # 控制JSON文件是否私聊发送
 DEFAULT_SHARE_PASSWORD = os.getenv("DEFAULT_SHARE_PASSWORD", "ZY4K")  # 分享链接默认提取码ZY4K
 STRM_SERVICE_URL = os.getenv("STRM_SERVICE_URL", "http://172.17.0.1:8123")  # STRM服务URL
-STRM_OUTPUT_DIR = os.getenv("STRM_OUTPUT_DIR", "/data/media")  # STRM文件输出目录
+STRM_OUTPUT_DIR = os.getenv("STRM_OUTPUT_DIR", "/media")  # STRM文件输出目录
 ####TGBOT配置
 BOT_TOKEN = os.getenv("TG_BOT_TOKEN","")
 ADMIN_USER_IDS = [int(id.strip()) for id in os.getenv("TG_ADMIN_USER_IDS", "").split(",") if id.strip()]
