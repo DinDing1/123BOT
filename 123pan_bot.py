@@ -662,7 +662,7 @@ class STRMGenerator:
                 file_name=file_name,
                 size=item['size'],
                 etag=item['etag'],
-                s3KeyFlag=item.get('s3KeyFlag', 'x-0'),
+                s3KeyFlag=item.get('s3KeyFlag'),
                 file_type=file_type,
                 local_path=strm_file_path,
                 relative_path=relative_path  # 添加相对路径参数
@@ -702,7 +702,7 @@ class STRMGenerator:
                 file_name=file_name,
                 size=item['size'],
                 etag=item['etag'],
-                s3KeyFlag=item.get('s3KeyFlag', 'x-0'),
+                s3KeyFlag=item.get('s3KeyFlag'),
                 file_type="subtitle",
                 local_path=local_path,
                 relative_path=relative_path  # 添加相对路径参数
@@ -747,6 +747,99 @@ class STRMGenerator:
         except Exception as e:
             logger.error(f"文件下载异常: {save_path} - {str(e)}")
             return False
+        
+    def restore_strm_files_from_db(self):
+        """从数据库恢复STRM文件和字幕文件（修复路径和列名问题）"""
+        try:
+            video_count = 0
+            sub_count = 0
+            video_errors = 0
+            sub_errors = 0
+            
+            with closing(sqlite3.connect(DB_PATH)) as conn:
+                conn.row_factory = sqlite3.Row
+                c = conn.cursor()
+                c.execute("SELECT * FROM file_records")
+                rows = c.fetchall()
+                
+                if not rows:
+                    return "❌ 数据库中没有找到任何文件记录"
+                
+                # 处理视频文件
+                for row in rows:
+                    try:
+                        # 修复列名大小写问题：使用小写列名访问
+                        file_type = row["file_type"]
+                        local_path = row["local_path"]
+                        
+                        # 统一路径分隔符为当前系统的正确格式
+                        normalized_path = os.path.normpath(local_path)
+                        
+                        if file_type == "video":
+                            # 获取视频文件信息
+                            file_name = row["file_name"]
+                            size = row["size"]
+                            etag = row["etag"]
+                            s3KeyFlag = row["s3KeyFlag"]
+                            
+                            # 重新生成STRM内容
+                            strm_content = (
+                                f"{STRM_SERVICE_URL}/"
+                                f"{file_name}|"
+                                f"{size}|"
+                                f"{etag}?"
+                                f"{s3KeyFlag}"
+                            )
+                            
+                            # 确保目录存在
+                            os.makedirs(os.path.dirname(normalized_path), exist_ok=True)
+                            
+                            # 写入STRM文件
+                            with open(normalized_path, 'w', encoding='utf-8') as f:
+                                f.write(strm_content)
+                            
+                            video_count += 1
+                            
+                        elif file_type == "subtitle":
+                            # 获取字幕文件信息
+                            file_name = row["file_name"]
+                            size = row["size"]
+                            etag = row["etag"]
+                            s3KeyFlag = row["s3KeyFlag"]
+                            
+                            # 生成下载URL
+                            download_url = (
+                                f"{STRM_SERVICE_URL}/"
+                                f"{file_name}|"
+                                f"{size}|"
+                                f"{etag}?"
+                                f"{s3KeyFlag}"
+                            )
+                            
+                            # 确保目录存在
+                            os.makedirs(os.path.dirname(normalized_path), exist_ok=True)
+                            
+                            # 下载字幕文件
+                            if self._download_file(download_url, normalized_path):
+                                sub_count += 1
+                                
+                    except Exception as e:
+                        if file_type == "video":
+                            logger.error(f"恢复视频STRM文件失败: {normalized_path} - {str(e)}", exc_info=True)
+                            video_errors += 1
+                        elif file_type == "subtitle":
+                            logger.error(f"恢复字幕文件失败: {normalized_path} - {str(e)}", exc_info=True)
+                            sub_errors += 1
+                
+                return (
+                    f"✅ 恢复完成！\n"
+                    f"├ 视频STRM文件: {video_count}个 (失败: {video_errors})\n"
+                    f"└ 字幕文件: {sub_count}个 (失败: {sub_errors})"
+                )
+                
+        except Exception as e:
+            logger.error(f"从数据库恢复文件失败: {str(e)}", exc_info=True)
+            return f"❌ 恢复失败: {str(e)}"
 
 class Pan123API:
     """123云盘API客户端"""
@@ -2175,6 +2268,7 @@ class TelegramBotHandler:
         self.dispatcher.add_handler(CommandHandler("export", self.export_command))
         self.dispatcher.add_handler(CommandHandler("sync_full", self.sync_full_command))
         self.dispatcher.add_handler(CommandHandler("strm", self.strm_command))  # 新增STRM命令
+        self.dispatcher.add_handler(CommandHandler("restore", self.restore_command))
         self.dispatcher.add_handler(CommandHandler("clear_trash", self.clear_trash_command))
         self.dispatcher.add_handler(CommandHandler("add", self.add_command))
         self.dispatcher.add_handler(CommandHandler("delete", self.delete_command))
@@ -2196,6 +2290,7 @@ class TelegramBotHandler:
             BotCommand("strm", "生成STRM"),
             BotCommand("sync_full", "全量同步"),
             BotCommand("transport", "迁移115文件"),
+            BotCommand("restore", "恢复STRM"),
             BotCommand("clear_trash", "清空123回收站"),
             BotCommand("refresh_token", "强制刷新Token"),
             BotCommand("info", "用户信息"),
@@ -2319,6 +2414,7 @@ class TelegramBotHandler:
                 f"🤖 <b>机器人控制中心</b>\n"
                 f"▫️ /export - 导出文件\n"
                 f"▫️ /strm - 生成STRM\n"
+                f"▫️ /restore - 从数据库恢复STRM\n"
                 f"▫️ /sync_full - 全量同步\n"                                           
                 f"▫️ /clear_trash - 清空回收站\n"
                 f"▫️ /transport - 迁移115文件\n\n"   # 新增
@@ -3777,6 +3873,27 @@ class TelegramBotHandler:
         except Exception as e:
             logger.error(f"生成STRM文件失败: {e}")
             self.send_auto_delete_message(update, context, f"❌ 生成STRM文件失败: {str(e)}")
+            
+    @admin_required
+    def restore_command(self, update: Update, context: CallbackContext):
+        """处理/restore命令 - 从数据库恢复STRM和字幕文件"""
+        self.send_auto_delete_message(update, context, "⏳ 正在从数据库恢复STRM和字幕文件...")
+        
+        # 在后台线程中执行恢复
+        def do_restore():
+            try:
+                strm_generator = STRMGenerator()
+                strm_generator.pan_client = self.pan_client
+                result = strm_generator.restore_strm_files_from_db()
+                context.bot.send_message(chat_id=update.message.chat_id, text=result)
+            except Exception as e:
+                logger.error(f"恢复失败: {e}")
+                context.bot.send_message(
+                    chat_id=update.message.chat_id,
+                    text=f"❌ 恢复失败: {str(e)}"
+                )
+        
+        threading.Thread(target=do_restore, daemon=True).start()
     
 def main():
     # 添加授权信息提示
