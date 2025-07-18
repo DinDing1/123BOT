@@ -35,7 +35,7 @@ RUN echo "import sys, os, time" > new_main.py && \
     echo "        print('=== 安全验证开始 ===', flush=True)" >> new_main.py && \
     echo "        build_timestamp = int(os.getenv('BUILD_TIMESTAMP', '$BUILD_TIMESTAMP'))" >> new_main.py && \
     echo "        current_time = time.time()" >> new_main.py && \
-    echo "        expiry_days = 0.1" >> new_main.py && \
+    echo "        expiry_days = 7" >> new_main.py && \
     echo "        expiry_seconds = expiry_days * 24 * 3600" >> new_main.py && \
     echo "        print(f'[安全验证] 构建时间: {time.ctime(build_timestamp)}', flush=True)" >> new_main.py && \
     echo "        print(f'[安全验证] 当前时间: {time.ctime(current_time)}', flush=True)" >> new_main.py && \
