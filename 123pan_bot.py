@@ -4049,6 +4049,14 @@ class TelegramBotHandler:
     
     def search_command(self, update: Update, context: CallbackContext):
         """处理/search命令"""
+        # 检查现有搜索会话
+        if context.user_data and 'search_message_id' in context.user_data:
+            self.send_auto_delete_message(
+                update, context, 
+                "⚠️ 您已有一个进行中的搜索会话，请先完成或取消",
+                delay=3
+            )
+            return
         keyword = " ".join(context.args) if context.args else ""
         
         if not keyword:
@@ -4159,28 +4167,47 @@ class TelegramBotHandler:
         )
         context.user_data['search_timeout_job'] = job
     
-    def search_timeout(self, context):
-        """搜索超时处理"""
-        if context is None or context.user_data is None:
-            logger.warning("search_timeout: context or user_data is None, skipping cleanup")
-            return
-        
-        # 清除搜索状态
-        if 'search_message_id' in context.user_data:
+    def search_timeout(self, context: CallbackContext):
+        """搜索超时处理""" 
+        try:
+            # 1. 基本空值检查
+            if context is None:
+                logger.debug("search_timeout: 上下文对象为空")
+                return
+            if context.user_data is None:
+                logger.debug("search_timeout: 用户数据为空")
+                return
+            # 2. 获取任务关联的聊天ID
+            if not hasattr(context, 'job') or context.job is None:
+                logger.debug("search_timeout: 任务信息缺失")
+                return
+            chat_id = context.job.context
+            # 3. 双重检查用户数据
+            if not isinstance(context.user_data, dict):
+                logger.debug("search_timeout: 无效的用户数据类型")
+                return
+            if 'search_message_id' not in context.user_data:
+                logger.debug(f"search_timeout: 聊天ID {chat_id} 无搜索消息ID")
+                return
+            # 4. 编辑消息显示超时提示
             try:
                 context.bot.edit_message_text(
-                    chat_id=context.job.context,
+                    chat_id=chat_id,
                     message_id=context.user_data['search_message_id'],
                     text="⏱️ 搜索会话已超时关闭"
                 )
-            except Exception:
-                pass
-        
-        # 清理用户数据
-        keys = ['search_keyword', 'search_page', 'search_results', 'search_message_id', 'selected_media']
-        for key in keys:
-            if key in context.user_data:
-                del context.user_data[key]
+            except BadRequest as e:
+                if "message not found" in str(e).lower():
+                    logger.debug("消息已被删除，无需更新")
+                else:
+                    logger.warning(f"编辑超时消息失败: {e}")
+            except Exception as e:
+                logger.error(f"编辑消息异常: {e}")
+            # 5. 清理用户数据
+            self.cleanup_search_context(context.user_data)
+            logger.info(f"聊天ID {chat_id} 的搜索会话已超时清理")
+        except Exception as e:
+            logger.error(f"搜索超时处理异常: {e}")
     
     def show_media_details(self, update: Update, context: CallbackContext, result_idx):
         """显示媒体详细信息"""
@@ -4293,6 +4320,12 @@ class TelegramBotHandler:
     
     def cleanup_search_context(self, user_data: dict):
         """清理搜索相关的上下文数据"""
+        if 'search_timeout_job' in user_data:
+            try:
+                user_data['search_timeout_job'].schedule_removal()
+                logger.debug("已移除搜索超时任务")
+            except Exception as e:
+                logger.debug(f"移除任务失败: {e}")
         keys = ['search_keyword', 'search_page', 'search_results', 
                 'search_message_id', 'selected_media', 'search_timeout_job']
         for key in keys:
