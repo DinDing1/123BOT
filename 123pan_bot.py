@@ -4201,7 +4201,7 @@ class TelegramBotHandler:
         
         # 重置超时时间
         self.set_search_timeout(context, update.callback_query.message.chat_id)
-    
+
     def delete_media(self, update: Update, context: CallbackContext, media_name):
         """删除媒体"""
         strm_generator = STRMGenerator()
@@ -4209,12 +4209,8 @@ class TelegramBotHandler:
         
         if deleted_count > 0:
             message = f"✅ 已删除媒体 '{media_name}'\n共移除 {deleted_count} 条记录"
-            # 从搜索结果中移除
-            results = context.user_data.get('search_results', [])
-            context.user_data['search_results'] = [r for r in results if r['media_name'] != media_name]
         else:
-            message = f"❌ 删除媒体 '{media_name}' 失败"
-        
+            message = f"❌ 删除媒体 '{media_name}' 失败"       
         try:
             context.bot.edit_message_text(
                 chat_id=update.callback_query.message.chat_id,
@@ -4225,15 +4221,10 @@ class TelegramBotHandler:
             pass
         
         # 清理上下文
-        if 'selected_media' in context.user_data:
-            del context.user_data['selected_media']
+        self.cleanup_search_context(context.user_data)
         
-        # 设置5秒后返回搜索结果
-        context.job_queue.run_once(
-            lambda ctx: self.show_search_results(update, context), 
-            5, 
-            name="return_to_search"
-        )
+        # 5秒后自动删除消息
+        self.auto_delete_message(context, update.callback_query.message.chat_id, context.user_data.get('search_message_id'), 5)
     
     def export_media(self, update: Update, context: CallbackContext, media_name):
         """导出媒体JSON"""
@@ -4243,7 +4234,16 @@ class TelegramBotHandler:
         if json_file:
             try:
                 with open(json_file, "rb") as f:
-                    context.bot.send_document(
+                    # 发送文件前先删除操作界面
+                    try:
+                        context.bot.delete_message(
+                            chat_id=update.callback_query.message.chat_id,
+                            message_id=context.user_data['search_message_id']
+                        )
+                    except Exception:
+                        pass
+                    # 发送文件
+                    msg = context.bot.send_document(
                         chat_id=update.callback_query.message.chat_id,
                         document=f,
                         filename=os.path.basename(json_file),
@@ -4254,14 +4254,17 @@ class TelegramBotHandler:
             except Exception as e:
                 logger.error(f"发送JSON文件失败: {e}")
         else:
+            # 导出失败时显示消息并自动删除
             try:
-                context.bot.edit_message_text(
+                msg = context.bot.send_message(
                     chat_id=update.callback_query.message.chat_id,
-                    message_id=context.user_data['search_message_id'],
                     text=f"❌ 导出媒体 '{media_name}' 失败"
                 )
-            except BadRequest:
+                self.auto_delete_message(context, update.callback_query.message.chat_id, msg.message_id, 5)
+            except Exception:
                 pass
+        # 清理上下文
+        self.cleanup_search_context(context.user_data)
     
     def cleanup_search_context(self, user_data: dict):
         """清理搜索相关的上下文数据"""
