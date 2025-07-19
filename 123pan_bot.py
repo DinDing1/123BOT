@@ -893,23 +893,46 @@ class STRMGenerator:
         except Exception as e:
             logger.error(f"删除媒体失败: {e}")
             return 0
-    
+
     def export_media_json(self, media_name):
-        """导出媒体JSON文件"""
+        """导出媒体JSON文件，精确处理commonPath和path结构"""
         try:
             with closing(sqlite3.connect(DB_PATH)) as conn:
                 conn.row_factory = sqlite3.Row
                 c = conn.cursor()
+                # 获取该媒体下的所有文件记录
                 c.execute("""
-                    SELECT file_path, etag, size 
+                    SELECT file_path, file_name, etag, size 
                     FROM file_records 
                     WHERE media_name = ?
                 """, (media_name,))
                 
                 files = []
+                common_path = ""
+                
                 for row in c.fetchall():
+                    full_path = row["file_path"]
+                    file_name = row["file_name"]
+                    
+                    # 提取媒体名称开始的目录路径
+                    # 例如："电视剧/国产剧/琅琊榜 (2024)/第一季/文件名"
+                    # 我们希望得到："琅琊榜 (2024)/第一季/"
+                    if media_name in full_path:
+                        # 找到媒体名称在路径中的位置
+                        media_index = full_path.find(media_name)
+                        if media_index != -1:
+                            # 提取从媒体名称开始到文件所在目录的部分
+                            # 先获取文件所在目录的路径
+                            dir_path = os.path.dirname(full_path)
+                            # 然后提取从媒体名称开始的部分
+                            media_path = dir_path[media_index:]
+                            # 确保路径以斜杠结尾
+                            if not media_path.endswith('/'):
+                                media_path += '/'
+                            common_path = media_path
+                    
                     files.append({
-                        "path": row["file_path"],
+                        "path": file_name,  # 只包含文件名
                         "etag": row["etag"],
                         "size": row["size"]
                     })
@@ -920,7 +943,7 @@ class STRMGenerator:
                 # 创建JSON结构
                 json_data = {
                     "usesBase62EtagsInExport": False,
-                    "commonPath": "",
+                    "commonPath": common_path,  # 媒体名称开始的目录路径
                     "totalFilesCount": len(files),
                     "totalSize": sum(f["size"] for f in files),
                     "formattedTotalSize": format_size(sum(f["size"] for f in files)),
@@ -928,13 +951,15 @@ class STRMGenerator:
                 }
                 
                 # 保存到临时文件
-                file_name = f"{re.sub(r'[\\/*?:\"<>|]', '', media_name)}.json"
+                clean_name = re.sub(r'[\\/*?:\"<>|]', '', media_name)
+                file_name = f"{clean_name}.json"
                 with open(file_name, "w", encoding="utf-8") as f:
                     json.dump(json_data, f, ensure_ascii=False, indent=2)
                 
                 return file_name
         except Exception as e:
             logger.error(f"导出媒体JSON失败: {e}")
+            traceback.print_exc()  # 打印详细错误信息
             return None
 
 class Pan123API:
