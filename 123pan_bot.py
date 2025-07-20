@@ -3307,7 +3307,15 @@ class TelegramBotHandler:
             else:
                 context.bot.send_message(chat_id=chat_id, text="❌ 全量同步已取消")
             return
-        # 3. 处理迁移状态查询回调
+        # 3.处理transport 刷新状态回调
+        if data.startswith("transport_"):  # 新增分支
+            parts = data.split('_')
+            if len(parts) >= 3 and parts[1] == "status":
+                task_id = '_'.join(parts[2:])  # 获取完整任务ID
+                self.get_transport_status(update, context, task_id)
+            return
+        
+        # 4. 处理迁移状态查询回调
         if data.startswith("search_"):
             if data == "search_prev":
                 context.user_data['search_page'] = max(0, context.user_data.get('search_page', 0) - 1)
