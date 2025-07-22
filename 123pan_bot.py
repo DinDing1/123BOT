@@ -4349,7 +4349,7 @@ def main():
     logger.info("=============================================")
 
     def run_web_interface():
-        app.run(host='0.0.0.0', port=8122, debug=False, use_reloader=False)
+        app.run(host='::', port=8122, debug=False, use_reloader=False)
     
     # 在独立线程中启动 Web 界面
     web_thread = threading.Thread(target=run_web_interface, daemon=True)
