@@ -31,6 +31,7 @@ from urllib3.util.retry import Retry
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from p115client import P115Client
 from p115client.tool.iterdir import iter_files_with_path, iter_files
+from web_interface import app
 
 # 禁用SSL警告
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -4347,6 +4348,13 @@ def main():
     logger.info(f"版本: {VERSION}")
     logger.info("=============================================")
 
+    def run_web_interface():
+        app.run(host='0.0.0.0', port=8122, debug=False, use_reloader=False)
+    
+    # 在独立线程中启动 Web 界面
+    web_thread = threading.Thread(target=run_web_interface, daemon=True)
+    web_thread.start()
+    logger.info(f"✅ Web 管理界面已启动: http://0.0.0.0:8122")
     logger.info("初始化123云盘客户端...")
     pan_client = Pan123Client(CLIENT_ID, CLIENT_SECRET)
     
