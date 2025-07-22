@@ -325,4 +325,4 @@ def print_startup_message():
 
 if __name__ == '__main__':
     print_startup_message()
-    app.run(host='0.0.0.0', port=8122, debug=False)
+    app.run(host='::', port=8122, debug=False)
