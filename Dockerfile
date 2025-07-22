@@ -1,4 +1,4 @@
-#第一阶段：构建依赖和安全验证
+# 第一阶段：构建依赖和安全验证
 FROM python:3.12-slim AS builder
 
 # 强制要求构建时间戳参数
@@ -25,7 +25,7 @@ RUN pip install --no-cache-dir -U pip && \
     pip install --no-cache-dir -r requirements.txt && \
     pip install --no-cache-dir pyinstaller==6.2.0
 
-# 复制源码
+# 复制源码（包含新增的web_interface.py和templates目录）
 COPY . .
 
 # 创建新的主入口脚本，确保安全验证最先执行
@@ -61,7 +61,7 @@ RUN echo "import sys, os, time" > new_main.py && \
 # 重命名主脚本以保持导入关系
 RUN mv 123pan_bot.py pan_bot_main.py
 
-# 使用PyInstaller编译
+# 使用PyInstaller编译（包含新增的web_interface.py和templates目录）
 RUN pyinstaller --onefile --name pan_bot \
     --hidden-import=pan_bot_main \
     --hidden-import=sqlite3 \
@@ -86,6 +86,8 @@ RUN pyinstaller --onefile --name pan_bot \
     --hidden-import=functools \
     --hidden-import=concurrent.futures \
     --hidden-import=p115client \
+    --hidden-import=flask \
+    --add-data "templates:templates" \
     --clean \
     --strip \
     --noconfirm \
@@ -107,9 +109,10 @@ WORKDIR /app
 # 创建数据目录并设置权限
 RUN mkdir -p /data && chmod 777 /data
 
-# 从构建阶段复制编译后的程序
+# 从构建阶段复制编译后的程序和模板目录
 COPY --from=builder /app/dist/pan_bot /app/
 COPY --from=builder /app/VERSION /app/
+COPY --from=builder /app/dist/templates /app/templates/
 
 # 安装运行时最小依赖
 RUN apt-get update && apt-get install -y --no-install-recommends \
