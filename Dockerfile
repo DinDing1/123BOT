@@ -25,7 +25,7 @@ RUN pip install --no-cache-dir -U pip && \
     pip install --no-cache-dir -r requirements.txt && \
     pip install --no-cache-dir pyinstaller==6.2.0
 
-# 复制源码（包含新增的web_interface.py和templates目录）
+# 复制源码
 COPY . .
 
 # 创建新的主入口脚本，确保安全验证最先执行
@@ -61,7 +61,10 @@ RUN echo "import sys, os, time" > new_main.py && \
 # 重命名主脚本以保持导入关系
 RUN mv 123pan_bot.py pan_bot_main.py
 
-# 使用PyInstaller编译（包含新增的web_interface.py和templates目录）
+# 创建临时目录存放模板文件
+RUN mkdir -p /tmp/templates && cp -r templates/* /tmp/templates/
+
+# 使用PyInstaller编译（正确添加模板文件）
 RUN pyinstaller --onefile --name pan_bot \
     --hidden-import=pan_bot_main \
     --hidden-import=sqlite3 \
@@ -87,7 +90,7 @@ RUN pyinstaller --onefile --name pan_bot \
     --hidden-import=concurrent.futures \
     --hidden-import=p115client \
     --hidden-import=flask \
-    --add-data "templates:templates" \
+    --add-data "/tmp/templates:templates" \
     --clean \
     --strip \
     --noconfirm \
@@ -109,10 +112,9 @@ WORKDIR /app
 # 创建数据目录并设置权限
 RUN mkdir -p /data && chmod 777 /data
 
-# 从构建阶段复制编译后的程序和模板目录
+# 从构建阶段复制编译后的程序
 COPY --from=builder /app/dist/pan_bot /app/
 COPY --from=builder /app/VERSION /app/
-COPY --from=builder /app/dist/templates /app/templates/
 
 # 安装运行时最小依赖
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -126,6 +128,7 @@ RUN find /app -name "*.py" -delete && \
 
 # 设置数据卷
 VOLUME /data
+
 # 暴露端口
 EXPOSE 8122
 
