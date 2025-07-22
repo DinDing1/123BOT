@@ -41,7 +41,7 @@ logger.addHandler(console_handler)
 logging.getLogger('werkzeug').setLevel(logging.WARNING)
 
 # 数据库路径（与主脚本一致）
-DB_PATH = os.getenv("DB_PATH", "./data/bot123.db")
+DB_PATH = os.getenv("DB_PATH", "/data/bot123.db")
 
 def get_directory_contents(path, page=1, per_page=100, sort_order='asc'):
     """
