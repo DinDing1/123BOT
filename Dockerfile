@@ -126,6 +126,8 @@ RUN find /app -name "*.py" -delete && \
 
 # 设置数据卷
 VOLUME /data
+# 暴露端口
+EXPOSE 8122
 
 # 设置入口点
 ENTRYPOINT ["/app/pan_bot"]
