@@ -312,6 +312,24 @@
             background-color: var(--secondary-color);
         }
         
+        .btn-delete-media {
+            background-color: var(--danger-color);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            padding: 0.5rem 1rem;
+            font-size: 0.85rem;
+            transition: all 0.3s;
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .btn-delete-media:hover {
+            background-color: #c82333;
+        }
+        
         .pagination-container {
             display: flex;
             justify-content: center;
@@ -457,6 +475,7 @@
             font-size: 0.9rem;
         }
         
+        /* 优化移动端按钮大小和间距 */
         @media (max-width: 768px) {
             body {
                 font-size: 15px;
@@ -485,12 +504,6 @@
             
             .search-container {
                 padding: 1rem;
-            }
-            
-            .btn-browse {
-                margin-left: 0;
-                margin-top: 8px;
-                width: 100%;
             }
             
             .pagination-container {
@@ -646,6 +659,47 @@
                 font-size: 1.1rem;
             }
         }
+        
+        /* 搜索列表项专用样式 */
+        .search-result-item .item-container {
+            display: flex;
+            width: 100%;
+            transition: transform 0.3s ease;
+            position: relative;
+        }
+        
+        .search-result-item .item-content {
+            flex: 1;
+            display: flex;
+            padding: 1rem 1.25rem;
+            min-width: 0;
+            width: 100%;
+            transition: transform 0.3s ease;
+            cursor: pointer;
+        }
+        
+        .search-result-item .item-actions {
+            display: flex;
+            align-items: center;
+            background-color: var(--danger-color);
+            padding: 0 1.5rem;
+            color: white;
+            position: absolute;
+            right: -80px;
+            top: 0;
+            height: 100%;
+            width: 80px;
+            transition: right 0.3s ease;
+        }
+        
+        .search-result-item.show-actions .item-actions {
+            right: 0;
+        }
+        
+        .search-result-item .file-info {
+            flex: 1;
+            min-width: 0;
+        }
     </style>
 </head>
 <body>
@@ -753,24 +807,43 @@
                         
                         <ul class="list-group list-group-flush">
                             {% for media in search_results %}
-                                <li class="list-group-item search-result-item">
-                                    <div class="d-flex justify-content-between align-items-center w-100 flex-wrap">
-                                        <div class="d-flex align-items-center mb-2 mb-md-0">
-                                            <i class="media-icon fas fa-film"></i>
-                                            <div>
-                                                <div class="file-name">{{ media.name }}</div>
-                                                <div class="file-meta">
-                                                    <span class="media-badge">
-                                                        {{ media.type|upper if media.type else '未知类型' }}
-                                                    </span>
-                                                    文件夹路径: {{ media.folder_path }}
+                                <li class="list-group-item search-result-item" id="search-item-{{ loop.index }}">
+                                    <div class="item-container">
+                                        <div class="item-content" onclick="browseMedia('{{ media.folder_path }}')">
+                                            <div class="d-flex align-items-center">
+                                                {% if media.type == 'movie' %}
+                                                    <i class="media-icon fas fa-film"></i>
+                                                {% elif media.type == 'tv' %}
+                                                    <i class="media-icon fas fa-tv"></i>
+                                                {% else %}
+                                                    <i class="media-icon fas fa-file"></i>
+                                                {% endif %}
+                                                <div class="file-info">
+                                                    <div class="file-name">{{ media.name }}</div>
+                                                    <div class="file-meta">
+                                                        <span class="media-badge">
+                                                            {{ media.type|upper if media.type else '未知类型' }}
+                                                        </span>
+                                                        {% if media.folder_path %}
+                                                            路径: {{ media.folder_path }}
+                                                        {% else %}
+                                                            路径: 根目录
+                                                        {% endif %}
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
-                                        <a href="{{ url_for('browse_path', path=media.folder_path) }}" 
-                                           class="btn btn-browse">
-                                            <i class="fas fa-folder-open me-1"></i>浏览媒体文件夹
-                                        </a>
+                                        <div class="item-actions">
+                                            <form method="POST" action="{{ url_for('delete_media') }}">
+                                                <input type="hidden" name="media_name" value="{{ media.name }}">
+                                                <input type="hidden" name="media_type" value="{{ media.type }}">
+                                                <input type="hidden" name="keyword" value="{{ search_keyword }}">
+                                                <button type="submit" class="btn btn-delete" 
+                                                        onclick="return confirm('确定删除整个媒体“{{ media.name }}”吗？此操作将删除该媒体所有文件记录，不可恢复！')">
+                                                    <i class="fas fa-trash-alt"></i>
+                                                </button>
+                                            </form>
+                                        </div>
                                     </div>
                                 </li>
                             {% endfor %}
@@ -1056,6 +1129,15 @@
             url.searchParams.set('sort_order', sortOrder);
             url.searchParams.set('page', 1); // 重置到第一页
             window.location.href = url.toString();
+        }
+        
+        // 浏览媒体路径
+        function browseMedia(path) {
+            if (path) {
+                window.location.href = "{{ url_for('browse_path') }}?path=" + encodeURIComponent(path);
+            } else {
+                window.location.href = "{{ url_for('browse_path') }}";
+            }
         }
     </script>
 </body>
