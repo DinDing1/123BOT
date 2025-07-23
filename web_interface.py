@@ -413,11 +413,11 @@ def print_startup_message():
     print("\n" + "=" * 60)
     print(f" 123Cloud Media Browser - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print("=" * 60)
-    print(f" • Running on: http://0.0.0.0:5000")
+    print(f" • Running on: http://0.0.0.0:8122")
     print(f" • Database: {DB_PATH}")
     print(f" • Press CTRL+C to stop")
     print("=" * 60 + "\n")
 
 if __name__ == '__main__':
     print_startup_message()
-    app.run(host='0.0.0.0', port=5000, debug=False)
+    app.run(host='::', port=8122, debug=False)
