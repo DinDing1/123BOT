@@ -40,7 +40,7 @@ logger.addHandler(console_handler)
 logging.getLogger('werkzeug').setLevel(logging.WARNING)
 
 # 数据库路径（与主脚本一致）
-DB_PATH = os.getenv("DB_PATH", "./data/bot123.db")
+DB_PATH = os.getenv("DB_PATH", "/data/bot123.db")
 
 def format_size(size_bytes):
     """手动格式化文件大小"""
@@ -340,6 +340,36 @@ def delete_directory():
                            page=page,
                            sort_order=sort_order))
 
+@app.route('/delete_media', methods=['POST'])
+def delete_media():
+    """删除媒体及其所有内容"""
+    media_name = request.form.get('media_name')
+    media_type = request.form.get('media_type')
+    keyword = request.form.get('keyword', '')
+    
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    try:
+        # 删除该媒体名称下的所有记录
+        cursor.execute("""
+            DELETE FROM file_records 
+            WHERE media_name = ? AND media_type = ?
+        """, (media_name, media_type))
+        
+        conn.commit()
+        flash(f"成功删除媒体: {media_name}", "success")
+        logger.info(f"Deleted media: {media_name} ({media_type})")
+    except Exception as e:
+        conn.rollback()
+        flash(f"删除失败: {str(e)}", "danger")
+        logger.error(f"Delete media failed: {str(e)}")
+    finally:
+        conn.close()
+    
+    # 重定向回搜索页面
+    return redirect(url_for('search_files', keyword=keyword))
+
 @app.route('/search')
 def search_files():
     """搜索媒体文件"""
@@ -376,7 +406,7 @@ def search_files():
                 # 获取文件所在目录
                 folder_path = os.path.dirname(local_path)
                 # 标准化路径
-                folder_path = folder_path.rstrip('/')
+                folder_path = folder_path.lstrip('/')
             else:
                 folder_path = ''
             
