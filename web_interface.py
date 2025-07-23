@@ -3,7 +3,6 @@ import sqlite3
 from flask import Flask, render_template, request, redirect, url_for, flash
 import logging
 from math import ceil
-from urllib.parse import unquote
 import sys
 from datetime import datetime
 
@@ -41,7 +40,81 @@ logger.addHandler(console_handler)
 logging.getLogger('werkzeug').setLevel(logging.WARNING)
 
 # 数据库路径（与主脚本一致）
-DB_PATH = os.getenv("DB_PATH", "/data/bot123.db")
+DB_PATH = os.getenv("DB_PATH", "./data/bot123.db")
+
+def format_size(size_bytes):
+    """手动格式化文件大小"""
+    if size_bytes is None:
+        return "0 B"
+    
+    # 定义单位
+    units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB']
+    unit_index = 0
+    size = float(size_bytes)
+    
+    # 循环直到找到合适的单位
+    while size >= 1024 and unit_index < len(units) - 1:
+        size /= 1024.0
+        unit_index += 1
+    
+    # 根据单位选择合适的精度
+    if unit_index == 0:  # B
+        return f"{int(size)} {units[unit_index]}"
+    elif unit_index < 3:  # KB 或 MB
+        return f"{size:.1f} {units[unit_index]}"
+    else:  # GB 或更大
+        return f"{size:.2f} {units[unit_index]}"
+
+def get_media_stats():
+    """获取媒体统计信息（增加总文件数统计）"""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    stats = {
+        'movies': {'count': 0, 'size': 0, 'size_human': '0 B'},
+        'tv_shows': {'count': 0, 'size': 0, 'size_human': '0 B'},
+        'total_files': {'count': 0, 'size': 0, 'size_human': '0 B'}  # 新增总文件数统计
+    }
+    
+    try:
+        # 获取电影统计
+        cursor.execute("""
+            SELECT COUNT(DISTINCT media_name), SUM(size)
+            FROM file_records
+            WHERE media_type = 'movie'
+        """)
+        movie_row = cursor.fetchone()
+        if movie_row and movie_row[0] is not None:
+            stats['movies']['count'] = movie_row[0]
+            stats['movies']['size'] = movie_row[1] or 0
+            stats['movies']['size_human'] = format_size(movie_row[1])
+        
+        # 获取电视剧统计
+        cursor.execute("""
+            SELECT COUNT(DISTINCT media_name), SUM(size)
+            FROM file_records
+            WHERE media_type = 'tv'
+        """)
+        tv_row = cursor.fetchone()
+        if tv_row and tv_row[0] is not None:
+            stats['tv_shows']['count'] = tv_row[0]
+            stats['tv_shows']['size'] = tv_row[1] or 0
+            stats['tv_shows']['size_human'] = format_size(tv_row[1])
+            
+        # 新增：获取总文件统计
+        cursor.execute("SELECT COUNT(*), SUM(size) FROM file_records")
+        total_row = cursor.fetchone()
+        if total_row and total_row[0] is not None:
+            stats['total_files']['count'] = total_row[0]
+            stats['total_files']['size'] = total_row[1] or 0
+            stats['total_files']['size_human'] = format_size(total_row[1])
+            
+    except Exception as e:
+        logger.error(f"获取媒体统计失败: {str(e)}")
+    finally:
+        conn.close()
+    
+    return stats
 
 def get_directory_contents(path, page=1, per_page=100, sort_order='asc'):
     """
@@ -56,15 +129,19 @@ def get_directory_contents(path, page=1, per_page=100, sort_order='asc'):
     # 添加结尾斜杠确保精确匹配
     search_path = path + '/' if path else ''
     
-    # 修复路径层级问题
+    # 修复：使用local_path字段查询
     cursor.execute("""
-        SELECT file_path
+        SELECT local_path
         FROM file_records
-        WHERE file_path LIKE ? || '%'
-    """, (search_path,))
+        WHERE local_path LIKE ? || '%'
+    """, (f"/{search_path}" if path else "/",))
     
     for row in cursor.fetchall():
         full_path = row[0]
+        # 移除开头的斜杠
+        if full_path.startswith('/'):
+            full_path = full_path[1:]
+        
         # 精确提取直接子目录
         if full_path.startswith(search_path):
             rel_path = full_path[len(search_path):]
@@ -77,12 +154,22 @@ def get_directory_contents(path, page=1, per_page=100, sort_order='asc'):
     # 排序
     dirs = sorted(dirs)
     
-    # 获取当前路径下的文件
-    cursor.execute("""
-        SELECT id, file_name, size, created_at
-        FROM file_records
-        WHERE file_path LIKE ? AND file_path NOT LIKE ? || '/%'
-    """, (search_path + '%', search_path + '%'))
+    # 修复：获取当前路径下的文件
+    if path:
+        cursor.execute("""
+            SELECT id, file_name, size, created_at
+            FROM file_records
+            WHERE local_path LIKE ? AND local_path NOT LIKE ? || '/%'
+        """, (f"/{search_path}%", f"/{search_path}%"))
+    else:
+        # 根目录特殊处理
+        cursor.execute("""
+            SELECT id, file_name, size, created_at
+            FROM file_records
+            WHERE local_path LIKE '/%' 
+            AND local_path NOT LIKE '/%/%' 
+            AND local_path NOT LIKE '/%/%/%'
+        """)
     
     files = []
     for row in cursor.fetchall():
@@ -108,17 +195,17 @@ def get_directory_contents(path, page=1, per_page=100, sort_order='asc'):
     
     # 修复：确保目录始终在文件前面
     directories = [item for item in items if item['type'] == 'directory']
-    files = [item for item in items if item['type'] == 'file']
+    files_list = [item for item in items if item['type'] == 'file']
     
     # 排序逻辑
     reverse_order = (sort_order == 'desc')
     
     # 先按类型排序（目录在前），再按名称排序
     directories.sort(key=lambda x: x['name'].lower(), reverse=reverse_order)
-    files.sort(key=lambda x: x['name'].lower(), reverse=reverse_order)
+    files_list.sort(key=lambda x: x['name'].lower(), reverse=reverse_order)
     
     # 重新组合
-    items = directories + files
+    items = directories + files_list
     
     # 计算分页
     start = (page - 1) * per_page
@@ -133,6 +220,10 @@ def get_directory_contents(path, page=1, per_page=100, sort_order='asc'):
     return paginated_items, total_items, total_pages
 
 @app.route('/')
+def root_path():
+    """根路径重定向到浏览路径"""
+    return redirect(url_for('browse_path'))
+
 @app.route('/browse')
 def browse_path():
     """浏览指定路径（带分页和排序）"""
@@ -151,7 +242,6 @@ def browse_path():
         parts = path.split('/')
         current_path = ""
         for i in range(len(parts)):
-            # 修复：正确构建路径部分
             current_path = current_path + parts[i] if not current_path else current_path + '/' + parts[i]
             breadcrumbs.append({
                 'name': parts[i],
@@ -163,6 +253,11 @@ def browse_path():
         path, page, per_page, sort_order
     )
     
+    # 如果是根目录，获取媒体统计
+    media_stats = None
+    if not path:
+        media_stats = get_media_stats()
+    
     return render_template('browse.html', 
                           path=path,
                           breadcrumbs=breadcrumbs,
@@ -172,7 +267,8 @@ def browse_path():
                           total_items=total_items,
                           search_results=None,
                           search_keyword=None,
-                          sort_order=sort_order)
+                          sort_order=sort_order,
+                          media_stats=media_stats)
 
 @app.route('/delete', methods=['POST'])
 def delete_file():
@@ -222,11 +318,11 @@ def delete_directory():
     cursor = conn.cursor()
     
     try:
-        # 删除目录及其所有子目录和文件
+        # 使用local_path字段进行删除
         cursor.execute("""
             DELETE FROM file_records 
-            WHERE file_path LIKE ? || '/%' 
-            OR file_path = ?
+            WHERE local_path LIKE ? || '/%' 
+            OR local_path = ?
         """, (dir_path, dir_path))
         
         conn.commit()
@@ -262,10 +358,10 @@ def search_files():
     try:
         # 在media_name字段上进行模糊搜索
         cursor.execute("""
-            SELECT DISTINCT media_name, media_type, file_path
+            SELECT DISTINCT media_name, media_type, local_path
             FROM file_records 
             WHERE media_name LIKE ? 
-            ORDER BY media_name, file_path
+            ORDER BY media_name, local_path
         """, ('%'+keyword+'%',))
         
         results = cursor.fetchall()
@@ -274,12 +370,11 @@ def search_files():
         media_groups = {}
         for row in results:
             media_name = row['media_name'] or '未知媒体'
-            # 修复：使用文件路径的目录部分作为文件夹路径
-            file_path = row['file_path']
-            # 确保路径格式正确
-            if file_path:
+            # 使用local_path获取文件所在目录
+            local_path = row['local_path']
+            if local_path:
                 # 获取文件所在目录
-                folder_path = os.path.dirname(file_path)
+                folder_path = os.path.dirname(local_path)
                 # 标准化路径
                 folder_path = folder_path.rstrip('/')
             else:
