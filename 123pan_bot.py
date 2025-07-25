@@ -2039,7 +2039,7 @@ class Pan123Client:
    
     def extract_share_info(self, share_url):
         """从分享链接提取分享Key和密码（使用改进的正则）"""
-        pattern = r'(https?://(?:[a-zA-Z0-9-]+\.)*123[a-zA-Z0-9-]*\.[a-z]{2,6}+/s/)([a-zA-Z0-9\-_]+)(?:[\s\S]*?(?:提取码|密码|code)[\s:：=]*(\w{4}))?'
+        pattern = r'(https?://(?:[a-zA-Z0-9-]+\.)*123[a-zA-Z0-9-]*\.[a-z]{2,6}+/s/)([a-zA-Z0-9\-_]+)(?:[\s\S]*?(?:提取码|pwd|code)[\s:：=]*(\w{4}))?'
         match = re.search(pattern, share_url)
         if not match:
             raise ValueError("无效的分享链接格式")
