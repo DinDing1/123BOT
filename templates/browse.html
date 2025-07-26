@@ -1134,6 +1134,14 @@
         // 浏览媒体路径
         function browseMedia(path) {
             if (path) {
+                const parts = path.split('/');
+                let mediaRoot = path;
+                for (let i = parts.length - 1; i >= 0; i--) {
+                    if (parts[i].match(/\((\d{4})\)|S\d{2}/i)) {
+                        mediaRoot = parts.slice(0, i + 1).join('/');
+                        break;
+                    }
+                }
                 window.location.href = "{{ url_for('browse_path') }}?path=" + encodeURIComponent(path);
             } else {
                 window.location.href = "{{ url_for('browse_path') }}";
