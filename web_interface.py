@@ -400,11 +400,21 @@ def search_files():
         media_groups = {}
         for row in results:
             media_name = row['media_name'] or '未知媒体'
-            # 使用local_path获取文件所在目录
+            # 使用local_path获取媒体根目录
             local_path = row['local_path']
             if local_path:
-                # 获取文件所在目录
-                folder_path = os.path.dirname(local_path)
+                # 关键修改：提取媒体根目录而非文件目录
+                # 分割路径并移除文件名部分
+                parts = local_path.split('/')
+                # 找到媒体名称在路径中的位置
+                try:
+                    # 查找媒体名称在路径中的索引
+                    idx = parts.index(media_name)
+                    # 截取从开始到媒体名称的部分作为根目录
+                    folder_path = '/'.join(parts[:idx+1])
+                except ValueError:
+                    # 如果找不到媒体名称，使用文件所在目录
+                    folder_path = os.path.dirname(local_path)
                 # 标准化路径
                 folder_path = folder_path.lstrip('/')
             else:
