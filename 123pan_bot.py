@@ -3603,24 +3603,28 @@ class TelegramBotHandler:
     @admin_required
     def handle_text(self, update: Update, context: CallbackContext):
         """处理文本消息 - 仅保留秒传链接处理"""
-        text = update.message.text.strip()
-        
-        # 秒传链接处理
-        if (text.startswith(LEGACY_FOLDER_LINK_PREFIX_V1) or 
-            text.startswith(LEGACY_FOLDER_LINK_PREFIX_V2) or 
-            text.startswith(COMMON_PATH_LINK_PREFIX_V1) or 
-            text.startswith(COMMON_PATH_LINK_PREFIX_V2) or
-            ('#' in text and '$' in text)):
-            self.send_auto_delete_message(update, context, "🔍 检测到秒传链接，开始解析...")
-            self.process_fast_link(update, context, text)
-        # 123云盘分享链接处理
-        elif re.search(r'https?://(?:[a-zA-Z0-9-]+\.)*123[a-zA-Z0-9-]*\.[a-z]{2,6}/s/[a-zA-Z0-9\-_]+', text):
-            self.send_auto_delete_message(update, context, "🔗 检测到123云盘分享链接，开始解析...")
-            self.process_share_link(update, context, text)
-        # 115分享链接处理
-        elif re.match(r"https?://115(?:cdn)?\.com/s/\w+\?password=\w+", text):
-            self.send_auto_delete_message(update, context, "🔗 检测到115分享链接，开始迁移...")
-            self.process_115_share(update, context, text)
+        try:
+            text = update.message.text.strip()
+
+            # 秒传链接处理
+            if (text.startswith(LEGACY_FOLDER_LINK_PREFIX_V1) or 
+                text.startswith(LEGACY_FOLDER_LINK_PREFIX_V2) or 
+                text.startswith(COMMON_PATH_LINK_PREFIX_V1) or 
+                text.startswith(COMMON_PATH_LINK_PREFIX_V2) or
+                ('#' in text and '$' in text)):
+                self.send_auto_delete_message(update, context, "🔍 检测到秒传链接，开始解析...")
+                self.process_fast_link(update, context, text)
+            # 123云盘分享链接处理
+            elif re.search(r'https?://(?:[a-zA-Z0-9-]+\.)*123[a-zA-Z0-9-]*\.[a-z]{2,6}/s/[a-zA-Z0-9\-_]+', text):
+                self.send_auto_delete_message(update, context, "🔗 检测到123云盘分享链接，开始解析...")
+                self.process_share_link(update, context, text)
+            # 115分享链接处理
+            elif re.match(r"https?://115(?:cdn)?\.com/s/\w+\?password=\w+", text):
+                self.send_auto_delete_message(update, context, "🔗 检测到115分享链接，开始迁移...")
+                self.process_115_share(update, context, text)
+        except Exception as e:
+            logger.error(f"处理文本消息出错: {e}", exc_info=True)
+            self.send_auto_delete_message(update, context, f"❌ 处理消息时出错: {e}")
     
     @admin_required
     def add_command(self, update: Update, context: CallbackContext):
