@@ -152,7 +152,7 @@ TG API 申请地址：https://my.telegram.org （获取 api_id / api_hash）
 | 自动化 | `-export` | 导出秒传 JSON 文件 |
 | 自动化 | `-export2` | 导出秒传 JSON 链接 |
 | 115 | `-115签到` | 115 网盘签到与查询 |
-| 115 | `-by115` | 115 资源搬运至 123（离线下载） |
+| 115 | `-by115` | 115 资源搬运至 123 |
 | 数据库 | `-sql迁移` | SQLite → PostgreSQL（仅媒体信息） |
 | 数据库 | `-db迁移` | PostgreSQL → SQLite（仅媒体信息） |
 | 运维 | `-restart` | 重启机器人（需挂载 Docker Socket） |
