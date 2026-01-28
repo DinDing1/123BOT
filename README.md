@@ -11,18 +11,51 @@ Media Sync 是一个围绕「123 云盘」构建的媒体工作流工具：支�
 - 多来源接入：123/夸克/天翼/115 分享链接与 JSON 秒传统一接入
 - 媒体工作流闭环：接收 → 整理 → 同步 → 直链/STRM → Emby 302 播放
 - Web 可视化：文件管理、洗版（去重/清理）、迁移中心、订阅追更、配置面板
-- 115 生态支持：扫码登录、签到、资源搬运至 123云盘
+- 自动转存监控：配置频道/群组 ID，资源发布后自动转存（可推送结果）
+- 元数据驱动：媒体库信息存储于 SQLite/PostgreSQL，易迁移、可扩展
+- 115 生态支持：扫码登录、签到、资源搬运至 123 云盘
+- 播放更顺滑：直链/Emby 反代缓存与预热，降低起播耗时
 - 部署友好：Docker 一键启动，默认端口清晰
 
 ## 一图看懂
 
 ```mermaid
-flowchart LR
-  A[分享链接 / JSON 秒传] --> B[保存至 123 目录]
-  B --> C[媒体整理（外部工具）]
-  C --> D[-sync 同步数据库]
-  D --> E[WebDAV / 直链 / STRM]
-  E --> F[Emby 302 播放]
+flowchart TB
+  classDef src fill:#EEF2FF,stroke:#6366F1,color:#111827;
+  classDef core fill:#ECFEFF,stroke:#06B6D4,color:#111827;
+  classDef store fill:#ECFCCB,stroke:#84CC16,color:#111827;
+  classDef out fill:#FFEDD5,stroke:#FB923C,color:#111827;
+
+  subgraph TG[Telegram]
+    MON[监控频道/群组\n（配置ID列表）]:::src
+    MAN[私聊/群聊\n（手动指令）]:::src
+  end
+
+  subgraph IN[输入]
+    LINK[分享链接\n123/夸克/天翼/115]:::src
+    JSON[JSON 秒传]:::src
+  end
+
+  BOT[Media Sync（123bot）]:::core
+
+  MON --> BOT
+  MAN --> BOT
+  LINK --> BOT
+  JSON --> BOT
+
+  subgraph CLOUD[123 云盘]
+    SAVE[保存目录]:::store
+  end
+
+  BOT --> SAVE
+  SAVE --> ORGANIZE[媒体整理\n（外部工具）]:::core
+  ORGANIZE --> SYNC[-sync 同步入库]:::core
+
+  SYNC --> DAV[WebDAV\n/dav]:::out
+  SYNC --> DL123[直链\n/d123]:::out
+  SYNC --> DL115[直链\n/d115]:::out
+  SYNC --> STRM[-strm/-strm115\n生成 STRM 到本地]:::core
+  STRM --> EMBY[Emby\n（302 播放 / 反代:8124）]:::out
 ```
 
 ## 快速开始（Docker）
@@ -60,7 +93,8 @@ services:
 
 `/var/run/docker.sock` 用于支持 `-restart` 指令，仅建议在受控环境启用，不需要可移除。
 
-### Docker Run（快速体验）
+<details>
+<summary>Docker Run（快速体验）</summary>
 
 ```bash
 docker run -d \
@@ -77,6 +111,8 @@ docker run -d \
   dinding1/123bot:latest
 ```
 
+</details>
+
 ## 初次配置（2 分钟）
 
 1. 打开 Web：`http://服务器IP:8122/`
@@ -91,6 +127,18 @@ TG API 申请地址：https://my.telegram.org（获取 api_id / api_hash）
 ### 接收资源
 
 - 发送 123/夸克/天翼/115 分享链接或 JSON 秒传文件，资源会保存到 123 云盘配置的保存目录
+
+### 监控频道/群组自动转存
+
+- 在 Web「系统设置」里填写“监控频道 ID 列表”（支持 `@username` 或数字 ID）
+- 可选填写“推送群组 ID”，用于把转存结果推送到指定群组/频道
+- 在被监控的频道/群组里发布分享链接/秒传内容，会自动转存到 123 云盘保存目录
+- 用 `-id` 可快速查询当前群组/频道 ID
+
+### 数据库存储（SQLite/PostgreSQL）
+
+- 媒体库的文件索引、去重信息、STRM 生成所需字段均落库，不需要把视频下载到本地存储
+- 默认使用 SQLite；可在系统设置启用 PostgreSQL，并用 `-sql迁移` / `-db迁移` 在两者间迁移（仅媒体信息）
 
 ### 媒体同步与播放
 
