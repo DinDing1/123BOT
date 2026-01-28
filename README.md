@@ -14,9 +14,7 @@ Media Sync 是一个围绕「123 云盘」构建的媒体工作流工具：支�
 - [初次配置](#初次配置2-分钟)
 - [使用方式](#使用方式)
 - [指令速查](#指令速查)
-- [端口与路径](#端口与路径)
 - [部署自检](#部署自检)
-- [日志与排障](#日志与排障)
 
 ## 亮点
 
@@ -105,26 +103,6 @@ services:
 
 `/var/run/docker.sock` 用于支持 `-restart` 指令，仅建议在受控环境启用，不需要可移除。
 
-<details>
-<summary>Docker Run（快速体验）</summary>
-
-```bash
-docker run -d \
-  --name 123bot \
-  --privileged \
-  -p 8122:8122 -p 8124:8124 \
-  -e TZ=Asia/Shanghai \
-  -e PYTHONUNBUFFERED=1 \
-  -e PYTHONDONTWRITEBYTECODE=1 \
-  -v /path/to/media:/app/media \
-  -v /path/to/data:/app/data \
-  -v /path/to/logs:/app/logs \
-  -v /var/run/docker.sock:/var/run/docker.sock \
-  dinding1/123bot:latest
-```
-
-</details>
-
 ## 初次配置（2 分钟）
 
 1. 打开 Web：`http://服务器IP:8122/`
@@ -132,13 +110,13 @@ docker run -d \
 3. 如需 115 功能，在页面进行“115 扫码登录”
 4. 保存配置并刷新页面
 
-TG API 申请地址：https://my.telegram.org（获取 api_id / api_hash）
+TG API 申请地址：https://my.telegram.org （获取 api_id / api_hash）
 
 ## 使用方式
 
 ### 接收资源（手动）
 
-- 发送 123/夸克/天翼/115 分享链接或 JSON 秒传文件，资源会保存到 123 云盘配置的保存目录
+- 发送 123/夸克/天翼/115 分享链接或 JSON 秒传文件，可实现自动转存到云盘指定目录
 
 ### 自动转存监控（频道/群组）
 
@@ -181,16 +159,6 @@ TG API 申请地址：https://my.telegram.org（获取 api_id / api_hash）
 | 数据库 | `-db迁移` | PostgreSQL → SQLite（仅媒体信息） |
 | 运维 | `-restart` | 重启机器人（需挂载 Docker Socket） |
 
-## 端口与路径
-
-| 项目 | 默认值 |
-|---|---|
-| Web/UI | `8122` |
-| WebDAV | `/dav` |
-| 123 直链 | `/d123` |
-| 115 直链 | `/d115` |
-| Emby 反代 | `8124` |
-
 ## 部署自检
 
 - 访问 `http://服务器IP:8122/` 可打开页面
@@ -198,12 +166,3 @@ TG API 申请地址：https://my.telegram.org（获取 api_id / api_hash）
 - 发送 `-start` 能返回系统信息
 - WebDAV 可被客户端挂载（如 rclone / Finder）
 
-## 日志与排障
-
-```bash
-docker logs -f 123bot
-```
-
-- 115 登录异常：检查 Cookie 是否有效，必要时重新扫码登录
-- 端口冲突：调整映射端口，确保未被占用
-- 权限问题：宿主目录需读写权限，NAS 请确认共享权限
