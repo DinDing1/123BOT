@@ -72,9 +72,11 @@ flowchart TB
 
   SYNC --> DAV[WebDAV<br/>/dav]:::out
   SYNC --> DL123[直链<br/>/d123]:::out
-  SYNC --> DL115[直链<br/>/d115]:::out
-  SYNC --> STRM[-strm/-strm115<br/>生成 STRM 到本地]:::core
-  STRM --> EMBY[Emby<br/>（302 播放 / 反代:8124）]:::out
+  SAVE115 --> DL115[直链<br/>/d115]:::out
+  SYNC --> STRM123[-strm<br/>生成 123 STRM 到本地]:::core
+  SAVE115 --> STRM115[-strm115<br/>从 115 生成 STRM 到本地]:::core
+  STRM123 --> EMBY[Emby<br/>（302 播放 / 反代:8124）]:::out
+  STRM115 --> EMBY
 ```
 
 ## 快速开始（Docker）
