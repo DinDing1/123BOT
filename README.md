@@ -42,7 +42,8 @@ flowchart TB
   end
 
   subgraph IN[输入]
-    LINK[分享链接<br/>123/夸克/天翼/115]:::src
+    LINK123[分享链接<br/>123/夸克/天翼]:::src
+    LINK115[分享链接<br/>115 云盘]:::src
     JSON[JSON 秒传]:::src
   end
 
@@ -50,15 +51,23 @@ flowchart TB
 
   MON --> BOT
   MAN --> BOT
-  LINK --> BOT
+  LINK123 --> BOT
+  LINK115 --> BOT
   JSON --> BOT
 
-  subgraph CLOUD[123 云盘]
-    SAVE[保存目录]:::store
+  subgraph CLOUD115[115 云盘]
+    SAVE115[保存目录<br/>（115 源目录）]:::store
   end
 
-  BOT --> SAVE
-  SAVE --> ORGANIZE[媒体整理<br/>（外部工具）]:::core
+  subgraph CLOUD123[123 云盘]
+    SAVE123[保存目录]:::store
+  end
+
+  BOT -->|转存| SAVE123
+  BOT -->|保存/整理| SAVE115
+  SAVE115 -->|秒传/离线下载<br/>-by115| SAVE123
+
+  SAVE123 --> ORGANIZE[媒体整理<br/>（外部工具）]:::core
   ORGANIZE --> SYNC[-sync 同步入库]:::core
 
   SYNC --> DAV[WebDAV<br/>/dav]:::out
@@ -165,4 +174,3 @@ TG API 申请地址：https://my.telegram.org （获取 api_id / api_hash）
 - Web“系统设置”保存配置有成功提示
 - 发送 `-start` 能返回系统信息
 - WebDAV 可被客户端挂载（如 rclone / Finder）
-
