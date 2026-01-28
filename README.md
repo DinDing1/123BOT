@@ -20,67 +20,50 @@ Media Sync 是一个围绕「123 云盘」构建的媒体工作流工具：支�
 ## 一图看懂
 
 ```mermaid
-flowchart LR
+%%{init: {"flowchart": {"curve": "linear", "nodeSpacing": 28, "rankSpacing": 36}}}%%
+flowchart TB
   classDef src fill:#EEF2FF,stroke:#6366F1,color:#111827;
-  classDef core fill:#ECFEFF,stroke:#06B6D4,color:#111827;
+  classDef svc fill:#ECFEFF,stroke:#06B6D4,color:#111827;
   classDef store fill:#ECFCCB,stroke:#84CC16,color:#111827;
   classDef out fill:#FFEDD5,stroke:#FB923C,color:#111827;
 
-  subgraph ENTRY[入口]
-    direction TB
-    MON[监控频道/群组<br/>（配置ID列表）]:::src
-    MAN[私聊/群聊<br/>（手动指令）]:::src
-    LINK123[分享链接<br/>123/夸克/天翼]:::src
-    LINK115[分享链接<br/>115 云盘]:::src
-    JSON[JSON 秒传]:::src
-  end
+  TG[Telegram<br/>监控/手动]:::src
+  LINK123[分享链接<br/>123/夸克/天翼]:::src
+  LINK115[分享链接<br/>115 云盘]:::src
+  JSON[JSON 秒传]:::src
 
-  BOT[Media Sync（123bot）]:::core
+  BOT[Media Sync（123bot）]:::svc
 
-  subgraph CLOUDS[云盘侧]
-    direction TB
-    subgraph CLOUD115[115 云盘]
-      direction TB
-      SAVE115[保存目录<br/>（115 源目录）]:::store
-    end
-    subgraph CLOUD123[123 云盘]
-      direction TB
-      SAVE123[保存目录]:::store
-    end
-  end
+  PAN115[115 云盘<br/>源目录]:::store
+  PAN123[123 云盘<br/>保存目录]:::store
 
-  subgraph FLOW[工作流]
-    direction TB
-    ORGANIZE[媒体整理<br/>（外部工具）]:::core
-    SYNC[-sync 同步入库]:::core
-    STRM123[-strm<br/>生成 123 STRM 到本地]:::core
-    STRM115[-strm115<br/>从 115 生成 STRM 到本地]:::core
-  end
+  SYNC[-sync<br/>同步入库]:::svc
+  DB[(SQLite / PostgreSQL)]:::store
 
-  subgraph OUT[输出]
-    direction TB
-    DAV[WebDAV<br/>/dav]:::out
-    DL123[直链<br/>/d123]:::out
-    DL115[直链<br/>/d115]:::out
-    EMBY[Emby<br/>（302 播放 / 反代:8124）]:::out
-  end
+  DAV[WebDAV<br/>/dav]:::out
+  DL123[直链<br/>/d123]:::out
+  DL115[直链<br/>/d115]:::out
+  STRM123[-strm<br/>生成 123 STRM]:::svc
+  STRM115[-strm115<br/>从 115 生成 STRM]:::svc
+  EMBY[Emby<br/>302 / 反代:8124]:::out
 
-  ENTRY --> BOT
-  BOT -->|转存| SAVE123
-  BOT -->|保存/整理| SAVE115
-  SAVE115 -->|秒传/离线下载<br/>-by115| SAVE123
+  TG --> BOT
+  LINK123 --> BOT
+  LINK115 --> BOT
+  JSON --> BOT
 
-  SAVE123 --> ORGANIZE
-  ORGANIZE --> SYNC
+  BOT -->|转存| PAN123
+  BOT -->|保存| PAN115
+  PAN115 -->|秒传/离线下载<br/>-by115| PAN123
 
-  SYNC --> DAV
-  SYNC --> DL123
-  SYNC --> STRM123
-  SAVE115 --> DL115
-  SAVE115 --> STRM115
+  PAN123 --> SYNC --> DB
 
-  STRM123 --> EMBY
-  STRM115 --> EMBY
+  DB --> DAV
+  DB --> DL123
+  DB --> STRM123 --> EMBY
+
+  PAN115 --> DL115
+  PAN115 --> STRM115 --> EMBY
 ```
 
 ## 快速开始（Docker）
