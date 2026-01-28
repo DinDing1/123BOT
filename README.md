@@ -6,16 +6,6 @@
 
 Media Sync 是一个围绕「123 云盘」构建的媒体工作流工具：支持从多网盘/分享链接接收资源、同步元数据、生成 STRM、提供 WebDAV/直链播放，并提供 Web 可视化管理。
 
-## 目录
-
-- [亮点](#亮点)
-- [一图看懂](#一图看懂)
-- [快速开始（Docker）](#快速开始docker)
-- [初次配置](#初次配置2-分钟)
-- [使用方式](#使用方式)
-- [指令速查](#指令速查)
-- [部署自检](#部署自检)
-
 ## 亮点
 
 - 多来源接入：123/夸克/天翼/115 分享链接与 JSON 秒传统一接入
@@ -30,18 +20,16 @@ Media Sync 是一个围绕「123 云盘」构建的媒体工作流工具：支�
 ## 一图看懂
 
 ```mermaid
-flowchart TB
+flowchart LR
   classDef src fill:#EEF2FF,stroke:#6366F1,color:#111827;
   classDef core fill:#ECFEFF,stroke:#06B6D4,color:#111827;
   classDef store fill:#ECFCCB,stroke:#84CC16,color:#111827;
   classDef out fill:#FFEDD5,stroke:#FB923C,color:#111827;
 
-  subgraph TG[Telegram]
+  subgraph ENTRY[入口]
+    direction TB
     MON[监控频道/群组<br/>（配置ID列表）]:::src
     MAN[私聊/群聊<br/>（手动指令）]:::src
-  end
-
-  subgraph IN[输入]
     LINK123[分享链接<br/>123/夸克/天翼]:::src
     LINK115[分享链接<br/>115 云盘]:::src
     JSON[JSON 秒传]:::src
@@ -49,33 +37,49 @@ flowchart TB
 
   BOT[Media Sync（123bot）]:::core
 
-  MON --> BOT
-  MAN --> BOT
-  LINK123 --> BOT
-  LINK115 --> BOT
-  JSON --> BOT
-
-  subgraph CLOUD115[115 云盘]
-    SAVE115[保存目录<br/>（115 源目录）]:::store
+  subgraph CLOUDS[云盘侧]
+    direction TB
+    subgraph CLOUD115[115 云盘]
+      direction TB
+      SAVE115[保存目录<br/>（115 源目录）]:::store
+    end
+    subgraph CLOUD123[123 云盘]
+      direction TB
+      SAVE123[保存目录]:::store
+    end
   end
 
-  subgraph CLOUD123[123 云盘]
-    SAVE123[保存目录]:::store
+  subgraph FLOW[工作流]
+    direction TB
+    ORGANIZE[媒体整理<br/>（外部工具）]:::core
+    SYNC[-sync 同步入库]:::core
+    STRM123[-strm<br/>生成 123 STRM 到本地]:::core
+    STRM115[-strm115<br/>从 115 生成 STRM 到本地]:::core
   end
 
+  subgraph OUT[输出]
+    direction TB
+    DAV[WebDAV<br/>/dav]:::out
+    DL123[直链<br/>/d123]:::out
+    DL115[直链<br/>/d115]:::out
+    EMBY[Emby<br/>（302 播放 / 反代:8124）]:::out
+  end
+
+  ENTRY --> BOT
   BOT -->|转存| SAVE123
   BOT -->|保存/整理| SAVE115
   SAVE115 -->|秒传/离线下载<br/>-by115| SAVE123
 
-  SAVE123 --> ORGANIZE[媒体整理<br/>（外部工具）]:::core
-  ORGANIZE --> SYNC[-sync 同步入库]:::core
+  SAVE123 --> ORGANIZE
+  ORGANIZE --> SYNC
 
-  SYNC --> DAV[WebDAV<br/>/dav]:::out
-  SYNC --> DL123[直链<br/>/d123]:::out
-  SAVE115 --> DL115[直链<br/>/d115]:::out
-  SYNC --> STRM123[-strm<br/>生成 123 STRM 到本地]:::core
-  SAVE115 --> STRM115[-strm115<br/>从 115 生成 STRM 到本地]:::core
-  STRM123 --> EMBY[Emby<br/>（302 播放 / 反代:8124）]:::out
+  SYNC --> DAV
+  SYNC --> DL123
+  SYNC --> STRM123
+  SAVE115 --> DL115
+  SAVE115 --> STRM115
+
+  STRM123 --> EMBY
   STRM115 --> EMBY
 ```
 
