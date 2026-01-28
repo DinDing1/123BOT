@@ -1,0 +1,15 @@
+<svg viewBox="0 0 350 100" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+        <linearGradient id="g4" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stop-color="#01b4e4"/>
+            <stop offset="100%" stop-color="#90cea1"/>
+        </linearGradient>
+    </defs>
+    <!-- Dashed motion lines -->
+    <path d="M30 55 C30 35 50 35 60 55 C70 75 90 75 90 55 C90 35 70 35 60 55 C50 75 30 75 30 55 Z" 
+          stroke="url(#g4)" stroke-width="4" fill="none" stroke-dasharray="8,4"/>
+    <path d="M25 55 C25 25 55 25 65 55 C75 85 105 85 105 55 C105 25 75 25 65 55 C55 85 25 85 25 55 Z" 
+          stroke="url(#g4)" stroke-width="2" fill="none" opacity="0.5"/>
+    <!-- Text with gradient on Sync -->
+    <text x="120" y="62" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-weight="800" font-style="italic" font-size="34" fill="#fff">Media <tspan fill="url(#g4)">Sync</tspan></text>
+</svg>
