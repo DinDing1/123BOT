@@ -39,12 +39,12 @@ flowchart TB
   classDef out fill:#FFEDD5,stroke:#FB923C,color:#111827;
 
   subgraph TG[Telegram]
-    MON[监控频道/群组\n（配置ID列表）]:::src
-    MAN[私聊/群聊\n（手动指令）]:::src
+    MON[监控频道/群组<br/>（配置ID列表）]:::src
+    MAN[私聊/群聊<br/>（手动指令）]:::src
   end
 
   subgraph IN[输入]
-    LINK[分享链接\n123/夸克/天翼/115]:::src
+    LINK[分享链接<br/>123/夸克/天翼/115]:::src
     JSON[JSON 秒传]:::src
   end
 
@@ -60,14 +60,14 @@ flowchart TB
   end
 
   BOT --> SAVE
-  SAVE --> ORGANIZE[媒体整理\n（外部工具）]:::core
+  SAVE --> ORGANIZE[媒体整理<br/>（外部工具）]:::core
   ORGANIZE --> SYNC[-sync 同步入库]:::core
 
-  SYNC --> DAV[WebDAV\n/dav]:::out
-  SYNC --> DL123[直链\n/d123]:::out
-  SYNC --> DL115[直链\n/d115]:::out
-  SYNC --> STRM[-strm/-strm115\n生成 STRM 到本地]:::core
-  STRM --> EMBY[Emby\n（302 播放 / 反代:8124）]:::out
+  SYNC --> DAV[WebDAV<br/>/dav]:::out
+  SYNC --> DL123[直链<br/>/d123]:::out
+  SYNC --> DL115[直链<br/>/d115]:::out
+  SYNC --> STRM[-strm/-strm115<br/>生成 STRM 到本地]:::core
+  STRM --> EMBY[Emby<br/>（302 播放 / 反代:8124）]:::out
 ```
 
 ## 快速开始（Docker）
