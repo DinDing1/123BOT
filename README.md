@@ -10,7 +10,8 @@ Media Sync 是一个围绕「123 云盘」构建的媒体工作流工具：支�
 
 - 多来源接入：123/夸克/天翼/115 分享链接与 JSON 秒传统一接入
 - 媒体工作流闭环：接收 → 整理 → 同步 → 直链/STRM → Emby 302 播放
-- Web 可视化：文件管理、洗版（去重/清理）、迁移中心、订阅追更、配置面板
+- 自动整理归档：识别电影/剧集与 TMDB 信息，按模板一键移动/复制到媒体库目录（支持定时）
+- Web 可视化：文件管理、洗版（去重/清理）、迁移中心、订阅追更、配置面板、媒体整理
 - 自动转存监控：配置频道/群组 ID，资源发布后自动转存
 - 元数据驱动：媒体库信息存储于 SQLite/PostgreSQL，易迁移、可扩展
 - 115 生态支持：扫码登录、签到、资源搬运至 123 云盘
@@ -34,8 +35,12 @@ flowchart TB
 
   BOT[Media Sync（123bot）]:::svc
 
-  PAN115[115 云盘<br/>源目录]:::store
-  PAN123[123 云盘<br/>保存目录]:::store
+  PAN123_SAVE[123 云盘<br/>保存目录]:::store
+  PAN123_LIB[123 云盘<br/>媒体库目录]:::store
+  PAN115_SRC[115 云盘<br/>源目录]:::store
+  PAN115_LIB[115 云盘<br/>媒体库目录]:::store
+
+  ORG[媒体整理<br/>手动/自动]:::svc
 
   SYNC[-sync<br/>同步入库]:::svc
   DB[(SQLite / PostgreSQL)]:::store
@@ -44,7 +49,7 @@ flowchart TB
   DL123[直链<br/>/d123]:::out
   DL115[直链<br/>/d115]:::out
   STRM123[-strm<br/>生成 123 STRM]:::svc
-  STRM115[-strm115<br/>从 115 生成 STRM]:::svc
+  STRM115[-strm115<br/>从 115 媒体库生成 STRM]:::svc
   EMBY[Emby<br/>302 / 反代:8124]:::out
 
   TG --> BOT
@@ -52,18 +57,19 @@ flowchart TB
   LINK115 --> BOT
   JSON --> BOT
 
-  BOT -->|转存| PAN123
-  BOT -->|保存| PAN115
-  PAN115 -->|秒传/离线下载<br/>-by115| PAN123
+  BOT -->|转存| PAN123_SAVE
+  BOT -->|保存| PAN115_SRC
+  PAN115_SRC -->|秒传/离线下载<br/>-by115| PAN123_SAVE
 
-  PAN123 --> SYNC --> DB
+  PAN123_SAVE --> ORG --> PAN123_LIB --> SYNC --> DB
+  PAN115_SRC --> ORG --> PAN115_LIB
 
   DB --> DAV
   DB --> DL123
   DB --> STRM123 --> EMBY
 
-  PAN115 --> DL115
-  PAN115 --> STRM115 --> EMBY
+  PAN115_LIB --> DL115
+  PAN115_LIB --> STRM115 --> EMBY
 ```
 
 ## 快速开始（Docker）
@@ -122,6 +128,7 @@ TG API 申请地址：https://my.telegram.org （获取 api_id / api_hash）
 - 可选填写“推送群组 ID”，用于把转存结果推送到指定群组/频道
 - 在被监控的频道/群组里发布分享链接/秒传内容，会自动转存到 123 云盘保存目录
 - 用 `-id` 可快速查询当前群组/频道 ID
+
 
 ### 媒体同步与播放
 
